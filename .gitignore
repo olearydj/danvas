@@ -1,4 +1,47 @@
+# Local secrets and machine-specific config
+.env
+.env.*
+!.env.example
+
+# Python environments
 .venv/
+venv/
+env/
+
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
-.env
+*$py.class
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Local tool/runtime output
+*.log
+*.tmp
+*.temp
+.DS_Store
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Canvas/download outputs generated during ad-hoc use
+canvas_assignment_files/
+downloads/
+assignments-md/
+discussion*.json
+discussion*.csv
