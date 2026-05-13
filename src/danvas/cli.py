@@ -24,6 +24,7 @@ from canvasapi import Canvas
 from canvasapi.exceptions import ResourceDoesNotExist
 from dotenv import load_dotenv
 
+from danvas import assignment_audit, gradebook, quiz
 
 DEFAULT_API_URL = "https://auburn.instructure.com/"
 
@@ -176,7 +177,7 @@ def slugify(value: str, fallback: str) -> str:
     return value or fallback
 
 
-def command_courses(args: argparse.Namespace) -> None:
+def command_courses(args: Any) -> None:
     canvas = canvas_from_args(args)
     user = canvas.get_current_user()
     rows = []
@@ -195,7 +196,7 @@ def command_courses(args: argparse.Namespace) -> None:
     print(f"Wrote {len(rows)} courses to {args.output}")
 
 
-def command_roster(args: argparse.Namespace) -> None:
+def command_roster(args: Any) -> None:
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     enrollments = course.get_enrollments(type=[args.enrollment_type], state=["active"])
@@ -223,11 +224,13 @@ def write_rows(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) ->
         writer.writerows(rows)
 
 
-def command_assignments_export(args: argparse.Namespace) -> None:
+def command_assignments_export(args: Any) -> None:
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     course_payload = canvas_object_to_dict(course)
-    groups = {int(group.id): canvas_object_to_dict(group) for group in course.get_assignment_groups()}
+    groups = {
+        int(group.id): canvas_object_to_dict(group) for group in course.get_assignment_groups()
+    }
     rows = []
     for assignment in course.get_assignments(include=["all_dates", "overrides"]):
         payload = canvas_object_to_dict(assignment)
@@ -305,17 +308,21 @@ def write_assignments_markdown(
         "assignment_count": len(rows),
         "points_possible_total": sum(float(row["points_possible"] or 0) for row in rows),
     }
-    (output / "course.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+    (output / "course.json").write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     for index, row in enumerate(rows, start=1):
         slug = slugify(str(row["name"]), f"assignment-{row['id']}")
         path = output / f"{index:03d}-{slug}-{row['id']}.md"
-        metadata = {key: row[key] for key in row if key not in {"description_html", "description_text"}}
+        metadata = {
+            key: row[key] for key in row if key not in {"description_html", "description_text"}
+        }
         text = "---\n" + json.dumps(metadata, indent=2, ensure_ascii=False) + "\n---\n\n"
         text += row["description_text"] or row["description_html"] or ""
         path.write_text(text, encoding="utf-8")
 
 
-def command_assignments_create(args: argparse.Namespace) -> None:
+def command_assignments_create(args: Any) -> None:
     source = Path(args.source)
     if not source.is_file():
         raise SystemExit(f"Assignment Markdown source not found: {source}")
@@ -337,7 +344,9 @@ def load_assignment_markdown(source: Path) -> dict[str, Any]:
     lines = text.splitlines(keepends=True)
     if not lines or lines[0].strip() != "+++":
         raise SystemExit(f"Assignment source must start with TOML front matter: {source}")
-    close = next((idx for idx, line in enumerate(lines[1:], start=1) if line.strip() == "+++"), None)
+    close = next(
+        (idx for idx, line in enumerate(lines[1:], start=1) if line.strip() == "+++"), None
+    )
     if close is None:
         raise SystemExit(f"Assignment source missing closing +++: {source}")
     metadata = tomllib.loads("".join(lines[1:close]))
@@ -369,7 +378,7 @@ def normalize_canvas_value(value: Any) -> Any:
     return value
 
 
-def command_submissions_feedback(args: argparse.Namespace) -> None:
+def command_submissions_feedback(args: Any) -> None:
     feedback_dir = Path(args.feedback_dir)
     roster_path = Path(args.roster)
     if not feedback_dir.is_dir():
@@ -394,7 +403,9 @@ def command_submissions_feedback(args: argparse.Namespace) -> None:
     for canvas_id, path in matched:
         label = f"{canvas_ids[canvas_id]} (CanvasID {canvas_id})"
         try:
-            assignment.get_submission(canvas_id).upload_comment(file=str(path), comment=args.comment)
+            assignment.get_submission(canvas_id).upload_comment(
+                file=str(path), comment=args.comment
+            )
             success += 1
             print(f"  {label}: uploaded {path.name}")
             time.sleep(args.sleep_seconds)
@@ -411,10 +422,16 @@ def load_roster_ids(path: Path) -> dict[int, str]:
         reader = csv.DictReader(f)
         if "CanvasID" not in (reader.fieldnames or []):
             raise SystemExit(f"Roster CSV must include CanvasID: {path}")
-        return {int(row["CanvasID"]): row.get("Name", row["CanvasID"]) for row in reader if row.get("CanvasID")}
+        return {
+            int(row["CanvasID"]): row.get("Name", row["CanvasID"])
+            for row in reader
+            if row.get("CanvasID")
+        }
 
 
-def match_files_to_students(files: list[Path], canvas_ids: dict[int, str]) -> tuple[list[tuple[int, Path]], list[Path]]:
+def match_files_to_students(
+    files: list[Path], canvas_ids: dict[int, str]
+) -> tuple[list[tuple[int, Path]], list[Path]]:
     matched = []
     unmatched = []
     for path in files:
@@ -427,7 +444,7 @@ def match_files_to_students(files: list[Path], canvas_ids: dict[int, str]) -> tu
     return matched, unmatched
 
 
-def command_submissions_media(args: argparse.Namespace) -> None:
+def command_submissions_media(args: Any) -> None:
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
     output_root = Path(args.output_dir)
@@ -439,13 +456,19 @@ def command_submissions_media(args: argparse.Namespace) -> None:
         prefix = f"{student_name}_sub{submission.id}"
         for attachment in getattr(submission, "attachments", []) or []:
             filename = f"{prefix}_{clean_filename(attachment.filename)}"
-            if download_file(attachment.url, assignment_dir / filename, attachment.url, getattr(attachment, "content_type", "")):
+            if download_file(
+                attachment.url,
+                assignment_dir / filename,
+                attachment.url,
+                getattr(attachment, "content_type", ""),
+            ):
                 count += 1
         media = getattr(submission, "media_comment", None)
-        if media:
-            if download_media(media, assignment_dir, prefix):
-                count += 1
-        for index, comment in enumerate(getattr(submission, "submission_comments", []) or [], start=1):
+        if media and download_media(media, assignment_dir, prefix):
+            count += 1
+        for index, comment in enumerate(
+            getattr(submission, "submission_comments", []) or [], start=1
+        ):
             media = getattr(comment, "media_comment", None)
             if media:
                 author = clean_filename(getattr(comment, "author_name", f"comment{index}"))
@@ -486,7 +509,9 @@ def download_file(url: str, path: Path, original_url: str, content_type: str) ->
             "content_type_from_canvas": content_type,
             "downloaded_filename": path.name,
         }
-        path.with_suffix(path.suffix + ".info.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        path.with_suffix(path.suffix + ".info.json").write_text(
+            json.dumps(metadata, indent=2), encoding="utf-8"
+        )
         print(f"Downloaded: {path}")
         return True
     except requests.RequestException as exc:
@@ -494,12 +519,14 @@ def download_file(url: str, path: Path, original_url: str, content_type: str) ->
         return False
 
 
-def command_grades_post(args: argparse.Namespace) -> None:
+def command_grades_post(args: Any) -> None:
     rows = load_grade_rows(Path(args.grades_csv))
     if args.dry_run:
         print("Dry run - no grades posted:")
         for row in rows:
-            print(f"  {row.get('Name') or row['CanvasID']} (CanvasID {row['CanvasID']}): {row['Grade']}")
+            print(
+                f"  {row.get('Name') or row['CanvasID']} (CanvasID {row['CanvasID']}): {row['Grade']}"
+            )
         return
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
@@ -534,13 +561,15 @@ def command_grades_post(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
-def command_grades_verify(args: argparse.Namespace) -> None:
+def command_grades_verify(args: Any) -> None:
     rows = load_grade_rows(Path(args.grades_csv))
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
     failures = 0
     for row in rows:
-        submission = assignment.get_submission(int(row["CanvasID"]), include=["submission_comments"])
+        submission = assignment.get_submission(
+            int(row["CanvasID"]), include=["submission_comments"]
+        )
         grade_ok = grade_matches(submission, row["Grade"].strip())
         comment = row.get("Comment", "").strip()
         comment_ok = not comment or comment_exists(submission, comment)
@@ -578,7 +607,11 @@ def grade_matches(submission: Any, expected: str) -> bool:
 
 def comment_exists(submission: Any, expected: str) -> bool:
     for comment in getattr(submission, "submission_comments", []) or []:
-        text = comment.get("comment", "") if isinstance(comment, dict) else getattr(comment, "comment", "")
+        text = (
+            comment.get("comment", "")
+            if isinstance(comment, dict)
+            else getattr(comment, "comment", "")
+        )
         if str(text).strip() == expected.strip():
             return True
     return False
@@ -587,11 +620,13 @@ def comment_exists(submission: Any, expected: str) -> bool:
 def parse_discussion_url(url: str) -> tuple[int, int]:
     match = re.search(r"courses/(\d+)/discussion_topics/(\d+)", url)
     if not match:
-        raise SystemExit("Discussion URL must contain /courses/{course_id}/discussion_topics/{discussion_id}")
+        raise SystemExit(
+            "Discussion URL must contain /courses/{course_id}/discussion_topics/{discussion_id}"
+        )
     return int(match.group(1)), int(match.group(2))
 
 
-def command_discussions_export(args: argparse.Namespace) -> None:
+def command_discussions_export(args: Any) -> None:
     canvas = canvas_from_args(args)
     course_id, discussion_id = parse_discussion_url(args.discussion_url)
     course = canvas.get_course(course_id)
@@ -600,32 +635,67 @@ def command_discussions_export(args: argparse.Namespace) -> None:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     if args.format == "csv" or output.suffix.lower() == ".csv":
-        fieldnames = ["topic_id", "topic_title", "post_id", "parent_id", "author", "author_id", "message", "created_at", "is_reply", "depth"]
+        fieldnames = [
+            "topic_id",
+            "topic_title",
+            "post_id",
+            "parent_id",
+            "author",
+            "author_id",
+            "message",
+            "created_at",
+            "is_reply",
+            "depth",
+        ]
         write_rows(output, posts, fieldnames)
     else:
         output.write_text(json.dumps(posts, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Wrote {len(posts)} posts to {output}")
 
 
-def command_discussions_score(args: argparse.Namespace) -> None:
+def command_discussions_score(args: Any) -> None:
     canvas = canvas_from_args(args)
     course_id, discussion_id = parse_discussion_url(args.discussion_url)
     course = canvas.get_course(course_id)
     topic = course.get_discussion_topic(discussion_id)
     posts = discussion_posts(course, topic)
     students = student_enrollments(course)
-    scored = score_discussion(posts, students, args.points_per_original, args.points_per_response, args.max_original_comments, args.max_responses)
+    scored = score_discussion(
+        posts,
+        students,
+        args.points_per_original,
+        args.points_per_response,
+        args.max_original_comments,
+        args.max_responses,
+    )
     for row in scored:
         print(f"  {row['name']}: {row['score']}")
     if args.output:
-        write_rows(Path(args.output), scored, ["author_id", "name", "score", "original_comments", "responses", "total_posts", "comment"])
+        write_rows(
+            Path(args.output),
+            scored,
+            [
+                "author_id",
+                "name",
+                "score",
+                "original_comments",
+                "responses",
+                "total_posts",
+                "comment",
+            ],
+        )
     if args.upload or args.dry_run:
-        upload_discussion_scores(course, topic, scored, dry_run=args.dry_run, sleep_seconds=args.sleep_seconds)
+        upload_discussion_scores(
+            course, topic, scored, dry_run=args.dry_run, sleep_seconds=args.sleep_seconds
+        )
 
 
 def discussion_posts(course: Any, topic: Any) -> list[dict[str, Any]]:
     data = course.get_full_discussion_topic(topic.id)
-    participants = {item["id"]: item.get("display_name", f"User {item['id']}") for item in data.get("participants", [])}
+    participants = {
+        item["id"]: item.get("display_name", f"User {item['id']}")
+        for item in data.get("participants", [])
+    }
     posts: list[dict[str, Any]] = []
 
     def walk(entries: list[dict[str, Any]], parent_id: int | None = None, depth: int = 0) -> None:
@@ -656,9 +726,13 @@ def discussion_posts(course: Any, topic: Any) -> list[dict[str, Any]]:
 
 def student_enrollments(course: Any) -> dict[int, str]:
     out = {}
-    for enrollment in course.get_enrollments(type=["StudentEnrollment"], state=["active", "invited"]):
+    for enrollment in course.get_enrollments(
+        type=["StudentEnrollment"], state=["active", "invited"]
+    ):
         user = getattr(enrollment, "user", {}) or {}
-        out[int(enrollment.user_id)] = user.get("sortable_name") or user.get("name") or f"User {enrollment.user_id}"
+        out[int(enrollment.user_id)] = (
+            user.get("sortable_name") or user.get("name") or f"User {enrollment.user_id}"
+        )
     return out
 
 
@@ -686,19 +760,28 @@ def score_discussion(
     for uid, name in students.items():
         original = counts[uid]["original_comments"]
         responses = counts[uid]["responses"]
-        score = min(original, max_original_comments) * points_per_original + min(responses, max_responses) * points_per_response
-        max_score = max_original_comments * points_per_original + max_responses * points_per_response
+        score = (
+            min(original, max_original_comments) * points_per_original
+            + min(responses, max_responses) * points_per_response
+        )
+        max_score = (
+            max_original_comments * points_per_original + max_responses * points_per_response
+        )
         comment = (
             f"Discussion score: {score}/{max_score}\n"
             f"Original posts: {min(original, max_original_comments)} x {points_per_original} pts\n"
             f"Responses: {min(responses, max_responses)} x {points_per_response} pts"
         )
-        rows.append({"author_id": uid, "name": name, "score": score, **counts[uid], "comment": comment})
+        rows.append(
+            {"author_id": uid, "name": name, "score": score, **counts[uid], "comment": comment}
+        )
     rows.sort(key=lambda row: row["name"])
     return rows
 
 
-def upload_discussion_scores(course: Any, topic: Any, rows: list[dict[str, Any]], *, dry_run: bool, sleep_seconds: float) -> None:
+def upload_discussion_scores(
+    course: Any, topic: Any, rows: list[dict[str, Any]], *, dry_run: bool, sleep_seconds: float
+) -> None:
     assignment_id = getattr(topic, "assignment_id", None)
     if not assignment_id:
         raise SystemExit("Discussion is not graded and has no assignment_id.")
@@ -740,6 +823,14 @@ assignments_app = typer.Typer(
     help="Create assignments from Markdown/TOML or export assignment metadata for review.",
     no_args_is_help=True,
 )
+gradebook_app = typer.Typer(
+    help="Check Canvas gradebook exports and audit final-score setup.",
+    no_args_is_help=True,
+)
+quiz_app = typer.Typer(
+    help="Analyze Canvas Classic Quiz/Survey student-analysis CSV exports.",
+    no_args_is_help=True,
+)
 submissions_app = typer.Typer(
     help="Download submitted media/attachments or upload per-student feedback files.",
     no_args_is_help=True,
@@ -754,6 +845,8 @@ discussions_app = typer.Typer(
 )
 
 app.add_typer(assignments_app, name="assignments")
+app.add_typer(gradebook_app, name="gradebook")
+app.add_typer(quiz_app, name="quiz")
 app.add_typer(submissions_app, name="submissions")
 app.add_typer(grades_app, name="grades")
 app.add_typer(discussions_app, name="discussions")
@@ -761,7 +854,9 @@ app.add_typer(discussions_app, name="discussions")
 
 ApiUrl = Annotated[
     str | None,
-    typer.Option("--api-url", help="Canvas base URL. Defaults to CANVAS_API_URL, then Auburn Canvas."),
+    typer.Option(
+        "--api-url", help="Canvas base URL. Defaults to CANVAS_API_URL, then Auburn Canvas."
+    ),
 ]
 SecretProviderOption = Annotated[
     SecretProvider,
@@ -769,7 +864,9 @@ SecretProviderOption = Annotated[
 ]
 OpReference = Annotated[
     str | None,
-    typer.Option("--op-reference", help="1Password item reference, such as op://Dev/Canvas/credential."),
+    typer.Option(
+        "--op-reference", help="1Password item reference, such as op://Dev/Canvas/credential."
+    ),
 ]
 ApiKeyEnv = Annotated[
     str | None,
@@ -783,7 +880,8 @@ def run_command(func: Any, args: SimpleNamespace) -> None:
     try:
         func(args)
     except ResourceDoesNotExist as exc:
-        raise typer.Exit(f"Canvas resource not found: {exc}") from exc
+        typer.echo(f"Canvas resource not found: {exc}", err=True)
+        raise typer.Exit(1) from exc
     except SystemExit as exc:
         message = str(exc)
         if message and message != "0":
@@ -793,7 +891,12 @@ def run_command(func: Any, args: SimpleNamespace) -> None:
 
 @app.command(help="Export active courses visible to the authenticated Canvas user.")
 def courses(
-    output: Annotated[Path, typer.Option("--output", "-o", help="CSV output path: id, name, course_code, start_at, end_at.")] = Path("courses.csv"),
+    output: Annotated[
+        Path,
+        typer.Option(
+            "--output", "-o", help="CSV output path: id, name, course_code, start_at, end_at."
+        ),
+    ] = Path("courses.csv"),
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -811,10 +914,14 @@ def courses(
     )
 
 
-@app.command(help="Export active course enrollments to a roster CSV for later grade/feedback matching.")
+@app.command(
+    help="Export active course enrollments to a roster CSV for later grade/feedback matching."
+)
 def roster(
     course_id: CourseId,
-    output: Annotated[Path, typer.Option("--output", "-o", help="CSV output path: CanvasID, Name, Email, SIS_ID.")] = Path("roster.csv"),
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="CSV output path: CanvasID, Name, Email, SIS_ID.")
+    ] = Path("roster.csv"),
     enrollment_type: Annotated[
         str,
         typer.Option("--enrollment-type", help="Canvas enrollment type to include."),
@@ -838,15 +945,27 @@ def roster(
     )
 
 
-@assignments_app.command("export", help="Export assignment details as JSON, CSV, or a Markdown directory.")
+@assignments_app.command(
+    "export", help="Export assignment details as JSON, CSV, or a Markdown directory."
+)
 def assignments_export(
     course_id: CourseId,
-    output: Annotated[Path, typer.Option("--output", "-o", help="Output path. Use .json, .csv, or a directory with --format markdown.")] = Path("assignments.json"),
+    output: Annotated[
+        Path,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output path. Use .json, .csv, or a directory with --format markdown.",
+        ),
+    ] = Path("assignments.json"),
     output_format: Annotated[
         AssignmentExportFormat,
         typer.Option("--format", help="Output format. 'auto' infers JSON/CSV from extension."),
     ] = "auto",
-    full: Annotated[bool, typer.Option("--full", help="Include raw Canvas assignment/group payloads in JSON output.")] = False,
+    full: Annotated[
+        bool,
+        typer.Option("--full", help="Include raw Canvas assignment/group payloads in JSON output."),
+    ] = False,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -873,8 +992,12 @@ def assignments_export(
 )
 def assignments_create(
     course_id: CourseId,
-    source: Annotated[Path, typer.Argument(help="Markdown source beginning with +++ TOML assignment metadata.")],
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print the Canvas payload without creating anything.")] = False,
+    source: Annotated[
+        Path, typer.Argument(help="Markdown source beginning with +++ TOML assignment metadata.")
+    ],
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Print the Canvas payload without creating anything.")
+    ] = False,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -894,11 +1017,169 @@ def assignments_create(
     )
 
 
-@submissions_app.command("media", help="Download all submission attachments and media comments for one assignment.")
+@assignments_app.command(
+    "audit",
+    help="Compare a saved assignments export to course policy weights and basic setup expectations.",
+)
+def assignments_audit(
+    assignments_path: Annotated[
+        Path, typer.Argument(help="Assignments JSON file or Markdown export directory.")
+    ],
+    course_yaml: Annotated[
+        Path | None,
+        typer.Option("--course-yaml", help="Optional course policy YAML with expected weights."),
+    ] = None,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Optional JSON audit output path.")
+    ] = None,
+) -> None:
+    payload = assignment_audit.audit_assignment_file(assignments_path, course_yaml)
+    typer.echo(f"Assignment setup audit: {assignments_path}")
+    if payload["canvas_weights"]:
+        typer.echo(f"  Canvas weight sum: {payload['weight_sum']}")
+    if payload["missing_groups"]:
+        typer.echo(f"  Missing groups: {', '.join(payload['missing_groups'])}")
+    if payload["extra_groups"]:
+        typer.echo(f"  Extra groups: {', '.join(payload['extra_groups'])}")
+    typer.echo(f"  Assignments: {payload['assignments']['count']}")
+    typer.echo(f"  Unpublished: {len(payload['assignments']['unpublished'])}")
+    typer.echo(f"  Missing due dates: {len(payload['assignments']['missing_due_dates'])}")
+    if output:
+        gradebook.write_json(output, payload)
+        typer.echo(f"Wrote {output}")
+
+
+@gradebook_app.command(
+    "check",
+    help="Inspect a Canvas gradebook CSV export for structure, score variants, and missing cells.",
+)
+def gradebook_check(
+    gradebook_csv: Annotated[Path, typer.Argument(help="Canvas gradebook CSV export.")],
+    course_yaml: Annotated[
+        Path | None,
+        typer.Option(
+            "--course-yaml", help="Optional YAML with exclude_students/final_score_column."
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Optional JSON check output path.")
+    ] = None,
+) -> None:
+    policy = gradebook.load_policy(course_yaml)
+    gb = gradebook.CanvasGradebook.read(gradebook_csv, policy.get("exclude_students") or [])
+    payload = gradebook.check_gradebook(gb, final_score_column=policy.get("final_score_column"))
+    typer.echo(f"Canvas gradebook check: {gradebook_csv}")
+    typer.echo(f"  Included rows: {payload['structure']['included_rows']}")
+    typer.echo(f"  Columns: {payload['structure']['columns']}")
+    typer.echo(f"  Final score column: {payload['structure']['final_score_column']}")
+    typer.echo(f"  Assignment columns: {payload['assignments']['detected_columns']}")
+    typer.echo(f"  Assignment groups: {payload['assignments']['detected_groups']}")
+    typer.echo(f"  Score variant diff rows: {payload['score_variants']['rows_with_differences']}")
+    if payload["missing"]["totals"]:
+        typer.echo(f"  Missing/nonnumeric totals: {payload['missing']['totals']}")
+    if output:
+        gradebook.write_json(output, payload)
+        typer.echo(f"Wrote {output}")
+
+
+@gradebook_app.command(
+    "audit",
+    help="Audit final-score setup using a gradebook export and optional course policy/assignment snapshot.",
+)
+def gradebook_audit(
+    gradebook_csv: Annotated[Path, typer.Argument(help="Canvas gradebook CSV export.")],
+    course_yaml: Annotated[
+        Path | None,
+        typer.Option(
+            "--course-yaml", help="Course policy YAML with weights and reconstruction rules."
+        ),
+    ] = None,
+    assignments_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--assignments",
+            help="Optional assignments JSON/directory export for Canvas group weights.",
+        ),
+    ] = None,
+    tolerance: Annotated[
+        float, typer.Option("--tolerance", help="Maximum allowed absolute final-score difference.")
+    ] = 0.05,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Optional JSON audit output path.")
+    ] = None,
+) -> None:
+    policy = gradebook.load_policy(course_yaml)
+    assignment_weights = None
+    if assignments_path:
+        assignment_weights = assignment_audit.assignment_group_weights(
+            assignment_audit.load_assignment_snapshot(assignments_path)
+        )
+    gb = gradebook.CanvasGradebook.read(gradebook_csv, policy.get("exclude_students") or [])
+    payload = gradebook.audit_gradebook(
+        gb,
+        policy=policy,
+        assignment_weights=assignment_weights,
+        tolerance=tolerance,
+    )
+    typer.echo(f"Canvas gradebook audit: {gradebook_csv}")
+    typer.echo(f"  Final score column: {payload['final_score_column']}")
+    typer.echo(f"  Weight sum: {payload['weight_sum']}")
+    typer.echo(f"  Matched groups: {len(payload['matched_group_columns'])}")
+    if payload["missing_weight_groups"]:
+        typer.echo(f"  Missing weighted groups: {', '.join(payload['missing_weight_groups'])}")
+    recon = payload["reconstruction"]
+    typer.echo(f"  Rows compared: {recon['rows_compared']}")
+    typer.echo(f"  Max abs diff: {recon['max_abs_diff']}")
+    typer.echo(f"  Rows over tolerance: {recon['rows_over_tolerance']}")
+    typer.echo(f"  Status: {recon['status']}")
+    if output:
+        gradebook.write_json(output, payload)
+        typer.echo(f"Wrote {output}")
+
+
+@quiz_app.command(
+    "analysis", help="Summarize a Canvas Classic Quiz/Survey student-analysis CSV export."
+)
+def quiz_analysis(
+    student_analysis_csv: Annotated[
+        Path, typer.Argument(help="Canvas student-analysis CSV export.")
+    ],
+    answer_term: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--answer-term",
+            help="Question text term to count answers for. Repeat for multiple terms.",
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Optional JSON analysis output path.")
+    ] = None,
+) -> None:
+    payload = quiz.analyze_student_analysis(student_analysis_csv, answer_terms=answer_term)
+    typer.echo(f"Canvas quiz analysis: {student_analysis_csv}")
+    typer.echo(f"  Students: {payload['rows']['students']}")
+    typer.echo(f"  Submitted: {payload['rows']['submitted']}")
+    typer.echo(f"  Question pairs: {len(payload['questions'])}")
+    typer.echo(f"  Mean earned: {payload['score_summary']['earned']['mean']}")
+    if "answer_counts" in payload:
+        typer.echo(f"  Answer counts: {payload['answer_counts']}")
+    if output:
+        quiz.write_json(output, payload)
+        typer.echo(f"Wrote {output}")
+
+
+@submissions_app.command(
+    "media", help="Download all submission attachments and media comments for one assignment."
+)
 def submissions_media(
     course_id: CourseId,
     assignment_id: AssignmentId,
-    output_dir: Annotated[Path, typer.Option("--output-dir", help="Base directory for downloaded files and .info.json metadata.")] = Path("canvas_assignment_files"),
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir", help="Base directory for downloaded files and .info.json metadata."
+        ),
+    ] = Path("canvas_assignment_files"),
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -925,12 +1206,32 @@ def submissions_media(
 def submissions_feedback(
     course_id: CourseId,
     assignment_id: AssignmentId,
-    roster_path: Annotated[Path, typer.Option("--roster", "-r", help="Roster CSV with a CanvasID column.")],
-    feedback_dir: Annotated[Path, typer.Option("--feedback-dir", "-d", help="Directory containing feedback files.")],
-    pattern: Annotated[str, typer.Option("--pattern", "-p", help="Glob pattern inside --feedback-dir, for example '*-feedback.pdf'.")] = "*",
-    comment: Annotated[str, typer.Option("--comment", "-c", help="Submission comment text.")] = "Here is your graded feedback.",
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show matched/unmatched files without uploading. Recommended first.")] = False,
-    sleep_seconds: Annotated[float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")] = 0.5,
+    roster_path: Annotated[
+        Path, typer.Option("--roster", "-r", help="Roster CSV with a CanvasID column.")
+    ],
+    feedback_dir: Annotated[
+        Path, typer.Option("--feedback-dir", "-d", help="Directory containing feedback files.")
+    ],
+    pattern: Annotated[
+        str,
+        typer.Option(
+            "--pattern",
+            "-p",
+            help="Glob pattern inside --feedback-dir, for example '*-feedback.pdf'.",
+        ),
+    ] = "*",
+    comment: Annotated[
+        str, typer.Option("--comment", "-c", help="Submission comment text.")
+    ] = "Here is your graded feedback.",
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run", help="Show matched/unmatched files without uploading. Recommended first."
+        ),
+    ] = False,
+    sleep_seconds: Annotated[
+        float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
+    ] = 0.5,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -962,9 +1263,21 @@ def submissions_feedback(
 def grades_post(
     course_id: CourseId,
     assignment_id: AssignmentId,
-    grades_csv: Annotated[Path, typer.Option("--grades-csv", "-g", help="CSV with CanvasID, Grade, optional Name, optional Comment.")],
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print rows without posting. Recommended before live grade writes.")] = False,
-    sleep_seconds: Annotated[float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")] = 0.25,
+    grades_csv: Annotated[
+        Path,
+        typer.Option(
+            "--grades-csv", "-g", help="CSV with CanvasID, Grade, optional Name, optional Comment."
+        ),
+    ],
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run", help="Print rows without posting. Recommended before live grade writes."
+        ),
+    ] = False,
+    sleep_seconds: Annotated[
+        float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
+    ] = 0.25,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -986,11 +1299,15 @@ def grades_post(
     )
 
 
-@grades_app.command("verify", help="Check Canvas grades/comments against a CSV and exit nonzero on mismatch.")
+@grades_app.command(
+    "verify", help="Check Canvas grades/comments against a CSV and exit nonzero on mismatch."
+)
 def grades_verify(
     course_id: CourseId,
     assignment_id: AssignmentId,
-    grades_csv: Annotated[Path, typer.Option("--grades-csv", "-g", help="CSV with CanvasID, Grade, optional Comment.")],
+    grades_csv: Annotated[
+        Path, typer.Option("--grades-csv", "-g", help="CSV with CanvasID, Grade, optional Comment.")
+    ],
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -1010,11 +1327,22 @@ def grades_verify(
     )
 
 
-@discussions_app.command("export", help="Export all visible posts from one Canvas discussion topic to JSON or CSV.")
+@discussions_app.command(
+    "export", help="Export all visible posts from one Canvas discussion topic to JSON or CSV."
+)
 def discussions_export(
-    discussion_url: Annotated[str, typer.Argument(help="Canvas discussion URL containing course and topic IDs.")],
-    output: Annotated[Path, typer.Option("--output", "-o", help="Output file. Use --format csv for spreadsheet review.")] = Path("discussion.json"),
-    output_format: Annotated[DiscussionExportFormat, typer.Option("--format", help="Output format.")] = "json",
+    discussion_url: Annotated[
+        str, typer.Argument(help="Canvas discussion URL containing course and topic IDs.")
+    ],
+    output: Annotated[
+        Path,
+        typer.Option(
+            "--output", "-o", help="Output file. Use --format csv for spreadsheet review."
+        ),
+    ] = Path("discussion.json"),
+    output_format: Annotated[
+        DiscussionExportFormat, typer.Option("--format", help="Output format.")
+    ] = "json",
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -1039,15 +1367,32 @@ def discussions_export(
     help="Score student discussion activity from post/reply counts and optionally upload to the graded discussion.",
 )
 def discussions_score(
-    discussion_url: Annotated[str, typer.Argument(help="Canvas discussion URL containing course and topic IDs.")],
+    discussion_url: Annotated[
+        str, typer.Argument(help="Canvas discussion URL containing course and topic IDs.")
+    ],
     points_per_original: Annotated[float, typer.Argument(help="Points awarded per original post.")],
     points_per_response: Annotated[float, typer.Argument(help="Points awarded per response.")],
     max_original_comments: Annotated[int, typer.Argument(help="Maximum original posts counted.")],
     max_responses: Annotated[int, typer.Argument(help="Maximum responses counted.")],
-    output: Annotated[Path | None, typer.Option("--output", "-o", help="Optional CSV output for scored rows.")] = None,
-    upload: Annotated[bool, typer.Option("--upload", help="Post scores and comments to the discussion's Canvas assignment.")] = False,
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show upload actions without writing to Canvas. Implies upload preview.")] = False,
-    sleep_seconds: Annotated[float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")] = 0.3,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Optional CSV output for scored rows.")
+    ] = None,
+    upload: Annotated[
+        bool,
+        typer.Option(
+            "--upload", help="Post scores and comments to the discussion's Canvas assignment."
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Show upload actions without writing to Canvas. Implies upload preview.",
+        ),
+    ] = False,
+    sleep_seconds: Annotated[
+        float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
+    ] = 0.3,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,

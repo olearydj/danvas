@@ -9,9 +9,25 @@ dependencies = [
     "canvasapi>=3.3",
     "markdown>=3.6",
     "python-dotenv>=1.0",
+    "pyyaml>=6.0",
     "requests>=2.31",
     "typer>=0.12",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.8",
+    "ty>=0.0.1a22",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
 
 [project.scripts]
 danvas = "danvas.cli:main"

@@ -16,6 +16,11 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - full or concise payloads
   - includes assignment groups, points, dates, publication state, submission types, URLs, and descriptions
 
+- audit Canvas assignment setup
+  - compare Canvas assignment group weights to `course.yaml`
+  - summarize assignments by group
+  - identify unpublished assignments and missing due dates
+
 - create assignments in Canvas
   - Markdown body with TOML front matter
   - supports Canvas assignment metadata fields
@@ -38,6 +43,12 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - idempotent checks for existing grades/comments
   - verify Canvas grades/comments against CSV
 
+- check and audit gradebook exports
+  - parse Canvas gradebook CSVs with `Points Possible` rows
+  - identify final score variants and assignment groups
+  - summarize missing, `N/A`, and nonnumeric cells
+  - reconstruct weighted totals from course policy and Canvas group scores
+
 - grade discussions
   - export discussion posts by discussion URL
   - score discussions by original post count and response count
@@ -50,6 +61,11 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - discussion scores to the associated graded discussion assignment
   - optional submission comments
   - dry-run mode before live Canvas writes
+
+- analyze Canvas quiz/survey exports
+  - parse Classic Quiz / Survey student-analysis CSV files
+  - discover question/score column pairs
+  - summarize scores and selected answer counts
 
 ## Installation
 
@@ -94,6 +110,7 @@ danvas assignments export --course-id 1706414 --output assignments.json
 danvas assignments export --course-id 1706414 --output assignments.csv
 danvas assignments export --course-id 1706414 --output assignments-md --format markdown
 danvas assignments create --course-id 1706414 assignments/hw1.md --dry-run
+danvas assignments audit assignments-full.json --course-yaml course.yaml --output assignment-audit.json
 
 # Submissions and feedback
 danvas submissions media --course-id 1706414 --assignment-id 19413569 --output-dir downloads
@@ -103,6 +120,13 @@ danvas submissions feedback --course-id 1706414 --assignment-id 19413569 \
 # Grades
 danvas grades post --course-id 1706414 --assignment-id 19413569 --grades-csv grades.csv --dry-run
 danvas grades verify --course-id 1706414 --assignment-id 19413569 --grades-csv grades.csv
+danvas gradebook check final-canvas-gradebook.csv --course-yaml course.yaml
+danvas gradebook audit final-canvas-gradebook.csv --course-yaml course.yaml \
+  --assignments assignments-full.json --output gradebook-audit.json
+
+# Quiz/survey exports
+danvas quiz analysis student-analysis.csv --answer-term "which version" --answer-term comp \
+  --output quiz-analysis.json
 
 # Discussions
 danvas discussions export https://auburn.instructure.com/courses/1655780/discussion_topics/9772349 \
