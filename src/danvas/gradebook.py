@@ -113,9 +113,6 @@ class CanvasGradebook:
             rows.append(row)
         return cls(path, headers, points, rows, points_idx)
 
-    def column_index(self, name: str) -> int | None:
-        return self.headers.index(name) if name in self.headers else None
-
     def choose_final_score_column(self, requested: str | None = None) -> tuple[str, int]:
         candidates = [requested] if requested else []
         candidates += [candidate for candidate in TOTAL_VARIANTS if candidate not in candidates]
@@ -318,30 +315,68 @@ def reconstruct_scores(
     reconstruction: dict[str, Any],
     tolerance: float,
 ) -> dict[str, Any]:
-    base_assignment = reconstruction.get("base_assignment")
-    target_idx = (
-        gradebook.headers.index(base_assignment)
-        if base_assignment in gradebook.headers
-        else final_idx
+    target_idx, base_assignment = reconstruction_target(gradebook, final_idx, reconstruction)
+    adjustment_names, adjustment_indices, missing_adjustments = adjustment_columns(
+        gradebook,
+        reconstruction,
     )
-    adjustment_names = reconstruction.get("adjustment_assignments") or []
+    diffs, skipped = reconstruction_diffs(
+        gradebook,
+        final_idx,
+        target_idx,
+        base_assignment,
+        matched,
+        weights,
+        adjustment_indices,
+    )
+    return reconstruction_summary(
+        gradebook,
+        target_idx,
+        base_assignment,
+        adjustment_names,
+        missing_adjustments,
+        diffs,
+        skipped,
+        tolerance,
+    )
+
+
+def reconstruction_target(
+    gradebook: CanvasGradebook,
+    final_idx: int,
+    reconstruction: dict[str, Any],
+) -> tuple[int, str | None]:
+    base_assignment = reconstruction.get("base_assignment")
+    if isinstance(base_assignment, str) and base_assignment in gradebook.headers:
+        return gradebook.headers.index(base_assignment), base_assignment
+    return final_idx, None
+
+
+def adjustment_columns(
+    gradebook: CanvasGradebook,
+    reconstruction: dict[str, Any],
+) -> tuple[list[str], list[int], list[str]]:
+    adjustment_names = [str(name) for name in reconstruction.get("adjustment_assignments") or []]
     adjustment_indices = [
         gradebook.headers.index(name) for name in adjustment_names if name in gradebook.headers
     ]
     missing_adjustments = [name for name in adjustment_names if name not in gradebook.headers]
+    return adjustment_names, adjustment_indices, missing_adjustments
+
+
+def reconstruction_diffs(
+    gradebook: CanvasGradebook,
+    final_idx: int,
+    target_idx: int,
+    base_assignment: str | None,
+    matched: dict[str, int],
+    weights: dict[str, float],
+    adjustment_indices: list[int],
+) -> tuple[list[float], int]:
     diffs = []
     skipped = 0
     for row in gradebook.rows:
-        if base_assignment:
-            score = parse_number(row[target_idx])
-        else:
-            score = 0.0
-            for group, idx in matched.items():
-                value = parse_number(row[idx])
-                if value is None:
-                    score = None
-                    break
-                score += value * weights[group] / 100
+        score = row_base_score(row, target_idx, base_assignment, matched, weights)
         final = parse_number(row[final_idx])
         if score is None or final is None:
             skipped += 1
@@ -349,12 +384,45 @@ def reconstruct_scores(
         for idx in adjustment_indices:
             score += parse_number(row[idx]) or 0
         diffs.append(score - final)
+    return diffs, skipped
+
+
+def row_base_score(
+    row: list[str],
+    target_idx: int,
+    base_assignment: str | None,
+    matched: dict[str, int],
+    weights: dict[str, float],
+) -> float | None:
+    if base_assignment:
+        return parse_number(row[target_idx])
+    score = 0.0
+    for group, idx in matched.items():
+        value = parse_number(row[idx])
+        if value is None:
+            return None
+        score += value * weights[group] / 100
+    return score
+
+
+def reconstruction_summary(
+    gradebook: CanvasGradebook,
+    target_idx: int,
+    base_assignment: str | None,
+    adjustment_names: list[str],
+    missing_adjustments: list[str],
+    diffs: list[float],
+    skipped: int,
+    tolerance: float,
+) -> dict[str, Any]:
     abs_diffs = [abs(diff) for diff in diffs]
     rows_over = sum(1 for diff in abs_diffs if diff > tolerance)
     return {
         "target": gradebook.headers[target_idx],
         "posted_method": "base plus adjustments" if base_assignment else "weighted groups",
-        "adjustment_assignments": [name for name in adjustment_names if name in gradebook.headers],
+        "adjustment_assignments": [
+            name for name in adjustment_names if name not in missing_adjustments
+        ],
         "missing_adjustment_assignments": missing_adjustments,
         "rows_compared": len(diffs),
         "rows_skipped": skipped,
