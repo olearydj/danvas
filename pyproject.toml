@@ -1,0 +1,25 @@
+[project]
+name = "danvas"
+version = "0.1.0"
+description = "Unified operational Canvas CLI"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.12",
+    "canvasapi>=3.3",
+    "markdown>=3.6",
+    "python-dotenv>=1.0",
+    "requests>=2.31",
+    "typer>=0.12",
+]
+
+[project.scripts]
+danvas = "danvas.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "danvas"
+module-root = "src"
