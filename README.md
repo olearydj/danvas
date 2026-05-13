@@ -2,7 +2,9 @@
 
 `danvas` is a command-line tool for day-to-day Canvas course operations: rosters, assignments, submissions, grading, and discussions.
 
-It is intentionally separate from archival/history tooling such as Canvas ledger databases. See `docs/pdd-v1.md` for the original consolidation notes and source inventory.
+Status: early/internal tool. It is useful for real Canvas workflows, but command behavior may still change as course planning and audit workflows mature.
+
+It is intentionally separate from archival/history tooling such as Canvas ledger databases.
 
 ## Functionality
 
