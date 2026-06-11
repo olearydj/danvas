@@ -29,7 +29,7 @@ uv run ty check
 uv run pytest
 ```
 
-Latest checks: `ruff` clean and `35 passed` in pytest. `uv run ty check` currently reports 11 diagnostics (BeautifulSoup typing in `panopto.py`, optional-key dict lookups, and test fakes passed where `requests` types are annotated).
+Latest checks: `ruff` clean, `ty` clean, and `70 passed` in pytest.
 
 Main files:
 
@@ -39,6 +39,7 @@ Main files:
 - `src/danvas/courses.py`: courses/roster operations.
 - `src/danvas/assignments.py`: assignment export/create operations.
 - `src/danvas/announcements.py`: announcement create/export operations.
+- `src/danvas/frontmatter.py`: shared Markdown front matter parsing for write commands.
 - `src/danvas/submissions.py`: submission download/feedback upload operations.
 - `src/danvas/grades.py`: grade post/verify operations.
 - `src/danvas/discussions.py`: discussion export/score/upload operations.
