@@ -22,6 +22,7 @@ from danvas.files import command_files_download, command_files_inventory
 from danvas.grades import command_grades_post, command_grades_verify
 from danvas.panopto import command_panopto_captions
 from danvas.submissions import command_submissions_feedback, command_submissions_media
+from danvas.utils import write_json
 
 SecretProvider = Literal["auto", "1password", "env"]
 AssignmentExportFormat = Literal["auto", "json", "csv", "markdown"]
@@ -375,7 +376,7 @@ def assignments_audit(
     typer.echo(f"  Unpublished: {len(payload['assignments']['unpublished'])}")
     typer.echo(f"  Missing due dates: {len(payload['assignments']['missing_due_dates'])}")
     if output:
-        gradebook.write_json(output, payload)
+        write_json(output, payload)
         typer.echo(f"Wrote {output}")
 
 
@@ -408,7 +409,7 @@ def gradebook_check(
     if payload["missing"]["totals"]:
         typer.echo(f"  Missing/nonnumeric totals: {payload['missing']['totals']}")
     if output:
-        gradebook.write_json(output, payload)
+        write_json(output, payload)
         typer.echo(f"Wrote {output}")
 
 
@@ -463,7 +464,7 @@ def gradebook_audit(
     typer.echo(f"  Rows over tolerance: {recon['rows_over_tolerance']}")
     typer.echo(f"  Status: {recon['status']}")
     if output:
-        gradebook.write_json(output, payload)
+        write_json(output, payload)
         typer.echo(f"Wrote {output}")
 
 
@@ -494,7 +495,7 @@ def quiz_analysis(
     if "answer_counts" in payload:
         typer.echo(f"  Answer counts: {payload['answer_counts']}")
     if output:
-        quiz.write_json(output, payload)
+        write_json(output, payload)
         typer.echo(f"Wrote {output}")
 
 

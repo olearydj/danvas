@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -138,8 +137,3 @@ def analyze_student_analysis(path: Path, answer_terms: list[str] | None = None) 
             counts[answer] = counts.get(answer, 0) + 1
         payload["answer_counts"] = {" ".join(answer_terms): counts}
     return payload
-
-
-def write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

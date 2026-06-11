@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import json
-import tomllib
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from danvas.auth import canvas_from_args
+from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
 from danvas.utils import canvas_object_to_dict, html_to_text, write_rows
 
 ANNOUNCEMENT_METADATA_FIELDS = {
@@ -83,55 +80,17 @@ def command_announcements_create(args: Any) -> None:
 
 def load_announcement_markdown(source: Path) -> dict[str, Any]:
     text = source.read_text(encoding="utf-8-sig")
-    metadata, body = parse_announcement_frontmatter(text, source)
+    metadata, body = parse_frontmatter(text, source, "Announcement")
     if not str(metadata.get("title", "")).strip():
         raise SystemExit("Announcement metadata must include 'title'.")
     unknown = sorted(set(metadata) - ANNOUNCEMENT_METADATA_FIELDS)
     if unknown:
         raise SystemExit(f"Unsupported announcement metadata field(s): {', '.join(unknown)}")
-
-    import markdown as markdown_lib
-
     announcement = {key: normalize_canvas_value(value) for key, value in metadata.items()}
     announcement.setdefault("published", False)
     announcement["is_announcement"] = True
-    announcement["message"] = markdown_lib.markdown(body, extensions=["extra", "sane_lists"])
+    announcement["message"] = markdown_to_html(body)
     return announcement
-
-
-def parse_announcement_frontmatter(text: str, source: Path) -> tuple[dict[str, Any], str]:
-    lines = text.splitlines(keepends=True)
-    if not lines:
-        raise SystemExit(f"Announcement source must start with front matter: {source}")
-    delimiter = lines[0].strip()
-    if delimiter not in {"+++", "---"}:
-        raise SystemExit(
-            f"Announcement source must start with YAML (---) or TOML (+++) front matter: {source}"
-        )
-    close = next(
-        (idx for idx, line in enumerate(lines[1:], start=1) if line.strip() == delimiter), None
-    )
-    if close is None:
-        raise SystemExit(f"Announcement source missing closing {delimiter}: {source}")
-    metadata_text = "".join(lines[1:close])
-    if delimiter == "+++":
-        metadata = tomllib.loads(metadata_text)
-    else:
-        metadata = yaml.safe_load(metadata_text) or {}
-        if not isinstance(metadata, dict):
-            raise SystemExit(f"Announcement YAML front matter must be a mapping: {source}")
-    body = "".join(lines[close + 1 :])
-    return {str(key): value for key, value in metadata.items()}, body
-
-
-def normalize_canvas_value(value: Any) -> Any:
-    if isinstance(value, (dt.datetime, dt.date, dt.time)):
-        return value.isoformat()
-    if isinstance(value, list):
-        return [normalize_canvas_value(item) for item in value]
-    if isinstance(value, dict):
-        return {str(key): normalize_canvas_value(item) for key, item in value.items()}
-    return value
 
 
 def resolve_format(output: Path, requested: str) -> str:

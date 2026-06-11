@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
+import json
 import re
 import unicodedata
 from html.parser import HTMLParser
@@ -73,3 +74,8 @@ def write_rows(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) ->
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

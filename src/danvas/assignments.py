@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import json
-import tomllib
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from danvas.auth import canvas_from_args
 from danvas.config import resolve_assignment_group_id
+from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
 from danvas.utils import canvas_object_to_dict, html_to_text, slugify, write_rows
 
 ASSIGNMENT_METADATA_FIELDS = {
@@ -188,7 +185,7 @@ def command_assignments_create(args: Any) -> None:
 
 def load_assignment_markdown(source: Path) -> dict[str, Any]:
     text = source.read_text(encoding="utf-8-sig")
-    metadata, body = parse_assignment_frontmatter(text, source)
+    metadata, body = parse_frontmatter(text, source, "Assignment")
     if "title" in metadata:
         if "name" in metadata:
             raise SystemExit("Use either 'name' or 'title', not both.")
@@ -198,44 +195,7 @@ def load_assignment_markdown(source: Path) -> dict[str, Any]:
     unknown = sorted(set(metadata) - ASSIGNMENT_METADATA_FIELDS)
     if unknown:
         raise SystemExit(f"Unsupported assignment metadata field(s): {', '.join(unknown)}")
-    import markdown as markdown_lib
-
     assignment = {key: normalize_canvas_value(value) for key, value in metadata.items()}
     assignment.setdefault("published", False)
-    assignment["description"] = markdown_lib.markdown(body, extensions=["extra", "sane_lists"])
+    assignment["description"] = markdown_to_html(body)
     return assignment
-
-
-def parse_assignment_frontmatter(text: str, source: Path) -> tuple[dict[str, Any], str]:
-    lines = text.splitlines(keepends=True)
-    if not lines:
-        raise SystemExit(f"Assignment source must start with front matter: {source}")
-    delimiter = lines[0].strip()
-    if delimiter not in {"+++", "---"}:
-        raise SystemExit(
-            f"Assignment source must start with YAML (---) or TOML (+++) front matter: {source}"
-        )
-    close = next(
-        (idx for idx, line in enumerate(lines[1:], start=1) if line.strip() == delimiter), None
-    )
-    if close is None:
-        raise SystemExit(f"Assignment source missing closing {delimiter}: {source}")
-    metadata_text = "".join(lines[1:close])
-    if delimiter == "+++":
-        metadata = tomllib.loads(metadata_text)
-    else:
-        metadata = yaml.safe_load(metadata_text) or {}
-        if not isinstance(metadata, dict):
-            raise SystemExit(f"Assignment YAML front matter must be a mapping: {source}")
-    body = "".join(lines[close + 1 :])
-    return {str(key): value for key, value in metadata.items()}, body
-
-
-def normalize_canvas_value(value: Any) -> Any:
-    if isinstance(value, (dt.datetime, dt.date, dt.time)):
-        return value.isoformat()
-    if isinstance(value, list):
-        return [normalize_canvas_value(item) for item in value]
-    if isinstance(value, dict):
-        return {str(key): normalize_canvas_value(item) for key, item in value.items()}
-    return value

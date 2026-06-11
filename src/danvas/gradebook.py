@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 import re
 from collections import Counter
 from collections.abc import Iterable
@@ -433,8 +432,3 @@ def reconstruction_summary(
         "tolerance": tolerance,
         "status": "matches" if rows_over == 0 else "differs",
     }
-
-
-def write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
