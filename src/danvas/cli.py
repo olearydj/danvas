@@ -149,9 +149,8 @@ def run_command(func: Any, args: SimpleNamespace) -> None:
         typer.echo(f"Canvas resource not found: {exc}", err=True)
         raise typer.Exit(1) from exc
     except SystemExit as exc:
-        message = str(exc)
-        if message and message != "0":
-            typer.echo(message, err=True)
+        if isinstance(exc.code, str) and exc.code:
+            typer.echo(exc.code, err=True)
         raise typer.Exit(code=exc.code if isinstance(exc.code, int) else 1) from exc
 
 

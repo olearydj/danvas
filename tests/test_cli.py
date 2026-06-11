@@ -1,8 +1,11 @@
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
+import typer
 from typer.testing import CliRunner
 
-from danvas.cli import app
+from danvas.cli import app, run_command
 from tests.fixtures import write_assignment_fixture, write_gradebook_fixture, write_quiz_fixture
 
 runner = CliRunner()
@@ -64,6 +67,22 @@ def test_quiz_analysis_cli(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Students: 2" in result.output
+
+
+def test_run_command_echoes_string_exits_only(capsys: pytest.CaptureFixture[str]) -> None:
+    def fail_with_message(args: SimpleNamespace) -> None:
+        raise SystemExit("something went wrong")
+
+    def fail_with_code(args: SimpleNamespace) -> None:
+        raise SystemExit(1)
+
+    with pytest.raises(typer.Exit):
+        run_command(fail_with_message, SimpleNamespace())
+    assert "something went wrong" in capsys.readouterr().err
+
+    with pytest.raises(typer.Exit):
+        run_command(fail_with_code, SimpleNamespace())
+    assert capsys.readouterr().err == ""
 
 
 def test_recordings_panopto_captions_help() -> None:
