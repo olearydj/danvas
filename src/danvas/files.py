@@ -85,10 +85,18 @@ def command_files_download(args: Any) -> None:
 
     folders = list(course.get_folders())
     folders_by_id = {int(folder.id): folder for folder in folders if getattr(folder, "id", None)}
+    pairs = [
+        (file_obj, canvas_file_record(file_obj, folders_by_id)) for file_obj in course.get_files()
+    ]
+    path_counts = Counter(download_relative_path(record) for _, record in pairs)
     rows = []
-    for file_obj in course.get_files():
-        record = canvas_file_record(file_obj, folders_by_id)
+    for file_obj, record in pairs:
         relative_path = download_relative_path(record)
+        deduplicated = path_counts[relative_path] > 1
+        if deduplicated:
+            relative_path = relative_path.with_name(
+                f"{relative_path.stem}-{record['id']}{relative_path.suffix}"
+            )
         target = output_dir / relative_path
         skipped = target.exists() and not args.overwrite
         if not skipped:
@@ -98,6 +106,7 @@ def command_files_download(args: Any) -> None:
             {
                 **record,
                 "download_path": target.relative_to(output_dir).as_posix(),
+                "deduplicated": deduplicated,
                 "status": "skipped_exists" if skipped else "downloaded",
             }
         )

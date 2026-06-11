@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -140,3 +141,31 @@ def test_command_files_download_writes_manifest(
     manifest = (tmp_path / "files-download-manifest.json").read_text(encoding="utf-8")
     assert "case.pdf" in manifest
     assert "verifier" not in manifest
+
+
+def test_command_files_download_deduplicates_colliding_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class CollidingCourse(FakeCourse):
+        def get_files(self) -> list[object]:
+            return [
+                FakeFile(id=10, display_name="case.pdf", filename="case.pdf", folder_id=2, size=7),
+                FakeFile(id=11, display_name="case.pdf", filename="case.pdf", folder_id=2, size=9),
+            ]
+
+    class CollidingCanvas:
+        def get_course(self, course_id: int) -> CollidingCourse:
+            return CollidingCourse()
+
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: CollidingCanvas())
+    args = SimpleNamespace(course_id=101, output_dir=str(tmp_path), overwrite=False)
+
+    command_files_download(args)
+
+    assert (tmp_path / "cases" / "case-10.pdf").read_bytes() == b"x" * 7
+    assert (tmp_path / "cases" / "case-11.pdf").read_bytes() == b"x" * 9
+    manifest = json.loads(
+        (tmp_path / "files-download-manifest.json").read_text(encoding="utf-8")
+    )
+    assert [row["deduplicated"] for row in manifest["files"]] == [True, True]
+    assert [row["status"] for row in manifest["files"]] == ["downloaded", "downloaded"]
