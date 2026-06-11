@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from danvas import assignment_audit, gradebook, quiz
 from danvas.assignments import command_assignments_create, command_assignments_export
 from danvas.auth import DEFAULT_API_URL
+from danvas.config import command_init, command_refresh, resolve_api_url, resolve_course_id
 from danvas.courses import command_courses, command_roster
 from danvas.discussions import command_discussions_export, command_discussions_score
 from danvas.grades import command_grades_post, command_grades_verify
@@ -88,13 +89,20 @@ ApiKeyEnv = Annotated[
     str | None,
     typer.Option("--api-key-env", help="Environment variable containing the Canvas API token."),
 ]
-CourseId = Annotated[int, typer.Option("--course-id", help="Canvas course ID.")]
+CourseId = Annotated[int | None, typer.Option("--course-id", help="Canvas course ID.")]
 AssignmentId = Annotated[int, typer.Option("--assignment-id", help="Canvas assignment ID.")]
 
 
 def args_for(**kwargs: Any) -> SimpleNamespace:
     """Build the namespace expected by operation modules."""
-    kwargs["api_url"] = kwargs.get("api_url") or os.environ.get("CANVAS_API_URL", DEFAULT_API_URL)
+    config_start = config_start_for(kwargs)
+    if "course_id" in kwargs:
+        kwargs["course_id"] = resolve_course_id(kwargs.get("course_id"), start=config_start)
+    kwargs["api_url"] = (
+        resolve_api_url(kwargs.get("api_url"), start=config_start)
+        or os.environ.get("CANVAS_API_URL")
+        or DEFAULT_API_URL
+    )
     kwargs["secret_provider"] = kwargs.get("secret_provider") or os.environ.get(
         "CANVAS_SECRET_PROVIDER", "auto"
     )
@@ -105,6 +113,14 @@ def args_for(**kwargs: Any) -> SimpleNamespace:
         "CANVAS_API_KEY_ENV", "CANVAS_API_KEY"
     )
     return SimpleNamespace(**kwargs)
+
+
+def config_start_for(kwargs: dict[str, Any]) -> Path | None:
+    for key in ("project_root", "source"):
+        value = kwargs.get(key)
+        if value:
+            return Path(value)
+    return None
 
 
 def run_command(func: Any, args: SimpleNamespace) -> None:
@@ -118,6 +134,68 @@ def run_command(func: Any, args: SimpleNamespace) -> None:
         if message and message != "0":
             typer.echo(message, err=True)
         raise typer.Exit(code=exc.code if isinstance(exc.code, int) else 1) from exc
+
+
+@app.command(
+    "init",
+    help="Create .danvas/config.toml and .danvas/course.json for a Canvas course project.",
+)
+def init_project(
+    course_id: Annotated[int, typer.Argument(help="Canvas course ID to bind to this project.")],
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root to initialize.")
+    ] = Path("."),
+    timezone: Annotated[
+        str, typer.Option("--timezone", help="Course-local timezone for due-date workflows.")
+    ] = "America/Chicago",
+    force: Annotated[
+        bool, typer.Option("--force", help="Replace an existing .danvas/config.toml.")
+    ] = False,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_init,
+        args_for(
+            course_id=course_id,
+            project_root=str(project_root),
+            timezone=timezone,
+            force=force,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@app.command(
+    "refresh",
+    help="Refresh .danvas/course.json from Canvas using --course-id or .danvas/config.toml.",
+)
+def refresh_project(
+    course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_refresh,
+        args_for(
+            course_id=course_id,
+            project_root=str(project_root),
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
 
 
 @app.command(help="Export active courses visible to the authenticated Canvas user.")
@@ -149,7 +227,7 @@ def courses(
     help="Export active course enrollments to a roster CSV for later grade/feedback matching."
 )
 def roster(
-    course_id: CourseId,
+    course_id: CourseId = None,
     output: Annotated[
         Path, typer.Option("--output", "-o", help="CSV output path: CanvasID, Name, Email, SIS_ID.")
     ] = Path("roster.csv"),
@@ -180,7 +258,7 @@ def roster(
     "export", help="Export assignment details as JSON, CSV, or a Markdown directory."
 )
 def assignments_export(
-    course_id: CourseId,
+    course_id: CourseId = None,
     output: Annotated[
         Path,
         typer.Option(
@@ -222,13 +300,13 @@ def assignments_export(
     help="Create one Canvas assignment from Markdown. Use --dry-run first to inspect the payload.",
 )
 def assignments_create(
-    course_id: CourseId,
     source: Annotated[
         Path,
         typer.Argument(
             help="Markdown source beginning with YAML (---) or TOML (+++) assignment metadata."
         ),
     ],
+    course_id: CourseId = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Print the Canvas payload without creating anything.")
     ] = False,
@@ -406,8 +484,8 @@ def quiz_analysis(
     "media", help="Download all submission attachments and media comments for one assignment."
 )
 def submissions_media(
-    course_id: CourseId,
     assignment_id: AssignmentId,
+    course_id: CourseId = None,
     output_dir: Annotated[
         Path,
         typer.Option(
@@ -438,7 +516,6 @@ def submissions_media(
     help="Upload feedback files as submission comments, matching Canvas IDs embedded in filenames.",
 )
 def submissions_feedback(
-    course_id: CourseId,
     assignment_id: AssignmentId,
     roster_path: Annotated[
         Path, typer.Option("--roster", "-r", help="Roster CSV with a CanvasID column.")
@@ -446,6 +523,7 @@ def submissions_feedback(
     feedback_dir: Annotated[
         Path, typer.Option("--feedback-dir", "-d", help="Directory containing feedback files.")
     ],
+    course_id: CourseId = None,
     pattern: Annotated[
         str,
         typer.Option(
@@ -495,7 +573,6 @@ def submissions_feedback(
     help="Post assignment grades from CSV. If Comment is present, add it once as a submission comment.",
 )
 def grades_post(
-    course_id: CourseId,
     assignment_id: AssignmentId,
     grades_csv: Annotated[
         Path,
@@ -503,6 +580,7 @@ def grades_post(
             "--grades-csv", "-g", help="CSV with CanvasID, Grade, optional Name, optional Comment."
         ),
     ],
+    course_id: CourseId = None,
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -537,11 +615,11 @@ def grades_post(
     "verify", help="Check Canvas grades/comments against a CSV and exit nonzero on mismatch."
 )
 def grades_verify(
-    course_id: CourseId,
     assignment_id: AssignmentId,
     grades_csv: Annotated[
         Path, typer.Option("--grades-csv", "-g", help="CSV with CanvasID, Grade, optional Comment.")
     ],
+    course_id: CourseId = None,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,

@@ -100,6 +100,48 @@ Common options are available on Canvas-backed commands:
 --api-key-env
 ```
 
+## Project Configuration
+
+Initialize a teaching project once to avoid repeating the Canvas course ID and
+assignment group IDs:
+
+```bash
+danvas init 1742717
+```
+
+This writes:
+
+```text
+.danvas/config.toml
+.danvas/course.json
+```
+
+`config.toml` is the human-readable project configuration. It stores stable,
+non-secret defaults such as the Canvas base URL, course ID, course timezone, and
+assignment group name-to-ID mappings. `course.json` is a generated Canvas
+metadata snapshot for local lookup and comparison. If the project is a git repo,
+`danvas init` adds `.danvas/course.json` to `.gitignore`.
+
+Refresh the generated snapshot without changing Canvas:
+
+```bash
+danvas refresh
+```
+
+After initialization, Canvas-backed commands can omit `--course-id`; an explicit
+`--course-id` still wins over the project config. Assignment Markdown can also
+use an assignment group name:
+
+```yaml
+---
+title: Case Study 1
+assignment_group_name: Case Studies
+points_possible: 100
+---
+```
+
+Use `assignment_group_id` when you want to bypass project-local name resolution.
+
 ## Examples
 
 ```bash

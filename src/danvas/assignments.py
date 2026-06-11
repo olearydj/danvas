@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from danvas.auth import canvas_from_args
+from danvas.config import resolve_assignment_group_id
 from danvas.utils import canvas_object_to_dict, html_to_text, slugify, write_rows
 
 ASSIGNMENT_METADATA_FIELDS = {
@@ -19,6 +20,8 @@ ASSIGNMENT_METADATA_FIELDS = {
     "anonymous_grading",
     "anonymous_peer_reviews",
     "assignment_group_id",
+    "assignment_group",
+    "assignment_group_name",
     "automatic_peer_reviews",
     "due_at",
     "external_tool_tag_attributes",
@@ -155,6 +158,16 @@ def command_assignments_create(args: Any) -> None:
     if not source.is_file():
         raise SystemExit(f"Assignment Markdown source not found: {source}")
     assignment = load_assignment_markdown(source)
+    if "assignment_group" in assignment:
+        if "assignment_group_name" in assignment:
+            raise SystemExit("Use either assignment_group or assignment_group_name, not both.")
+        assignment["assignment_group_name"] = assignment.pop("assignment_group")
+    if "assignment_group_name" in assignment:
+        assignment["assignment_group_id"] = resolve_assignment_group_id(
+            str(assignment.pop("assignment_group_name")),
+            explicit_id=assignment.get("assignment_group_id"),
+            start=source,
+        )
     if args.dry_run:
         print("Dry run - no assignment created.")
         print(json.dumps(assignment, indent=2, ensure_ascii=False))
