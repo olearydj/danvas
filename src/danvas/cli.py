@@ -36,7 +36,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 assignments_app = typer.Typer(
-    help="Create assignments from Markdown/TOML or export assignment metadata for review.",
+    help="Create assignments from Markdown sources or export assignment metadata for review.",
     no_args_is_help=True,
 )
 gradebook_app = typer.Typer(
@@ -224,7 +224,10 @@ def assignments_export(
 def assignments_create(
     course_id: CourseId,
     source: Annotated[
-        Path, typer.Argument(help="Markdown source beginning with +++ TOML assignment metadata.")
+        Path,
+        typer.Argument(
+            help="Markdown source beginning with YAML (---) or TOML (+++) assignment metadata."
+        ),
     ],
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Print the Canvas payload without creating anything.")

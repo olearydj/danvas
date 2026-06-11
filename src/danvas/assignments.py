@@ -8,6 +8,8 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from danvas.auth import canvas_from_args
 from danvas.utils import canvas_object_to_dict, html_to_text, slugify, write_rows
 
@@ -167,16 +169,7 @@ def command_assignments_create(args: Any) -> None:
 
 def load_assignment_markdown(source: Path) -> dict[str, Any]:
     text = source.read_text(encoding="utf-8-sig")
-    lines = text.splitlines(keepends=True)
-    if not lines or lines[0].strip() != "+++":
-        raise SystemExit(f"Assignment source must start with TOML front matter: {source}")
-    close = next(
-        (idx for idx, line in enumerate(lines[1:], start=1) if line.strip() == "+++"), None
-    )
-    if close is None:
-        raise SystemExit(f"Assignment source missing closing +++: {source}")
-    metadata = tomllib.loads("".join(lines[1:close]))
-    body = "".join(lines[close + 1 :])
+    metadata, body = parse_assignment_frontmatter(text, source)
     if "title" in metadata:
         if "name" in metadata:
             raise SystemExit("Use either 'name' or 'title', not both.")
@@ -192,6 +185,31 @@ def load_assignment_markdown(source: Path) -> dict[str, Any]:
     assignment.setdefault("published", False)
     assignment["description"] = markdown_lib.markdown(body, extensions=["extra", "sane_lists"])
     return assignment
+
+
+def parse_assignment_frontmatter(text: str, source: Path) -> tuple[dict[str, Any], str]:
+    lines = text.splitlines(keepends=True)
+    if not lines:
+        raise SystemExit(f"Assignment source must start with front matter: {source}")
+    delimiter = lines[0].strip()
+    if delimiter not in {"+++", "---"}:
+        raise SystemExit(
+            f"Assignment source must start with YAML (---) or TOML (+++) front matter: {source}"
+        )
+    close = next(
+        (idx for idx, line in enumerate(lines[1:], start=1) if line.strip() == delimiter), None
+    )
+    if close is None:
+        raise SystemExit(f"Assignment source missing closing {delimiter}: {source}")
+    metadata_text = "".join(lines[1:close])
+    if delimiter == "+++":
+        metadata = tomllib.loads(metadata_text)
+    else:
+        metadata = yaml.safe_load(metadata_text) or {}
+        if not isinstance(metadata, dict):
+            raise SystemExit(f"Assignment YAML front matter must be a mapping: {source}")
+    body = "".join(lines[close + 1 :])
+    return {str(key): value for key, value in metadata.items()}, body
 
 
 def normalize_canvas_value(value: Any) -> Any:

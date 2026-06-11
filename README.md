@@ -24,7 +24,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - identify unpublished assignments and missing due dates
 
 - create assignments in Canvas
-  - Markdown body with TOML front matter
+  - Markdown body with YAML (`---`) or TOML (`+++`) front matter
   - supports Canvas assignment metadata fields
   - dry-run mode to inspect payload before creating
 
