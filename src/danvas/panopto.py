@@ -184,6 +184,7 @@ def collect_lti_sessions(
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
+    listed: set[str] = set()
     wanted = set(session_ids or [])
     page = 0
     while len(rows) < limit:
@@ -202,6 +203,10 @@ def collect_lti_sessions(
         page_rows = payload.get("Results") or []
         if not page_rows:
             break
+        page_ids = {str(row.get("SessionID") or "") for row in page_rows}
+        if page_ids <= listed:
+            break
+        listed |= page_ids
         for row in page_rows:
             session_id = str(row.get("SessionID") or "")
             if wanted and session_id not in wanted:

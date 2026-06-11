@@ -137,6 +137,22 @@ def test_collect_lti_sessions_filters_deduplicates_and_pages() -> None:
     assert [call["json"]["queryParameters"]["page"] for call in web.post_calls] == [0, 1]
 
 
+def test_collect_lti_sessions_stops_when_server_repeats_pages() -> None:
+    lecture = {"SessionID": "session-one", "SessionName": "Lecture 1", "HasCaptions": True}
+    web = FakePanoptoSession(pages=[[lecture], [lecture], [lecture]])
+
+    sessions = collect_lti_sessions(
+        web,
+        "https://panopto.example",
+        folder_id=None,
+        session_ids=None,
+        limit=5,
+    )
+
+    assert sessions == [lecture]
+    assert len(web.post_calls) == 2
+
+
 def test_caption_filename_from_response_handles_encoded_filename() -> None:
     response = FakeResponse(
         headers={"content-disposition": "attachment; filename*=UTF-8''Lecture%201.txt"}
