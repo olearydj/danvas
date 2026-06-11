@@ -207,7 +207,7 @@ def filtered_replies(full_topic: dict[str, Any], reply_user_id: int) -> list[dic
                     {
                         "id": entry.get("id"),
                         "parent_id": entry.get("parent_id", parent_id),
-                        "author": participants.get(user_id, f"User {user_id}"),
+                        "author": participants.get(reply_user_id, f"User {user_id}"),
                         "author_id": user_id,
                         "message": html_to_text(entry.get("message") or ""),
                         "message_html": entry.get("message") or "",

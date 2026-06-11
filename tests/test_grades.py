@@ -39,13 +39,13 @@ class FakeAssignment:
 
 
 class FakeCanvas:
-    def __init__(self, assignment: FakeAssignment) -> None:
+    def __init__(self, assignment: Any) -> None:
         self.assignment = assignment
 
     def get_course(self, course_id: int) -> FakeCanvas:
         return self
 
-    def get_assignment(self, assignment_id: int) -> FakeAssignment:
+    def get_assignment(self, assignment_id: int) -> Any:
         return self.assignment
 
 
@@ -168,7 +168,7 @@ def test_grades_post_reports_failures_and_exits_nonzero(
         def get_submission(self, user_id: int, include: list[str] | None = None) -> Any:
             raise RuntimeError("boom")
 
-    canvas = FakeCanvas(ExplodingAssignment())  # type: ignore[arg-type]
+    canvas = FakeCanvas(ExplodingAssignment())
     monkeypatch.setattr("danvas.grades.canvas_from_args", lambda args: canvas)
 
     with pytest.raises(SystemExit):

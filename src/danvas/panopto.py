@@ -7,7 +7,7 @@ import re
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import unquote, urljoin, urlparse
 
 import requests
@@ -15,6 +15,37 @@ from bs4 import BeautifulSoup
 
 from danvas.auth import resolve_api_key
 from danvas.utils import write_rows
+
+
+class HttpSession(Protocol):
+    """requests.Session-style GET interface; lets tests substitute fakes."""
+
+    def get(
+        self,
+        url: str,
+        *,
+        params: Any = ...,
+        timeout: Any = ...,
+        allow_redirects: bool = ...,
+    ) -> Any: ...
+
+
+class WebSession(HttpSession, Protocol):
+    def post(
+        self,
+        url: str,
+        *,
+        data: Any = ...,
+        json: Any = ...,
+        headers: Any = ...,
+        timeout: Any = ...,
+        allow_redirects: bool = ...,
+    ) -> Any: ...
+
+
+class HttpResponse(Protocol):
+    @property
+    def headers(self) -> Any: ...
 
 CAPTION_MANIFEST_FIELDS = [
     "session_id",
@@ -69,7 +100,7 @@ def command_panopto_captions(args: Any) -> None:
 
 
 def discover_panopto_tool(
-    canvas: requests.Session, canvas_api_url: str, course_id: int
+    canvas: HttpSession, canvas_api_url: str, course_id: int
 ) -> dict[str, Any]:
     tools = canvas_get_paginated(
         canvas,
@@ -97,7 +128,7 @@ def external_tool_id(tab: dict[str, Any]) -> int | str | None:
 
 
 def canvas_get_paginated(
-    session: requests.Session, canvas_api_url: str, path: str
+    session: HttpSession, canvas_api_url: str, path: str
 ) -> list[dict[str, Any]]:
     url = urljoin(canvas_api_url.rstrip("/") + "/", path)
     rows: list[dict[str, Any]] = []
@@ -125,7 +156,7 @@ def normalize_panopto_base_url(value: str | None) -> str:
 
 
 def establish_lti_session(
-    canvas: requests.Session,
+    canvas: HttpSession,
     canvas_api_url: str,
     *,
     course_id: int,
@@ -156,13 +187,16 @@ def establish_lti_session(
         form = soup.find("form")
         if form is None:
             break
-        action = urljoin(response.url, form.get("action") or "")
-        data = {
-            input_tag.get("name"): input_tag.get("value", "")
-            for input_tag in form.find_all("input")
-            if input_tag.get("name")
-        }
-        method = (form.get("method") or "get").lower()
+        action_value = form.get("action")
+        action = urljoin(response.url, action_value if isinstance(action_value, str) else "")
+        data = {}
+        for input_tag in form.find_all("input"):
+            name = input_tag.get("name")
+            if isinstance(name, str):
+                value = input_tag.get("value", "")
+                data[name] = value if isinstance(value, str) else ""
+        method_value = form.get("method")
+        method = (method_value if isinstance(method_value, str) else "get").lower()
         if method == "post":
             response = web.post(action, data=data, timeout=30, allow_redirects=True)
         else:
@@ -175,7 +209,7 @@ def establish_lti_session(
 
 
 def collect_lti_sessions(
-    web: requests.Session,
+    web: WebSession,
     panopto_base_url: str,
     *,
     folder_id: str | None,
@@ -223,7 +257,7 @@ def collect_lti_sessions(
 
 
 def lti_get_sessions(
-    web: requests.Session, panopto_base_url: str, query_parameters: dict[str, Any]
+    web: WebSession, panopto_base_url: str, query_parameters: dict[str, Any]
 ) -> dict[str, Any]:
     endpoint = urljoin(
         panopto_base_url.rstrip("/") + "/Panopto/",
@@ -244,7 +278,7 @@ def lti_get_sessions(
 
 
 def write_caption_outputs(
-    web: requests.Session,
+    web: WebSession,
     sessions: list[dict[str, Any]],
     panopto_base_url: str,
     *,
@@ -293,7 +327,7 @@ def lti_session_record(session: dict[str, Any]) -> dict[str, Any]:
 
 
 def download_lti_caption(
-    web: requests.Session,
+    web: WebSession,
     panopto_base_url: str,
     session: dict[str, Any],
     *,
@@ -320,7 +354,7 @@ def download_lti_caption(
     return target
 
 
-def caption_filename_from_response(response: requests.Response) -> str | None:
+def caption_filename_from_response(response: HttpResponse) -> str | None:
     disposition = response.headers.get("content-disposition", "")
     encoded_match = re.search(r"filename\*=UTF-8''([^;]+)", disposition, flags=re.IGNORECASE)
     if encoded_match:

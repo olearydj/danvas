@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -70,11 +71,11 @@ class FakeCourse:
             },
         }
 
-    def get_discussion_topics(self, **kwargs: object) -> list[object]:
+    def get_discussion_topics(self, **kwargs: object) -> list[Any]:
         assert kwargs == {"only_announcements": True}
         return self.topics
 
-    def get_full_discussion_topic(self, topic_id: int) -> dict[str, object]:
+    def get_full_discussion_topic(self, topic_id: int) -> dict[str, Any]:
         return self.full_topics[topic_id]
 
     def create_discussion_topic(self, **kwargs: object) -> object:
