@@ -1,6 +1,6 @@
 # danvas
 
-`danvas` is a command-line tool for day-to-day Canvas course operations: rosters, assignments, submissions, grading, and discussions.
+`danvas` is a command-line tool for day-to-day Canvas course operations: rosters, assignments, submissions, grading, announcements, and discussions.
 
 Status: early/internal tool. It is useful for real Canvas workflows, but command behavior may still change as course planning and audit workflows mature.
 
@@ -57,6 +57,13 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - configurable points and caps
   - optional CSV output of scored rows
   - optional upload to graded discussion assignment
+
+- export announcements
+  - create announcements from Markdown with front matter
+  - dry-run mode to inspect the Canvas discussion-topic payload before creating
+  - course-level announcement bodies
+  - optional JSON, CSV, or Markdown output
+  - filters replies to the authenticated user by default, so student replies are excluded
 
 - upload grades
   - assignment grades from CSV
@@ -177,6 +184,10 @@ danvas discussions export https://auburn.instructure.com/courses/1655780/discuss
   --output discussion.json
 danvas discussions score https://auburn.instructure.com/courses/1655780/discussion_topics/9772349 \
   2 2 3 2 --output discussion-scores.csv
+
+# Announcements
+danvas announcements create --course-id 1706414 announcements/welcome.md --dry-run
+danvas announcements export --course-id 1655780 --output announcements.md
 ```
 
 ## CSV Formats

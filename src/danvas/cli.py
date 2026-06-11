@@ -12,6 +12,7 @@ from canvasapi.exceptions import ResourceDoesNotExist
 from dotenv import load_dotenv
 
 from danvas import assignment_audit, gradebook, quiz
+from danvas.announcements import command_announcements_create, command_announcements_export
 from danvas.assignments import command_assignments_create, command_assignments_export
 from danvas.auth import DEFAULT_API_URL
 from danvas.config import command_init, command_refresh, resolve_api_url, resolve_course_id
@@ -23,6 +24,7 @@ from danvas.submissions import command_submissions_feedback, command_submissions
 SecretProvider = Literal["auto", "1password", "env"]
 AssignmentExportFormat = Literal["auto", "json", "csv", "markdown"]
 DiscussionExportFormat = Literal["json", "csv"]
+AnnouncementExportFormat = Literal["auto", "json", "csv", "markdown"]
 
 
 app = typer.Typer(
@@ -60,6 +62,10 @@ discussions_app = typer.Typer(
     help="Export discussion posts or score participation for a graded discussion.",
     no_args_is_help=True,
 )
+announcements_app = typer.Typer(
+    help="Create/export course announcements and filtered instructor replies.",
+    no_args_is_help=True,
+)
 
 app.add_typer(assignments_app, name="assignments")
 app.add_typer(gradebook_app, name="gradebook")
@@ -67,6 +73,7 @@ app.add_typer(quiz_app, name="quiz")
 app.add_typer(submissions_app, name="submissions")
 app.add_typer(grades_app, name="grades")
 app.add_typer(discussions_app, name="discussions")
+app.add_typer(announcements_app, name="announcements")
 
 
 ApiUrl = Annotated[
@@ -666,6 +673,85 @@ def discussions_export(
             discussion_url=discussion_url,
             output=str(output),
             format=output_format,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@announcements_app.command(
+    "create",
+    help="Create one Canvas announcement from Markdown. Use --dry-run first to inspect the payload.",
+)
+def announcements_create(
+    source: Annotated[
+        Path,
+        typer.Argument(
+            help="Markdown source beginning with YAML (---) or TOML (+++) announcement metadata."
+        ),
+    ],
+    course_id: CourseId = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Print the Canvas payload without creating anything.")
+    ] = False,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_announcements_create,
+        args_for(
+            course_id=course_id,
+            source=str(source),
+            dry_run=dry_run,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@announcements_app.command(
+    "export",
+    help="Export course announcements, including only replies from the authenticated user by default.",
+)
+def announcements_export(
+    course_id: CourseId = None,
+    output: Annotated[
+        Path,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output file. Use .json, .csv, or .md, or specify --format.",
+        ),
+    ] = Path("announcements.json"),
+    output_format: Annotated[
+        AnnouncementExportFormat,
+        typer.Option("--format", help="Output format. 'auto' infers JSON/CSV/Markdown."),
+    ] = "auto",
+    reply_user_id: Annotated[
+        int | None,
+        typer.Option(
+            "--reply-user-id",
+            help="Canvas user ID whose replies should be included. Defaults to authenticated user.",
+        ),
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_announcements_export,
+        args_for(
+            course_id=course_id,
+            output=str(output),
+            format=output_format,
+            reply_user_id=reply_user_id,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
