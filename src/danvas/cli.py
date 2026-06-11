@@ -791,7 +791,7 @@ def files_inventory(
             "--local-root",
             help="Local course root for filename/size comparison. Omit to inventory Canvas only.",
         ),
-    ] = Path("."),
+    ] = None,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,

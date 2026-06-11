@@ -79,6 +79,19 @@ def test_build_file_inventory_compares_local_files_without_urls(tmp_path: Path) 
     assert "url" not in inventory["canvas_files"][0]
 
 
+def test_build_file_inventory_without_local_root_skips_comparison(tmp_path: Path) -> None:
+    inventory = build_file_inventory(FakeCourse(), local_root=None)
+
+    assert inventory["local_files_compared"] == 0
+    assert [row["status"] for row in inventory["comparison"]] == ["not_compared", "not_compared"]
+
+    output = tmp_path / "files-missing-report.md"
+    write_missing_report(output, inventory)
+    text = output.read_text(encoding="utf-8")
+    assert "Local comparison skipped" in text
+    assert "Missing locally by filename: `0`" in text
+
+
 def test_local_files_excludes_generated_and_grading_files(tmp_path: Path) -> None:
     (tmp_path / "files-inventory.json").write_text("{}", encoding="utf-8")
     grading_file = tmp_path / "_archive" / "24-25.Su" / "grading" / "grades.csv"

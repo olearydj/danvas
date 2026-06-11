@@ -67,7 +67,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 
 - inventory course files
   - exports Canvas Files metadata to JSON and CSV without download URLs
-  - compares Canvas filenames and sizes to a local course root
+  - optionally compares Canvas filenames and sizes to a local course root (`--local-root`)
   - writes a Markdown missing-file report for archive checks
   - downloads Canvas Files into a local folder tree with a manifest
 

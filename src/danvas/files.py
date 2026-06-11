@@ -128,7 +128,10 @@ def build_file_inventory(course: Any, local_root: Path | None = None) -> dict[st
 
     comparison_rows = []
     for record in canvas_rows:
-        status, matches = status_for(record, local_by_name)
+        if local_root:
+            status, matches = status_for(record, local_by_name)
+        else:
+            status, matches = "not_compared", []
         comparison_rows.append(
             {
                 **record,
@@ -278,7 +281,9 @@ def write_missing_report(output: Path, inventory: dict[str, Any]) -> None:
     for folder, count in sorted(by_folder.items()):
         lines.append(f"| {escape_markdown_table(folder)} | {count} | {missing_by_folder.get(folder, 0)} |")
     lines.extend(["", "## Missing Locally", ""])
-    if missing:
+    if not inventory.get("local_root"):
+        lines.append("Local comparison skipped; run with --local-root to compare.")
+    elif missing:
         lines.extend(["| Canvas folder | File | Size | Updated | Type |", "|---|---|---:|---|---|"])
         for row in sorted(missing, key=lambda r: (r["folder_full_name"], r["display_name"])):
             lines.append(
@@ -298,7 +303,7 @@ def write_missing_report(output: Path, inventory: dict[str, Any]) -> None:
         lines.append("No Canvas files are missing by filename.")
     lines.extend(["", "## Present Or Matched", "", "| Status | Canvas file | Local match(es) |", "|---|---|---|"])
     for row in sorted(
-        [r for r in comparison_rows if r["status"] != "missing"],
+        [r for r in comparison_rows if r["status"] not in {"missing", "not_compared"}],
         key=lambda r: (r["status"], r["folder_full_name"], r["display_name"]),
     ):
         matches = "<br>".join(escape_markdown_table(match) for match in row.get("local_matches", []))
