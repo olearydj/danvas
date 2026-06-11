@@ -70,6 +70,52 @@ def test_write_project_config_and_snapshot(tmp_path: Path) -> None:
     assert payload["folders"][1]["full_name"] == "course files/Case Studies"
 
 
+def test_toml_key_quotes_names_that_are_not_bare_keys() -> None:
+    assert config.toml_key("CaseStudies") == "CaseStudies"
+    assert config.toml_key("case-studies_1") == "case-studies_1"
+    assert config.toml_key("Case Studies") == '"Case Studies"'
+    assert config.toml_key("Présentations") == '"Présentations"'
+
+
+def test_write_project_config_round_trips_non_ascii_group_names(tmp_path: Path) -> None:
+    import tomllib
+
+    config_path = tmp_path / ".danvas" / "config.toml"
+    config.write_project_config(
+        config_path,
+        course_snapshot={
+            "course": {"id": 1, "name": "INSY 6600"},
+            "assignment_groups": [{"id": 5, "name": "Présentations"}],
+        },
+        api_url="https://canvas.example/",
+        timezone="America/Chicago",
+    )
+
+    data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    assert data["assignment_groups"]["Présentations"] == 5
+
+
+def test_maybe_ignore_course_snapshot_appends_without_blank_lines(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    gitignore = tmp_path / ".gitignore"
+    gitignore.write_text("existing\n", encoding="utf-8")
+
+    config.maybe_ignore_course_snapshot(tmp_path)
+    config.maybe_ignore_course_snapshot(tmp_path)
+
+    assert gitignore.read_text(encoding="utf-8") == "existing\n.danvas/course.json\n"
+
+
+def test_maybe_ignore_course_snapshot_adds_missing_trailing_newline(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    gitignore = tmp_path / ".gitignore"
+    gitignore.write_text("existing", encoding="utf-8")
+
+    config.maybe_ignore_course_snapshot(tmp_path)
+
+    assert gitignore.read_text(encoding="utf-8") == "existing\n.danvas/course.json\n"
+
+
 def test_assignment_group_name_resolves_in_dry_run(tmp_path: Path, capsys) -> None:
     (tmp_path / ".danvas").mkdir()
     (tmp_path / ".danvas" / "config.toml").write_text(

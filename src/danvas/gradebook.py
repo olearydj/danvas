@@ -85,7 +85,8 @@ class CanvasGradebook:
 
     @classmethod
     def read(cls, path: Path, exclude_patterns: list[str] | None = None) -> CanvasGradebook:
-        raw_rows = list(csv.reader(path.open(newline="", encoding="utf-8-sig")))
+        with path.open(newline="", encoding="utf-8-sig") as handle:
+            raw_rows = list(csv.reader(handle))
         if len(raw_rows) < 3:
             raise ValueError(f"{path} does not look like a Canvas gradebook export")
         headers = raw_rows[0]

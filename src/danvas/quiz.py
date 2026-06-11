@@ -36,7 +36,8 @@ class QuestionPair:
 class StudentAnalysisReport:
     def __init__(self, path: Path):
         self.path = path
-        self.rows = list(csv.reader(path.open(newline="", encoding="utf-8-sig")))
+        with path.open(newline="", encoding="utf-8-sig") as handle:
+            self.rows = list(csv.reader(handle))
         if not self.rows:
             raise ValueError(f"Empty report: {path}")
         self.headers = self.rows[0]
@@ -50,7 +51,8 @@ class StudentAnalysisReport:
         for field in SUMMARY_FIELDS:
             if field in self.header_index:
                 stop = min(stop, self.header_index[field])
-        idx = len(BASE_FIELDS)
+        submitted_idx = self.header_index.get("submitted")
+        idx = submitted_idx + 1 if submitted_idx is not None else len(BASE_FIELDS)
         while idx + 1 < stop:
             points_possible = parse_number(self.headers[idx + 1])
             if points_possible is not None:

@@ -216,20 +216,20 @@ def maybe_ignore_course_snapshot(root: Path) -> None:
         return
     gitignore = root / ".gitignore"
     ignore_line = f"{CONFIG_DIR_NAME}/{COURSE_SNAPSHOT_NAME}"
-    existing = gitignore.read_text(encoding="utf-8").splitlines() if gitignore.exists() else []
-    if ignore_line in existing:
+    existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    if ignore_line in existing.splitlines():
         return
     with gitignore.open("a", encoding="utf-8") as handle:
-        if existing and existing[-1]:
+        if existing and not existing.endswith("\n"):
             handle.write("\n")
         handle.write(f"{ignore_line}\n")
 
 
 def toml_key(value: str) -> str:
-    if value.replace("_", "").replace("-", "").isalnum() and " " not in value:
+    if value.isascii() and value.replace("_", "").replace("-", "").isalnum():
         return value
     return toml_string(value)
 
 
 def toml_string(value: str) -> str:
-    return json.dumps(value)
+    return json.dumps(value, ensure_ascii=False)
