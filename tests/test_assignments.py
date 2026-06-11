@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from danvas.assignments import load_assignment_markdown
+from danvas.assignments import load_assignment_markdown, resolve_format
 
 
 def test_load_assignment_markdown_accepts_yaml_frontmatter(tmp_path: Path) -> None:
@@ -53,6 +53,18 @@ submission_types = ["online_text_entry"]
     assert payload["name"] == "TOML Assignment"
     assert payload["submission_types"] == ["online_text_entry"]
     assert payload["published"] is False
+
+
+def test_resolve_format_infers_from_extension() -> None:
+    assert resolve_format(Path("assignments.json"), "auto") == "json"
+    assert resolve_format(Path("assignments.csv"), "auto") == "csv"
+    assert resolve_format(Path("assignments-md"), "auto") == "markdown"
+    assert resolve_format(Path("assignments.md"), "csv") == "csv"
+
+
+def test_resolve_format_rejects_ambiguous_extension() -> None:
+    with pytest.raises(SystemExit, match="Cannot infer assignments export format"):
+        resolve_format(Path("assignments.md"), "auto")
 
 
 def test_load_assignment_markdown_rejects_non_mapping_yaml(tmp_path: Path) -> None:

@@ -119,11 +119,17 @@ def command_assignments_export(args: Any) -> None:
 def resolve_format(output: Path, requested: str) -> str:
     if requested != "auto":
         return requested
-    if output.suffix.lower() == ".csv":
+    suffix = output.suffix.lower()
+    if suffix == ".csv":
         return "csv"
-    if output.suffix.lower() in {".md", ".markdown"} or not output.suffix:
-        return "markdown" if not output.suffix else "json"
-    return "json"
+    if suffix == ".json":
+        return "json"
+    if not suffix:
+        return "markdown"
+    raise SystemExit(
+        f"Cannot infer assignments export format from '{output.name}'. "
+        "Use .json, .csv, an extensionless directory, or pass --format."
+    )
 
 
 def write_assignments_markdown(
