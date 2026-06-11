@@ -65,6 +65,12 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - optional JSON, CSV, or Markdown output
   - filters replies to the authenticated user by default, so student replies are excluded
 
+- inventory course files
+  - exports Canvas Files metadata to JSON and CSV without download URLs
+  - compares Canvas filenames and sizes to a local course root
+  - writes a Markdown missing-file report for archive checks
+  - downloads Canvas Files into a local folder tree with a manifest
+
 - upload grades
   - assignment grades from CSV
   - discussion scores to the associated graded discussion assignment

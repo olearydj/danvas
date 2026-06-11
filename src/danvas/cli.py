@@ -18,6 +18,7 @@ from danvas.auth import DEFAULT_API_URL
 from danvas.config import command_init, command_refresh, resolve_api_url, resolve_course_id
 from danvas.courses import command_courses, command_roster
 from danvas.discussions import command_discussions_export, command_discussions_score
+from danvas.files import command_files_download, command_files_inventory
 from danvas.grades import command_grades_post, command_grades_verify
 from danvas.submissions import command_submissions_feedback, command_submissions_media
 
@@ -66,6 +67,10 @@ announcements_app = typer.Typer(
     help="Create/export course announcements and filtered instructor replies.",
     no_args_is_help=True,
 )
+files_app = typer.Typer(
+    help="Inventory Canvas course Files and compare them to local course files.",
+    no_args_is_help=True,
+)
 
 app.add_typer(assignments_app, name="assignments")
 app.add_typer(gradebook_app, name="gradebook")
@@ -74,6 +79,7 @@ app.add_typer(submissions_app, name="submissions")
 app.add_typer(grades_app, name="grades")
 app.add_typer(discussions_app, name="discussions")
 app.add_typer(announcements_app, name="announcements")
+app.add_typer(files_app, name="files")
 
 
 ApiUrl = Annotated[
@@ -752,6 +758,83 @@ def announcements_export(
             output=str(output),
             format=output_format,
             reply_user_id=reply_user_id,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@files_app.command(
+    "inventory",
+    help="Write a Canvas Files inventory JSON/CSV and local missing-file Markdown report.",
+)
+def files_inventory(
+    course_id: CourseId = None,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory for files-inventory.json, files-inventory.csv, and files-missing-report.md.",
+        ),
+    ] = Path("canvas-files-inventory"),
+    local_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--local-root",
+            help="Local course root for filename/size comparison. Omit to inventory Canvas only.",
+        ),
+    ] = Path("."),
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_files_inventory,
+        args_for(
+            course_id=course_id,
+            output_dir=str(output_dir),
+            local_root=str(local_root) if local_root else None,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@files_app.command(
+    "download",
+    help="Download all Canvas course Files into a local folder tree and write a manifest.",
+)
+def files_download(
+    course_id: CourseId = None,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory where Canvas Files should be downloaded.",
+        ),
+    ] = Path("canvas-files"),
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace local files that already exist."),
+    ] = False,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_files_download,
+        args_for(
+            course_id=course_id,
+            output_dir=str(output_dir),
+            overwrite=overwrite,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
