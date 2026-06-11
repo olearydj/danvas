@@ -71,6 +71,11 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - writes a Markdown missing-file report for archive checks
   - downloads Canvas Files into a local folder tree with a manifest
 
+- download Panopto captions
+  - launches Panopto through the Canvas course navigation LTI tool
+  - lists visible recording sessions and writes JSON/CSV manifests
+  - downloads caption text exports when captions are available
+
 - upload grades
   - assignment grades from CSV
   - discussion scores to the associated graded discussion assignment
@@ -112,6 +117,9 @@ Common options are available on Canvas-backed commands:
 --op-reference
 --api-key-env
 ```
+
+`recordings panopto-captions` uses the Canvas token to launch the course Panopto
+LTI tool; it does not require separate Panopto API client credentials.
 
 ## Project Configuration
 
@@ -194,6 +202,12 @@ danvas discussions score https://auburn.instructure.com/courses/1655780/discussi
 # Announcements
 danvas announcements create --course-id 1706414 announcements/welcome.md --dry-run
 danvas announcements export --course-id 1655780 --output announcements.md
+
+# Recordings
+danvas recordings panopto-captions --course-id 1742717 \
+  --folder-id b4e2a2bc-0b9f-439e-9095-b44e00f269c4 --dry-run
+danvas recordings panopto-captions --course-id 1742717 \
+  --folder-id b4e2a2bc-0b9f-439e-9095-b44e00f269c4 --output-dir panopto-captions
 ```
 
 ## CSV Formats
@@ -220,6 +234,7 @@ danvas assignments create ... --dry-run
 danvas submissions feedback ... --dry-run
 danvas grades post ... --dry-run
 danvas discussions score ... --dry-run
+danvas recordings panopto-captions ... --dry-run
 ```
 
 `grades post` and comment posting check for already-present grades/comments before writing when possible.

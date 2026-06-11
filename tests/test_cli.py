@@ -64,3 +64,11 @@ def test_quiz_analysis_cli(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Students: 2" in result.output
+
+
+def test_recordings_panopto_captions_help() -> None:
+    result = runner.invoke(app, ["recordings", "panopto-captions", "--help"])
+
+    assert result.exit_code == 0
+    assert "Panopto" in result.output
+    assert "--folder-id" in result.output

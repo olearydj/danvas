@@ -20,6 +20,7 @@ from danvas.courses import command_courses, command_roster
 from danvas.discussions import command_discussions_export, command_discussions_score
 from danvas.files import command_files_download, command_files_inventory
 from danvas.grades import command_grades_post, command_grades_verify
+from danvas.panopto import command_panopto_captions
 from danvas.submissions import command_submissions_feedback, command_submissions_media
 
 SecretProvider = Literal["auto", "1password", "env"]
@@ -71,6 +72,10 @@ files_app = typer.Typer(
     help="Inventory Canvas course Files and compare them to local course files.",
     no_args_is_help=True,
 )
+recordings_app = typer.Typer(
+    help="Discover and download course recording transcripts/captions.",
+    no_args_is_help=True,
+)
 
 app.add_typer(assignments_app, name="assignments")
 app.add_typer(gradebook_app, name="gradebook")
@@ -80,6 +85,7 @@ app.add_typer(grades_app, name="grades")
 app.add_typer(discussions_app, name="discussions")
 app.add_typer(announcements_app, name="announcements")
 app.add_typer(files_app, name="files")
+app.add_typer(recordings_app, name="recordings")
 
 
 ApiUrl = Annotated[
@@ -835,6 +841,82 @@ def files_download(
             course_id=course_id,
             output_dir=str(output_dir),
             overwrite=overwrite,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@recordings_app.command(
+    "panopto-captions",
+    help=(
+        "Use the Canvas Panopto LTI tool to list or download Panopto caption text exports."
+    ),
+)
+def recordings_panopto_captions(
+    course_id: CourseId = None,
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Directory for caption files plus manifest.json and manifest.csv.",
+        ),
+    ] = Path("panopto-captions"),
+    folder_id: Annotated[
+        str | None,
+        typer.Option(
+            "--folder-id",
+            help="Optional Panopto folder GUID. Omit to list visible recent sessions.",
+        ),
+    ] = None,
+    session_id: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--session-id",
+            help="Optional Panopto session GUID. Repeat to restrict to specific sessions.",
+        ),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Maximum Panopto sessions to inspect."),
+    ] = 20,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Write manifests without downloading caption files."),
+    ] = False,
+    caption_language: Annotated[
+        str,
+        typer.Option(
+            "--caption-language",
+            help="Panopto caption language value used by the transcript export endpoint.",
+        ),
+    ] = "English_USA",
+    panopto_base_url: Annotated[
+        str | None,
+        typer.Option(
+            "--panopto-base-url",
+            help="Override Panopto base URL. Defaults to the Canvas Panopto tool domain.",
+        ),
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_panopto_captions,
+        args_for(
+            course_id=course_id,
+            output_dir=str(output_dir),
+            folder_id=folder_id,
+            session_id=session_id or [],
+            limit=limit,
+            dry_run=dry_run,
+            caption_language=caption_language,
+            panopto_base_url=panopto_base_url,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
