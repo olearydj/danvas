@@ -84,15 +84,16 @@ def load_grade_rows(path: Path) -> list[dict[str, str]]:
 
 
 def grade_matches(submission: Any, expected: str) -> bool:
-    score = getattr(submission, "score", None)
-    grade = getattr(submission, "grade", None)
-    for value in (score, grade):
+    expected = expected.strip()
+    for value in (getattr(submission, "score", None), getattr(submission, "grade", None)):
         if value is None:
             continue
         try:
-            return abs(float(value) - float(expected)) < 0.0001
+            if abs(float(value) - float(expected)) < 0.0001:
+                return True
         except ValueError:
-            return str(value).strip() == expected.strip()
+            if str(value).strip() == expected:
+                return True
     return False
 
 
