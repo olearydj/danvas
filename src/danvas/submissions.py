@@ -72,8 +72,8 @@ def match_files_to_students(
     matched = []
     unmatched = []
     for path in files:
-        ids = [int(value) for value in re.findall(r"(?<!\d)(\d{5,})(?!\d)", path.name)]
-        hits = [canvas_id for canvas_id in ids if canvas_id in canvas_ids]
+        ids = {int(value) for value in re.findall(r"(?<!\d)(\d{5,})(?!\d)", path.name)}
+        hits = sorted(canvas_id for canvas_id in ids if canvas_id in canvas_ids)
         if len(hits) == 1:
             matched.append((hits[0], path))
         else:
