@@ -21,6 +21,7 @@ from danvas.discussions import command_discussions_export, command_discussions_s
 from danvas.files import command_files_download, command_files_inventory
 from danvas.grades import command_grades_post, command_grades_verify
 from danvas.panopto import command_panopto_captions
+from danvas.quiz_import import command_quiz_import_qti
 from danvas.status import command_status
 from danvas.submissions import command_submissions_feedback, command_submissions_media
 from danvas.utils import write_json
@@ -535,6 +536,95 @@ def quiz_analysis(
     if output:
         write_json(output, payload)
         typer.echo(f"Wrote {output}")
+
+
+@quiz_app.command(
+    "import-qti",
+    help=(
+        "Import a QTI zip as a Classic Quiz, poll the migration to completion, "
+        "apply quiz settings, and verify the result."
+    ),
+)
+def quiz_import_qti(
+    package: Annotated[Path, typer.Argument(help="QTI zip produced by text2qti/make-qti.")],
+    course_id: CourseId = None,
+    title: Annotated[
+        str | None, typer.Option("--title", help="Quiz title to set after import.")
+    ] = None,
+    assignment_group_id: Annotated[
+        int | None,
+        typer.Option("--assignment-group-id", help="Assignment group for the quiz."),
+    ] = None,
+    due_at: Annotated[
+        str | None, typer.Option("--due-at", help="Due timestamp, ISO 8601 UTC.")
+    ] = None,
+    unlock_at: Annotated[
+        str | None, typer.Option("--unlock-at", help="Unlock timestamp, ISO 8601 UTC.")
+    ] = None,
+    lock_at: Annotated[
+        str | None, typer.Option("--lock-at", help="Lock timestamp, ISO 8601 UTC.")
+    ] = None,
+    time_limit: Annotated[
+        int | None, typer.Option("--time-limit", help="Time limit in minutes.")
+    ] = None,
+    allowed_attempts: Annotated[
+        int | None, typer.Option("--allowed-attempts", help="Allowed attempts.")
+    ] = None,
+    publish: Annotated[
+        bool | None,
+        typer.Option("--publish/--no-publish", help="Publish state to set after import."),
+    ] = None,
+    match_title: Annotated[
+        str | None,
+        typer.Option(
+            "--match-title",
+            help="Select the imported quiz by exact title when it cannot be identified "
+            "automatically. Refuses ambiguous matches.",
+        ),
+    ] = None,
+    poll_seconds: Annotated[
+        float, typer.Option("--poll-seconds", help="Delay between migration status checks.")
+    ] = 5.0,
+    timeout_seconds: Annotated[
+        float, typer.Option("--timeout-seconds", help="Maximum time to wait for the migration.")
+    ] = 600.0,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show the package and settings without importing."),
+    ] = False,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Optional JSON verification report path."),
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_quiz_import_qti,
+        args_for(
+            course_id=course_id,
+            package=str(package),
+            title=title,
+            assignment_group_id=assignment_group_id,
+            due_at=due_at,
+            unlock_at=unlock_at,
+            lock_at=lock_at,
+            time_limit=time_limit,
+            allowed_attempts=allowed_attempts,
+            publish=publish,
+            match_title=match_title,
+            poll_seconds=poll_seconds,
+            timeout_seconds=timeout_seconds,
+            dry_run=dry_run,
+            output=str(output) if output else None,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
 
 
 @submissions_app.command(

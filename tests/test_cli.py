@@ -85,6 +85,21 @@ def test_run_command_echoes_string_exits_only(capsys: pytest.CaptureFixture[str]
     assert capsys.readouterr().err == ""
 
 
+def test_quiz_import_qti_help() -> None:
+    result = runner.invoke(app, ["quiz", "import-qti", "--help"])
+
+    assert result.exit_code == 0
+    assert "--match-title" in result.output
+    assert "--dry-run" in result.output
+
+
+def test_status_help() -> None:
+    result = runner.invoke(app, ["status", "--help"])
+
+    assert result.exit_code == 0
+    assert "Read-only" in result.output
+
+
 def test_recordings_panopto_captions_help() -> None:
     result = runner.invoke(app, ["recordings", "panopto-captions", "--help"])
 

@@ -94,6 +94,13 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - discover question/score column pairs
   - summarize scores and selected answer counts
 
+- import QTI quiz packages
+  - imports a text2qti/QTI zip as a Classic Quiz via the Canvas content-migration API
+  - polls the migration to completion and reports failures
+  - applies quiz shell settings: dates, publish state, time limit, attempts, assignment group
+  - verifies the resulting Canvas quiz settings and exits nonzero on mismatch
+  - dry-run mode shows the package and settings before any Canvas write
+
 ## Installation
 
 ```bash
@@ -153,10 +160,12 @@ group-category summaries, and it never stores download verifier URLs or student
 data. If the project is a git repo, `danvas init` adds `.danvas/course.json` to
 `.gitignore`.
 
-Refresh the generated snapshot without changing Canvas:
+Refresh the generated snapshot without changing Canvas; `--diff` summarizes what
+changed since the previous snapshot:
 
 ```bash
 danvas refresh
+danvas refresh --diff
 ```
 
 After initialization, Canvas-backed commands can omit `--course-id`; an explicit
@@ -207,6 +216,12 @@ danvas gradebook audit final-canvas-gradebook.csv --course-yaml course.yaml \
 danvas quiz analysis student-analysis.csv --answer-term "which version" --answer-term comp \
   --output quiz-analysis.json
 
+# Quiz import (Classic Quizzes via QTI)
+danvas quiz import-qti chap07.zip --course-id 1742717 \
+  --due-at 2026-06-20T04:59:00Z --publish --dry-run
+danvas quiz import-qti chap07.zip --course-id 1742717 \
+  --due-at 2026-06-20T04:59:00Z --publish --output quiz-import-report.json
+
 # Discussions
 danvas discussions export https://auburn.instructure.com/courses/1655780/discussion_topics/9772349 \
   --output discussion.json
@@ -248,6 +263,7 @@ danvas assignments create ... --dry-run
 danvas submissions feedback ... --dry-run
 danvas grades post ... --dry-run
 danvas discussions score ... --dry-run
+danvas quiz import-qti ... --dry-run
 danvas recordings panopto-captions ... --dry-run
 ```
 
