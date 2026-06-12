@@ -1,6 +1,10 @@
 # danvas Backlog
 
+Sprint plans in `docs/sprint-1.md` through `docs/sprint-3.md` schedule items from this backlog; delivered items are annotated below.
+
 ## Course Project Sync And Diff
+
+Status: largely delivered in sprint 1 by `danvas status` (read-only classification report) and `danvas refresh --diff`; a write-capable sync command remains open.
 
 Add a read-only `danvas sync` or `danvas diff` command that compares local course
 sources against `.danvas/course.json`.
@@ -20,6 +24,8 @@ Likely inputs:
 - local source conventions such as `content/announcements/`, `content/discussions/`, `content/quizzes/`, and `content/cases/`.
 
 ## Expanded Course Snapshot
+
+Status: delivered in sprint 1 (`schema_version` 2 snapshots).
 
 Expand `danvas refresh` so `.danvas/course.json` can support stronger local-vs-Canvas
 audits.
@@ -219,6 +225,8 @@ Minimum desired behavior:
 
 ## Local Source Discovery
 
+Status: delivered in sprint 1 (`danvas.sources`).
+
 Add a shared source scanner that understands project conventions and can power
 future sync/update commands.
 
@@ -232,6 +240,8 @@ Initial conventions:
 The scanner should classify source type, title, comparable metadata, and generated artifacts such as QTI zips when applicable.
 
 ## Quiz Shell Awareness
+
+Status: delivered in sprint 1 via `danvas status`.
 
 Add lightweight quiz awareness without turning `danvas` into the quiz authoring
 tool.
@@ -327,6 +337,8 @@ that workflow.
 
 ### P0: QTI Import, Publish, And Verification Workflow
 
+Status: implemented in sprint 1 as `danvas quiz import-qti`; pending live sandbox verification.
+
 Observed context:
 
 - Local quiz authoring used Markdown plus `make-qti` to produce a Canvas QTI zip.
@@ -357,6 +369,8 @@ Why priority P0:
   correctly configured without evidence.
 
 ### P0: Read-Only Course Status Report
+
+Status: delivered in sprint 1 as `danvas status`.
 
 Observed context:
 
@@ -452,6 +466,8 @@ Why priority P1:
 
 ### P1: Refresh-With-Diff Summary
 
+Status: delivered in sprint 1 as `danvas refresh --diff`.
+
 Observed context:
 
 - Canvas state changed outside `danvas` when the quiz was posted manually.
@@ -475,6 +491,8 @@ Why priority P1:
   comparisons.
 
 ### P2: Universal Mutation Guardrails
+
+Status: mutation banner delivered in sprint 1; multi-step progress reporting lands with groups import in sprint 2.
 
 Observed context:
 
@@ -500,6 +518,8 @@ Why priority P2:
 - It reduces the chance of accidental Canvas writes during agent-assisted workflows.
 
 ### P2: Human-Readable Operation Reports
+
+Status: partially delivered in sprint 1 (`danvas status --report-md`); other workflows remain.
 
 Observed context:
 

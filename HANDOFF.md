@@ -29,13 +29,16 @@ uv run ty check
 uv run pytest
 ```
 
-Latest checks: `ruff` clean, `ty` clean, and `70 passed` in pytest.
+Latest checks: `ruff` clean, `ty` clean, and `96 passed` in pytest. GitHub Actions (`.github/workflows/ci.yml`) runs the same three checks on push and pull request.
 
 Main files:
 
 - `src/danvas/cli.py`: Typer command surface.
 - `src/danvas/auth.py`: Canvas API auth/client creation.
-- `src/danvas/config.py`: project-local `.danvas` config and course snapshots.
+- `src/danvas/config.py`: project-local `.danvas` config, course snapshots, and snapshot diffs.
+- `src/danvas/sources.py`: local course source scanner (content/ conventions).
+- `src/danvas/status.py`: read-only `danvas status` snapshot-vs-local report.
+- `src/danvas/quiz_import.py`: QTI import, migration polling, and quiz verification.
 - `src/danvas/courses.py`: courses/roster operations.
 - `src/danvas/assignments.py`: assignment export/create operations.
 - `src/danvas/announcements.py`: announcement create/export operations.
@@ -64,7 +67,6 @@ Design decisions:
 
 Optional future `danvas` work:
 
-- Add GitHub Actions for `ruff`, `ty`, and `pytest`.
 - Add more examples in `README.md`.
 - Add comprehensive `danvas` activity logging so day-to-day Canvas interactions leave a durable operational history, without turning `danvas` into the archival ledger tool.
 - Add live Canvas gradebook export/download support.

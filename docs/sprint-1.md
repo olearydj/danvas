@@ -1,6 +1,6 @@
 # Sprint 1: Close the Local-to-Canvas Loop
 
-Status: planned. Drafted 2026-06-12 from `docs/backlog.md` and `HANDOFF.md`.
+Status: implemented 2026-06-12, pending live verification: Goal 1's refresh against a real course, and Goal 4's QTI import against a sandbox course. The `v0.1.0` tag from Goal 5 waits on that verification. Drafted 2026-06-12 from `docs/backlog.md` and `HANDOFF.md`.
 
 ## Theme
 
