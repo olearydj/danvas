@@ -76,3 +76,17 @@ def test_scan_sources_reports_missing_qti_zip(tmp_path: Path) -> None:
 
 def test_scan_sources_handles_missing_content_dirs(tmp_path: Path) -> None:
     assert scan_sources(tmp_path) == []
+
+
+def test_scan_sources_skips_readme_files(tmp_path: Path) -> None:
+    write(tmp_path / "content" / "discussions" / "README.md", "notes about this folder\n")
+    write(
+        tmp_path / "content" / "discussions" / "case-discussion.md",
+        "---\ntitle: Case Discussion\n---\n\nDiscuss.\n",
+    )
+
+    records = scan_sources(tmp_path)
+
+    assert [record["path"] for record in records] == [
+        "content/discussions/case-discussion.md"
+    ]

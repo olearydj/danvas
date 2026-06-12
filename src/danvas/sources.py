@@ -32,7 +32,7 @@ def scan_sources(root: Path) -> list[dict[str, Any]]:
         if not base.is_dir():
             continue
         for path in sorted(base.glob(pattern)):
-            if path.is_file():
+            if path.is_file() and path.name.lower() != "readme.md":
                 records.append(source_record(kind, path, root))
     return records
 
