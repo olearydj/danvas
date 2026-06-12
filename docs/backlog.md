@@ -337,7 +337,7 @@ that workflow.
 
 ### P0: QTI Import, Publish, And Verification Workflow
 
-Status: implemented in sprint 1 as `danvas quiz import-qti`; pending live sandbox verification.
+Status: delivered in sprint 1 as `danvas quiz import-qti`; verified live 2026-06-12 (Chapter 8, INSY 6600). Note: imports land in the Canvas "Imported Assignments" group unless `--assignment-group-id` is passed; resolving the group by name from `.danvas/config.toml` is a future ergonomic.
 
 Observed context:
 

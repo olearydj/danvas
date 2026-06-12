@@ -1,6 +1,6 @@
 # Sprint 1: Close the Local-to-Canvas Loop
 
-Status: implemented 2026-06-12, pending live verification: Goal 1's refresh against a real course, and Goal 4's QTI import against a sandbox course. The `v0.1.0` tag from Goal 5 waits on that verification. Drafted 2026-06-12 from `docs/backlog.md` and `HANDOFF.md`.
+Status: delivered and verified live 2026-06-12. `refresh --diff`, `status`, and `quiz import-qti` were each run against INSY 6600 (course 1742717); the Chapter 8 quiz imported, configured, and verified cleanly. Tagged `v0.1.0`. Drafted 2026-06-12 from `docs/backlog.md` and `HANDOFF.md`.
 
 ## Theme
 
