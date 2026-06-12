@@ -8,6 +8,13 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 
 ## Functionality
 
+- report course status
+  - compares the `.danvas` course snapshot and local course sources in one read-only command
+  - covers assignments, announcements, discussions, quiz shells, and files
+  - classifies each item as exact, metadata mismatch, local-only, Canvas-only, filename-only match, or unsupported comparison
+  - warns when the snapshot is stale
+  - optional JSON output and Markdown report
+
 - discover courses and rosters
   - list active Canvas courses visible to the authenticated user
   - export course rosters by course
@@ -140,8 +147,11 @@ This writes:
 `config.toml` is the human-readable project configuration. It stores stable,
 non-secret defaults such as the Canvas base URL, course ID, course timezone, and
 assignment group name-to-ID mappings. `course.json` is a generated Canvas
-metadata snapshot for local lookup and comparison. If the project is a git repo,
-`danvas init` adds `.danvas/course.json` to `.gitignore`.
+metadata snapshot for local lookup and comparison; it covers assignments,
+assignment groups, files, announcements, discussions, quiz shells, and
+group-category summaries, and it never stores download verifier URLs or student
+data. If the project is a git repo, `danvas init` adds `.danvas/course.json` to
+`.gitignore`.
 
 Refresh the generated snapshot without changing Canvas:
 
@@ -166,6 +176,10 @@ Use `assignment_group_id` when you want to bypass project-local name resolution.
 ## Examples
 
 ```bash
+# Course status (read-only, from the .danvas snapshot)
+danvas status
+danvas status --output status.json --report-md status.md
+
 # Courses and rosters
 danvas courses --output courses.csv
 danvas roster --course-id 1706414 --output roster.csv

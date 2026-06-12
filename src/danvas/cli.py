@@ -21,6 +21,7 @@ from danvas.discussions import command_discussions_export, command_discussions_s
 from danvas.files import command_files_download, command_files_inventory
 from danvas.grades import command_grades_post, command_grades_verify
 from danvas.panopto import command_panopto_captions
+from danvas.status import command_status
 from danvas.submissions import command_submissions_feedback, command_submissions_media
 from danvas.utils import write_json
 
@@ -213,6 +214,38 @@ def refresh_project(
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
+        ),
+    )
+
+
+@app.command(
+    help="Report Canvas-vs-local course state from the snapshot and local sources. Read-only."
+)
+def status(
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    max_age_hours: Annotated[
+        float | None,
+        typer.Option(
+            "--max-age-hours",
+            help="Snapshot age in hours before a stale warning. Defaults to [status] config or 24.",
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Optional JSON status output path.")
+    ] = None,
+    report_md: Annotated[
+        Path | None, typer.Option("--report-md", help="Optional Markdown report output path.")
+    ] = None,
+) -> None:
+    run_command(
+        command_status,
+        SimpleNamespace(
+            project_root=str(project_root),
+            max_age_hours=max_age_hours,
+            output=str(output) if output else None,
+            report_md=str(report_md) if report_md else None,
         ),
     )
 
