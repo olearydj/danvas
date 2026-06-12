@@ -9,11 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from danvas.auth import canvas_from_args
+from danvas.files import canvas_file_record
 from danvas.utils import canvas_object_to_dict, html_to_text
 
 CONFIG_DIR_NAME = ".danvas"
 CONFIG_FILE_NAME = "config.toml"
 COURSE_SNAPSHOT_NAME = "course.json"
+SNAPSHOT_SCHEMA_VERSION = 2
 
 
 def project_dir(root: Path | None = None) -> Path:
@@ -163,19 +165,116 @@ def build_course_snapshot(course: Any) -> dict[str, Any]:
             }
         )
     assignments.sort(key=lambda row: (str(row["due_at"] or ""), str(row["name"] or "")))
+    folder_objs = list(course.get_folders())
     folders = [
         canvas_object_to_dict(folder)
-        for folder in sorted(
-            course.get_folders(), key=lambda folder: str(getattr(folder, "full_name", ""))
-        )
+        for folder in sorted(folder_objs, key=lambda folder: str(getattr(folder, "full_name", "")))
     ]
     return {
+        "schema_version": SNAPSHOT_SCHEMA_VERSION,
         "generated_at": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
         "course": course_payload,
         "assignment_groups": groups,
         "assignments": assignments,
         "folders": folders,
+        "files": snapshot_files(course, folder_objs),
+        "discussions": snapshot_discussions(course),
+        "announcements": snapshot_announcements(course),
+        "quizzes": snapshot_quizzes(course),
+        "group_categories": snapshot_group_categories(course),
     }
+
+
+def snapshot_files(course: Any, folder_objs: list[Any]) -> list[dict[str, Any]]:
+    folders_by_id = {
+        int(folder.id): folder for folder in folder_objs if getattr(folder, "id", None)
+    }
+    rows = [canvas_file_record(file_obj, folders_by_id) for file_obj in course.get_files()]
+    rows.sort(key=lambda row: (str(row["folder_full_name"]), str(row["display_name"])))
+    return rows
+
+
+def snapshot_discussions(course: Any) -> list[dict[str, Any]]:
+    rows = [discussion_record(topic) for topic in course.get_discussion_topics()]
+    rows.sort(key=lambda row: str(row["title"]))
+    return rows
+
+
+def snapshot_announcements(course: Any) -> list[dict[str, Any]]:
+    rows = [
+        discussion_record(topic)
+        for topic in course.get_discussion_topics(only_announcements=True)
+    ]
+    rows.sort(key=lambda row: (str(row["posted_at"]), str(row["title"])))
+    return rows
+
+
+def discussion_record(topic: Any) -> dict[str, Any]:
+    return {
+        "id": getattr(topic, "id", None),
+        "title": getattr(topic, "title", "") or "",
+        "html_url": getattr(topic, "html_url", "") or "",
+        "assignment_id": getattr(topic, "assignment_id", None),
+        "published": getattr(topic, "published", None),
+        "locked": getattr(topic, "locked", None),
+        "posted_at": getattr(topic, "posted_at", "") or "",
+        "delayed_post_at": getattr(topic, "delayed_post_at", "") or "",
+        "message_text": html_to_text(getattr(topic, "message", "") or ""),
+    }
+
+
+def snapshot_quizzes(course: Any) -> list[dict[str, Any]]:
+    rows = []
+    for quiz in course.get_quizzes():
+        rows.append(
+            {
+                "id": getattr(quiz, "id", None),
+                "assignment_id": getattr(quiz, "assignment_id", None),
+                "title": getattr(quiz, "title", "") or "",
+                "description_text": html_to_text(getattr(quiz, "description", "") or ""),
+                "quiz_type": getattr(quiz, "quiz_type", "") or "",
+                "points_possible": getattr(quiz, "points_possible", None),
+                "question_count": getattr(quiz, "question_count", None),
+                "due_at": getattr(quiz, "due_at", "") or "",
+                "unlock_at": getattr(quiz, "unlock_at", "") or "",
+                "lock_at": getattr(quiz, "lock_at", "") or "",
+                "published": getattr(quiz, "published", None),
+                "time_limit": getattr(quiz, "time_limit", None),
+                "allowed_attempts": getattr(quiz, "allowed_attempts", None),
+                "html_url": getattr(quiz, "html_url", "") or "",
+            }
+        )
+    rows.sort(key=lambda row: str(row["title"]))
+    return rows
+
+
+def snapshot_group_categories(course: Any) -> list[dict[str, Any]]:
+    rows = []
+    for category in course.get_group_categories():
+        groups = sorted(
+            category.get_groups(), key=lambda group: str(getattr(group, "name", ""))
+        )
+        rows.append(
+            {
+                "id": getattr(category, "id", None),
+                "name": getattr(category, "name", "") or "",
+                "self_signup": getattr(category, "self_signup", None),
+                "group_count": len(groups),
+                "member_count": sum(
+                    int(getattr(group, "members_count", 0) or 0) for group in groups
+                ),
+                "groups": [
+                    {
+                        "id": getattr(group, "id", None),
+                        "name": getattr(group, "name", "") or "",
+                        "members_count": getattr(group, "members_count", None),
+                    }
+                    for group in groups
+                ],
+            }
+        )
+    rows.sort(key=lambda row: str(row["name"]))
+    return rows
 
 
 def write_course_snapshot(path: Path, payload: dict[str, Any]) -> None:

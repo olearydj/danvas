@@ -43,6 +43,73 @@ class FakeCourse:
             SimpleNamespace(id=2, name="Case Studies", full_name="course files/Case Studies"),
         ]
 
+    def get_files(self):
+        return [
+            SimpleNamespace(
+                id=300,
+                display_name="case1.pdf",
+                filename="case1.pdf",
+                folder_id=2,
+                size=1234,
+                content_type="application/pdf",
+                created_at="2026-06-01T00:00:00Z",
+                updated_at="2026-06-02T00:00:00Z",
+                url="https://canvas.test/files/300/download?verifier=secret-token",
+            )
+        ]
+
+    def get_discussion_topics(self, **kwargs):
+        if kwargs.get("only_announcements"):
+            return [
+                SimpleNamespace(
+                    id=401,
+                    title="Welcome",
+                    html_url="https://canvas.test/announcements/401",
+                    posted_at="2026-06-01T12:00:00Z",
+                    message="<p>Hello class</p>",
+                    published=True,
+                )
+            ]
+        return [
+            SimpleNamespace(
+                id=402,
+                title="Case Discussion",
+                html_url="https://canvas.test/discussion_topics/402",
+                assignment_id=99,
+                published=True,
+                locked=False,
+                message="<p>Discuss the case</p>",
+            )
+        ]
+
+    def get_quizzes(self):
+        return [
+            SimpleNamespace(
+                id=500,
+                assignment_id=98,
+                title="Chapter 7 Quiz",
+                description="<p>Covers chapter 7</p>",
+                quiz_type="assignment",
+                points_possible=20,
+                question_count=10,
+                due_at="2026-06-20T04:59:00Z",
+                unlock_at="",
+                lock_at="",
+                published=True,
+                time_limit=30,
+                allowed_attempts=2,
+                html_url="https://canvas.test/quizzes/500",
+            )
+        ]
+
+    def get_group_categories(self):
+        category = SimpleNamespace(id=700, name="Case 1 Groups", self_signup=None)
+        category.get_groups = lambda: [
+            SimpleNamespace(id=701, name="Group A", members_count=4),
+            SimpleNamespace(id=702, name="Group B", members_count=4),
+        ]
+        return [category]
+
 
 def test_write_project_config_and_snapshot(tmp_path: Path) -> None:
     snapshot = config.build_course_snapshot(FakeCourse())
@@ -68,6 +135,49 @@ def test_write_project_config_and_snapshot(tmp_path: Path) -> None:
     assert payload["course"]["id"] == 1742717
     assert payload["assignments"][0]["assignment_group_name"] == "Case Studies"
     assert payload["folders"][1]["full_name"] == "course files/Case Studies"
+
+
+def test_build_course_snapshot_includes_expanded_sections() -> None:
+    snapshot = config.build_course_snapshot(FakeCourse())
+
+    assert snapshot["schema_version"] == config.SNAPSHOT_SCHEMA_VERSION
+
+    file_record = snapshot["files"][0]
+    assert file_record["display_name"] == "case1.pdf"
+    assert file_record["folder_full_name"] == "course files/Case Studies"
+    assert file_record["size"] == 1234
+
+    discussion = snapshot["discussions"][0]
+    assert discussion["title"] == "Case Discussion"
+    assert discussion["assignment_id"] == 99
+    assert discussion["message_text"] == "Discuss the case"
+
+    announcement = snapshot["announcements"][0]
+    assert announcement["title"] == "Welcome"
+    assert announcement["message_text"] == "Hello class"
+
+    quiz = snapshot["quizzes"][0]
+    assert quiz["title"] == "Chapter 7 Quiz"
+    assert quiz["assignment_id"] == 98
+    assert quiz["points_possible"] == 20
+    assert quiz["time_limit"] == 30
+
+    category = snapshot["group_categories"][0]
+    assert category["name"] == "Case 1 Groups"
+    assert category["group_count"] == 2
+    assert category["member_count"] == 8
+    assert [group["name"] for group in category["groups"]] == ["Group A", "Group B"]
+
+
+def test_build_course_snapshot_contains_no_secrets_or_member_lists() -> None:
+    snapshot = config.build_course_snapshot(FakeCourse())
+    text = json.dumps(snapshot)
+
+    assert "verifier" not in text
+    assert "secret-token" not in text
+    for category in snapshot["group_categories"]:
+        for group in category["groups"]:
+            assert set(group) == {"id", "name", "members_count"}
 
 
 def test_toml_key_quotes_names_that_are_not_bare_keys() -> None:
