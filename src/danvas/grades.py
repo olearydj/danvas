@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from danvas.auth import canvas_from_args
+from danvas.utils import print_mutation_banner
 
 
 def command_grades_post(args: Any) -> None:
@@ -19,6 +20,15 @@ def command_grades_post(args: Any) -> None:
                 f"  {row.get('Name') or row['CanvasID']} (CanvasID {row['CanvasID']}): {row['Grade']}"
             )
         return
+    print_mutation_banner(
+        "post grades",
+        {
+            "course": args.course_id,
+            "assignment": args.assignment_id,
+            "rows": len(rows),
+            "comments": sum(1 for row in rows if row.get("Comment", "").strip()),
+        },
+    )
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
     success = skipped = failed = 0

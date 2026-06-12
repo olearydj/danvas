@@ -8,7 +8,7 @@ from typing import Any
 
 from danvas.auth import canvas_from_args
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
-from danvas.utils import canvas_object_to_dict, html_to_text, write_rows
+from danvas.utils import canvas_object_to_dict, html_to_text, print_mutation_banner, write_rows
 
 ANNOUNCEMENT_METADATA_FIELDS = {
     "allow_rating",
@@ -70,6 +70,15 @@ def command_announcements_create(args: Any) -> None:
         print("Dry run - no announcement created.")
         print(json.dumps(announcement, indent=2, ensure_ascii=False))
         return
+    print_mutation_banner(
+        "create announcement",
+        {
+            "course": args.course_id,
+            "title": announcement.get("title", ""),
+            "published": announcement.get("published", False),
+            "source": source,
+        },
+    )
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     created = course.create_discussion_topic(**announcement)

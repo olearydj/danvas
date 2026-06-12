@@ -11,7 +11,7 @@ import requests
 
 from danvas.auth import canvas_from_args
 from danvas.status import normalize_title, values_equal
-from danvas.utils import write_json
+from danvas.utils import print_mutation_banner, write_json
 
 SETTING_FIELDS = [
     "title",
@@ -37,6 +37,15 @@ def command_quiz_import_qti(args: Any) -> None:
         print("Quiz settings to apply after import:")
         print(json.dumps(settings, indent=2))
         return
+    print_mutation_banner(
+        "import QTI quiz package",
+        {
+            "course": args.course_id,
+            "package": package.name,
+            "size_bytes": package.stat().st_size,
+            "settings": ", ".join(sorted(settings)) or "none",
+        },
+    )
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     existing_ids = {quiz.id for quiz in course.get_quizzes()}

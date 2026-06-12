@@ -110,6 +110,8 @@ def test_grades_post_skips_existing_and_posts_missing(
     assert posted.edits == []
     assert unposted.edits == [{"submission": {"posted_grade": "80"}}]
     out = capsys.readouterr().out
+    assert "== Canvas write: post grades ==" in out
+    assert "rows: 2" in out
     assert "already posted" in out
     assert "Posted: 1, Already present: 1, Failed: 0" in out
 

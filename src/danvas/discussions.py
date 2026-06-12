@@ -11,7 +11,7 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 from danvas.auth import canvas_from_args
-from danvas.utils import write_rows
+from danvas.utils import print_mutation_banner, write_rows
 
 
 def parse_discussion_url(url: str) -> tuple[int, int]:
@@ -182,6 +182,15 @@ def upload_discussion_scores(
     assignment_id = getattr(topic, "assignment_id", None)
     if not assignment_id:
         raise SystemExit("Discussion is not graded and has no assignment_id.")
+    if not dry_run:
+        print_mutation_banner(
+            "post discussion scores",
+            {
+                "course": getattr(course, "id", ""),
+                "assignment": assignment_id,
+                "students": len(rows),
+            },
+        )
     assignment = course.get_assignment(assignment_id)
     success = failed = 0
     for row in rows:

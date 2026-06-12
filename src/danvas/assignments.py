@@ -9,7 +9,13 @@ from typing import Any
 from danvas.auth import canvas_from_args
 from danvas.config import resolve_assignment_group_id
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
-from danvas.utils import canvas_object_to_dict, html_to_text, slugify, write_rows
+from danvas.utils import (
+    canvas_object_to_dict,
+    html_to_text,
+    print_mutation_banner,
+    slugify,
+    write_rows,
+)
 
 ASSIGNMENT_METADATA_FIELDS = {
     "allowed_attempts",
@@ -175,6 +181,15 @@ def command_assignments_create(args: Any) -> None:
         print("Dry run - no assignment created.")
         print(json.dumps(assignment, indent=2, ensure_ascii=False))
         return
+    print_mutation_banner(
+        "create assignment",
+        {
+            "course": args.course_id,
+            "name": assignment.get("name", ""),
+            "published": assignment.get("published", False),
+            "source": source,
+        },
+    )
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     created = course.create_assignment(assignment)

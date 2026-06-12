@@ -85,6 +85,39 @@ def test_submissions_feedback_dry_run_previews_without_canvas(
     assert "notes.txt" not in out
 
 
+def test_submissions_feedback_live_run_prints_mutation_banner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    roster = tmp_path / "roster.csv"
+    write_roster(roster)
+    feedback_dir = tmp_path / "feedback"
+    feedback_dir.mkdir()
+    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"x")
+
+    class FakeCanvas:
+        def get_course(self, course_id: int) -> FakeCanvas:
+            return self
+
+        def get_assignment(self, assignment_id: int) -> Any:
+            class FakeAssignment:
+                def get_submission(self, canvas_id: int) -> Any:
+                    class FakeSubmission:
+                        def upload_comment(self, file: str, comment: str) -> None:
+                            pass
+
+                    return FakeSubmission()
+
+            return FakeAssignment()
+
+    monkeypatch.setattr("danvas.submissions.canvas_from_args", lambda args: FakeCanvas())
+
+    command_submissions_feedback(feedback_args(roster, feedback_dir))
+
+    out = capsys.readouterr().out
+    assert "== Canvas write: upload feedback comments ==" in out
+    assert "files: 1" in out
+
+
 def test_submissions_feedback_uploads_matched_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -12,7 +12,7 @@ from typing import Any
 import requests
 
 from danvas.auth import canvas_from_args
-from danvas.utils import clean_filename
+from danvas.utils import clean_filename, print_mutation_banner
 
 
 def command_submissions_feedback(args: Any) -> None:
@@ -34,6 +34,15 @@ def command_submissions_feedback(args: Any) -> None:
         for canvas_id, path in matched:
             print(f"  {canvas_ids[canvas_id]} (CanvasID {canvas_id}) <- {path.name}")
         return
+    print_mutation_banner(
+        "upload feedback comments",
+        {
+            "course": args.course_id,
+            "assignment": args.assignment_id,
+            "files": len(matched),
+            "comment": args.comment,
+        },
+    )
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
     success = failed = 0
