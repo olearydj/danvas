@@ -31,7 +31,9 @@ uv run ty check
 uv run pytest
 ```
 
-Latest checks: `ruff` clean, `ty` clean, and `97 passed` in pytest. GitHub Actions (`.github/workflows/ci.yml`) runs the same three checks on push and pull request.
+Latest checks: `ruff` clean, `ty` clean, and `98 passed` in pytest. GitHub Actions (`.github/workflows/ci.yml`) runs the same three checks on push and pull request.
+
+Versioning: `pyproject.toml` is the single version source; `danvas --version` and `danvas.__version__` read the installed package metadata. When the version changes, bump `pyproject.toml`, run `uv sync` (and reinstall the `uv tool` if used) so editable metadata refreshes, and create a matching `vX.Y.Z` git tag. Bump the minor version for feature sprints or new commands, the patch version for fixes.
 
 Main files:
 

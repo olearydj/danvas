@@ -11,7 +11,7 @@ import typer
 from canvasapi.exceptions import ResourceDoesNotExist
 from dotenv import load_dotenv
 
-from danvas import assignment_audit, gradebook, quiz
+from danvas import __version__, assignment_audit, gradebook, quiz
 from danvas.announcements import command_announcements_create, command_announcements_export
 from danvas.assignments import command_assignments_create, command_assignments_export
 from danvas.auth import DEFAULT_API_URL
@@ -79,6 +79,27 @@ recordings_app = typer.Typer(
     help="Discover and download course recording transcripts/captions.",
     no_args_is_help=True,
 )
+
+def version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"danvas {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def app_callback(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=version_callback,
+            is_eager=True,
+            help="Show the danvas version and exit.",
+        ),
+    ] = False,
+) -> None:
+    pass
+
 
 app.add_typer(assignments_app, name="assignments")
 app.add_typer(gradebook_app, name="gradebook")

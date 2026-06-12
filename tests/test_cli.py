@@ -85,6 +85,15 @@ def test_run_command_echoes_string_exits_only(capsys: pytest.CaptureFixture[str]
     assert capsys.readouterr().err == ""
 
 
+def test_version_flag() -> None:
+    from danvas import __version__
+
+    result = runner.invoke(app, ["--version"])
+
+    assert result.exit_code == 0
+    assert result.output.strip() == f"danvas {__version__}"
+
+
 def test_quiz_import_qti_help() -> None:
     result = runner.invoke(app, ["quiz", "import-qti", "--help"])
 

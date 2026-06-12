@@ -113,6 +113,12 @@ For development inside the repository:
 uv run danvas --help
 ```
 
+Check the installed version:
+
+```bash
+danvas --version
+```
+
 ## Authentication
 
 `danvas` loads `.env` and can read a Canvas API token from either 1Password or an environment variable.

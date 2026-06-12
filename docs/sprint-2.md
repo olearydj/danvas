@@ -26,7 +26,7 @@ The highest-friction workflow observed in live course prep that sprint 1 does no
 
 ## Definition of done
 
-Carry over sprint 1's definition of done, plus: update the Codex skill at `/Users/djo/.codex/skills/teaching-danvas/` (`SKILL.md` and `references/danvas-commands.md`) for any command surface changes; it lives outside this repo and is missed by repo-wide searches.
+Carry over sprint 1's definition of done, plus: update the Codex skill at `/Users/djo/.codex/skills/teaching-danvas/` (`SKILL.md` and `references/danvas-commands.md`) for any command surface changes; it lives outside this repo and is missed by repo-wide searches. Bump the version in `pyproject.toml` (minor for the sprint's features) and tag `vX.Y.Z` at sprint close-out.
 
 ## Open questions for planning
 

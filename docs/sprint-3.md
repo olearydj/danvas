@@ -28,7 +28,7 @@ Move from create-only to maintain: update existing Canvas objects from local sou
 
 ## Definition of done
 
-Carry over sprint 1's definition of done, plus: update the Codex skill at `/Users/djo/.codex/skills/teaching-danvas/` (`SKILL.md` and `references/danvas-commands.md`) for any command surface changes. Sprint 3's upsert work specifically invalidates the skill's "import always creates a new quiz; no update-in-place" caveat.
+Carry over sprint 1's definition of done, plus: update the Codex skill at `/Users/djo/.codex/skills/teaching-danvas/` (`SKILL.md` and `references/danvas-commands.md`) for any command surface changes. Sprint 3's upsert work specifically invalidates the skill's "import always creates a new quiz; no update-in-place" caveat. Bump the version in `pyproject.toml` (minor for the sprint's features) and tag `vX.Y.Z` at sprint close-out.
 
 ## Open questions for planning
 
