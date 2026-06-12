@@ -50,6 +50,7 @@ Main files:
 - `src/danvas/panopto.py`: Panopto caption downloads via the Canvas LTI launch.
 - `docs/course-yaml.md`: supported course policy YAML shape.
 - `docs/backlog.md`: planned feature work and design notes.
+- `docs/sprint-1.md`, `docs/sprint-2.md`, `docs/sprint-3.md`: sprint plans; sprint 1 is detailed, 2 and 3 are provisional.
 - `tests/`: pytest coverage and Typer smoke tests.
 
 Design decisions:
