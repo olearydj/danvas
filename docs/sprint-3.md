@@ -26,6 +26,10 @@ Move from create-only to maintain: update existing Canvas objects from local sou
 - Live Canvas gradebook export/download (HANDOFF).
 - Remaining `gradebook.py` complexity cleanup (HANDOFF chore; take opportunistically).
 
+## Definition of done
+
+Carry over sprint 1's definition of done, plus: update the Codex skill at `/Users/djo/.codex/skills/teaching-danvas/` (`SKILL.md` and `references/danvas-commands.md`) for any command surface changes. Sprint 3's upsert work specifically invalidates the skill's "import always creates a new quiz; no update-in-place" caveat.
+
 ## Open questions for planning
 
 - Where do Canvas IDs live: sidecar manifest only, optional front matter, or both with sidecar as the default? The backlog leans sidecar-first to keep reusable Markdown clean.

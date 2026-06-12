@@ -24,6 +24,10 @@ The highest-friction workflow observed in live course prep that sprint 1 does no
 - The mutation banner from sprint 1 Goal 5 applies to every new write command here.
 - QTI import's progress-polling code should be shared with `groups import` (both poll Canvas progress objects); extract a common helper when the second consumer appears.
 
+## Definition of done
+
+Carry over sprint 1's definition of done, plus: update the Codex skill at `/Users/djo/.codex/skills/teaching-danvas/` (`SKILL.md` and `references/danvas-commands.md`) for any command surface changes; it lives outside this repo and is missed by repo-wide searches.
+
 ## Open questions for planning
 
 - Does `groups plan` need a real constraint solver, or is the observed greedy/retry approach from the ad hoc session good enough to ship first?

@@ -58,6 +58,8 @@ Main files:
 - `docs/sprint-1.md`, `docs/sprint-2.md`, `docs/sprint-3.md`: sprint plans; sprint 1 is detailed, 2 and 3 are provisional.
 - `tests/`: pytest coverage and Typer smoke tests.
 
+Documentation sync: when the command surface or behavior changes, update every documentation surface in the same change set: `README.md`, `HANDOFF.md`, `docs/backlog.md`, the active `docs/sprint-N.md`, and the Codex skill at `/Users/djo/.codex/skills/teaching-danvas/` (`SKILL.md` and `references/danvas-commands.md`). The Codex skill lives outside this repo, so repo-wide searches will not surface it; check it explicitly at sprint close-out.
+
 Design decisions:
 
 - `danvas` is for operational Canvas workflows.
