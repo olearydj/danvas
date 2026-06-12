@@ -180,6 +180,56 @@ def test_build_course_snapshot_contains_no_secrets_or_member_lists() -> None:
             assert set(group) == {"id", "name", "members_count"}
 
 
+def test_diff_snapshots_reports_added_removed_changed() -> None:
+    old = config.build_course_snapshot(FakeCourse())
+    new = json.loads(json.dumps(old))
+    new["assignments"][0]["points_possible"] = 50
+    new["quizzes"] = []
+    new["files"].append({"id": 301, "display_name": "extra.pdf", "size": 10})
+
+    report = config.diff_snapshots(old, new)
+
+    assert report is not None
+    sections = report["sections"]
+    assert sections["files"]["added"] == ["extra.pdf"]
+    assert sections["quizzes"]["removed"] == ["Chapter 7 Quiz"]
+    changed = sections["assignments"]["changed"]
+    assert changed[0]["label"] == "Case Study 1"
+    assert changed[0]["changes"] == ["points_possible: 100 -> 50"]
+    assert "announcements" not in sections
+
+
+def test_diff_snapshots_refuses_schema_mismatch() -> None:
+    old = {"schema_version": 1, "generated_at": "2026-06-01T00:00:00Z"}
+    new = config.build_course_snapshot(FakeCourse())
+
+    assert config.diff_snapshots(old, new) is None
+    assert "diff unavailable" in config.render_snapshot_diff(None)[0]
+
+
+def test_command_refresh_with_diff_prints_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+    old = config.build_course_snapshot(FakeCourse())
+    old["assignments"][0]["points_possible"] = 50
+    config.write_course_snapshot(tmp_path / ".danvas" / "course.json", old)
+
+    class FakeCanvas:
+        def get_course(self, course_id: int) -> FakeCourse:
+            return FakeCourse()
+
+    monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(project_root=str(tmp_path), course_id=1742717, diff=True)
+
+    config.command_refresh(args)
+
+    out = capsys.readouterr().out
+    assert "Snapshot diff:" in out
+    assert "changed: Case Study 1 (points_possible: 50 -> 100)" in out
+    assert "Wrote" in out
+
+
 def test_toml_key_quotes_names_that_are_not_bare_keys() -> None:
     assert config.toml_key("CaseStudies") == "CaseStudies"
     assert config.toml_key("case-studies_1") == "case-studies_1"

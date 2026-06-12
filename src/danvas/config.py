@@ -128,6 +128,13 @@ def command_refresh(args: Any) -> None:
     course = canvas.get_course(args.course_id)
     payload = build_course_snapshot(course)
     snapshot = course_snapshot_path(root)
+    if getattr(args, "diff", False):
+        if snapshot.is_file():
+            previous = json.loads(snapshot.read_text(encoding="utf-8"))
+            for line in render_snapshot_diff(diff_snapshots(previous, payload)):
+                print(line)
+        else:
+            print("No previous snapshot; nothing to diff.")
     write_course_snapshot(snapshot, payload)
     print(f"Wrote {snapshot}")
 
@@ -275,6 +282,96 @@ def snapshot_group_categories(course: Any) -> list[dict[str, Any]]:
         )
     rows.sort(key=lambda row: str(row["name"]))
     return rows
+
+
+DIFF_SECTIONS: list[tuple[str, str, list[str]]] = [
+    (
+        "assignments",
+        "name",
+        ["name", "points_possible", "due_at", "unlock_at", "lock_at", "published"],
+    ),
+    ("assignment_groups", "name", ["name", "group_weight"]),
+    ("files", "display_name", ["display_name", "folder_full_name", "size", "updated_at"]),
+    (
+        "quizzes",
+        "title",
+        [
+            "title",
+            "points_possible",
+            "due_at",
+            "unlock_at",
+            "lock_at",
+            "published",
+            "time_limit",
+            "allowed_attempts",
+            "question_count",
+        ],
+    ),
+    ("announcements", "title", ["title", "posted_at", "delayed_post_at", "published"]),
+    ("discussions", "title", ["title", "published", "locked", "assignment_id"]),
+    ("group_categories", "name", ["name", "group_count", "member_count"]),
+]
+
+
+def diff_snapshots(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any] | None:
+    old_version = int(old.get("schema_version") or 1)
+    new_version = int(new.get("schema_version") or 1)
+    if old_version != new_version:
+        return None
+    sections: dict[str, dict[str, Any]] = {}
+    for section, label_key, fields in DIFF_SECTIONS:
+        old_rows = rows_by_id(old.get(section) or [])
+        new_rows = rows_by_id(new.get(section) or [])
+        added = sorted(
+            str(new_rows[key].get(label_key) or key) for key in new_rows.keys() - old_rows.keys()
+        )
+        removed = sorted(
+            str(old_rows[key].get(label_key) or key) for key in old_rows.keys() - new_rows.keys()
+        )
+        changed = []
+        for key in sorted(old_rows.keys() & new_rows.keys(), key=str):
+            changes = [
+                f"{field}: {old_rows[key].get(field)!r} -> {new_rows[key].get(field)!r}"
+                for field in fields
+                if old_rows[key].get(field) != new_rows[key].get(field)
+            ]
+            if changes:
+                changed.append(
+                    {
+                        "label": str(new_rows[key].get(label_key) or key),
+                        "changes": changes,
+                    }
+                )
+        if added or removed or changed:
+            sections[section] = {"added": added, "removed": removed, "changed": changed}
+    return {
+        "old_generated_at": old.get("generated_at"),
+        "new_generated_at": new.get("generated_at"),
+        "sections": sections,
+    }
+
+
+def rows_by_id(rows: list[dict[str, Any]]) -> dict[Any, dict[str, Any]]:
+    return {row.get("id"): row for row in rows if row.get("id") is not None}
+
+
+def render_snapshot_diff(report: dict[str, Any] | None) -> list[str]:
+    if report is None:
+        return ["Snapshot format changed; diff unavailable. The new snapshot replaces the old one."]
+    lines = [
+        f"Snapshot diff: {report['old_generated_at']} -> {report['new_generated_at']}"
+    ]
+    if not report["sections"]:
+        lines.append("  No changes detected in tracked sections.")
+    for section, data in report["sections"].items():
+        lines.append(f"  {section}:")
+        for label in data["added"]:
+            lines.append(f"    added: {label}")
+        for label in data["removed"]:
+            lines.append(f"    removed: {label}")
+        for change in data["changed"]:
+            lines.append(f"    changed: {change['label']} ({'; '.join(change['changes'])})")
+    return lines
 
 
 def write_course_snapshot(path: Path, payload: dict[str, Any]) -> None:

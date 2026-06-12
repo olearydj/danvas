@@ -200,6 +200,10 @@ def refresh_project(
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
+    diff: Annotated[
+        bool,
+        typer.Option("--diff", help="Summarize changes since the previous snapshot."),
+    ] = False,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -210,6 +214,7 @@ def refresh_project(
         args_for(
             course_id=course_id,
             project_root=str(project_root),
+            diff=diff,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
