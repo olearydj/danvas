@@ -182,6 +182,14 @@ points_possible: 100
 
 Use `assignment_group_id` when you want to bypass project-local name resolution.
 
+`danvas status` warns when the snapshot is older than 24 hours. Override the
+threshold per project with a `[status]` table in `config.toml`:
+
+```toml
+[status]
+max_snapshot_age_hours = 72
+```
+
 ## Examples
 
 ```bash
@@ -269,9 +277,15 @@ danvas recordings panopto-captions ... --dry-run
 
 `grades post` and comment posting check for already-present grades/comments before writing when possible.
 
+Live Canvas writes print a `== Canvas write: ... ==` banner showing the course, target, and write counts before any change is made.
+
 ## Development
 
 ```bash
-uv run python -m compileall src
+uv run ruff check .
+uv run ty check
+uv run pytest
 uv run danvas --help
 ```
+
+CI runs the same three checks on push and pull request.

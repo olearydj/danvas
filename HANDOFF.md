@@ -10,6 +10,8 @@ Remote: `origin git@github.com:olearydj/danvas.git`
 
 Branch: `main`
 
+Latest tag: `v0.1.0` (sprint 1 delivered and verified live, 2026-06-12; sprint plans in `docs/sprint-1.md` through `docs/sprint-3.md`).
+
 `danvas` is a unified operational Canvas CLI for course work. It handles rosters, assignments, submissions, grading, discussions, and local export audits. It is intentionally separate from archival/history tooling such as Canvas ledger databases and from report-specific scripts under teaching/report trees.
 
 Important commits:
@@ -29,7 +31,7 @@ uv run ty check
 uv run pytest
 ```
 
-Latest checks: `ruff` clean, `ty` clean, and `96 passed` in pytest. GitHub Actions (`.github/workflows/ci.yml`) runs the same three checks on push and pull request.
+Latest checks: `ruff` clean, `ty` clean, and `97 passed` in pytest. GitHub Actions (`.github/workflows/ci.yml`) runs the same three checks on push and pull request.
 
 Main files:
 
@@ -77,7 +79,6 @@ Optional future `danvas` work:
 - Add update/upsert support for Canvas write commands, keyed by Canvas ID when present and by title only with explicit confirmation. Dry-run should show a useful before/after diff to avoid duplicate assignments, discussions, or announcements.
 - Add a sidecar manifest or other round-trip metadata output for posted Canvas objects, including assignment IDs, discussion topic IDs, Canvas file IDs, and HTML URLs. Prefer keeping reusable Markdown clean unless course-specific IDs are intentionally stored in front matter.
 - Improve due-date ergonomics for course workflows: support local course timezone, end-of-day defaults, and date-only front matter such as `due_date: 2026-05-29` instead of requiring UTC timestamps.
-- Tag an initial version once the CLI stabilizes.
 
 ## Deprecated Canvas Tools
 
