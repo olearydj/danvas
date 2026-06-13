@@ -12,6 +12,8 @@ Branch: `main`
 
 Latest tag: `v0.1.3` (sprint 1 delivered and verified live 2026-06-12; `v0.1.1` added the `--version` flag and documentation fixes; `v0.1.2`/`v0.1.3` fixed CLI help tests that failed in headless CI; sprint plans in `docs/sprint-1.md` through `docs/sprint-3.md`).
 
+Release status: `v0.1.3` is the known-good release (green CI). `v0.1.1` and `v0.1.2` have failing CI and are superseded; they were left in place rather than rewriting published history. Use `v0.1.3` or later.
+
 CLI help tests: Typer renders `--help` as a width-dependent Rich table that wraps option flags in headless CI, so never assert option flags against rendered `--help` output (`v0.1.2`'s `COLUMNS` fixture did not fix it). Use the Click introspection helpers in `tests/test_cli.py` (`command(...)`, `option_names(...)`) to check option presence width-independently. Tag only after CI is confirmed green on the pushed commit.
 
 `danvas` is a unified operational Canvas CLI for course work. It handles rosters, assignments, submissions, grading, discussions, and local export audits. It is intentionally separate from archival/history tooling such as Canvas ledger databases and from report-specific scripts under teaching/report trees.
@@ -33,7 +35,7 @@ uv run ty check
 uv run pytest
 ```
 
-Latest checks: `ruff` clean, `ty` clean, and `98 passed` in pytest. GitHub Actions (`.github/workflows/ci.yml`) runs the same three checks on push and pull request.
+Latest checks: `ruff` clean, `ty` clean, and `99 passed` in pytest. GitHub Actions (`.github/workflows/ci.yml`) runs the same three checks on push and pull request.
 
 Versioning: `pyproject.toml` is the single version source; `danvas --version` and `danvas.__version__` read the installed package metadata. When the version changes, bump `pyproject.toml`, run `uv sync` (and reinstall the `uv tool` if used) so editable metadata refreshes, and create a matching `vX.Y.Z` git tag. Bump the minor version for feature sprints or new commands, the patch version for fixes.
 
