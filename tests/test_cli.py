@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import click
 import pytest
 import typer
 from typer.testing import CliRunner
@@ -9,6 +10,24 @@ from danvas.cli import app, run_command
 from tests.fixtures import write_assignment_fixture, write_gradebook_fixture, write_quiz_fixture
 
 runner = CliRunner()
+
+
+def command(*path: str) -> click.Command:
+    """Resolve a (sub)command from the Typer app's Click tree."""
+    cmd: click.Command = typer.main.get_command(app)
+    for name in path:
+        assert isinstance(cmd, click.Group)
+        cmd = cmd.commands[name]
+    return cmd
+
+
+def option_names(*path: str) -> set[str]:
+    cmd = command(*path)
+    names: set[str] = set()
+    for param in cmd.params:
+        names.update(param.opts)
+        names.update(param.secondary_opts)
+    return names
 
 
 def test_gradebook_check_cli(tmp_path: Path) -> None:
@@ -94,24 +113,28 @@ def test_version_flag() -> None:
     assert result.output.strip() == f"danvas {__version__}"
 
 
-def test_quiz_import_qti_help() -> None:
-    result = runner.invoke(app, ["quiz", "import-qti", "--help"])
-
-    assert result.exit_code == 0
-    assert "--match-title" in result.output
-    assert "--dry-run" in result.output
-
-
-def test_status_help() -> None:
-    result = runner.invoke(app, ["status", "--help"])
-
-    assert result.exit_code == 0
-    assert "Read-only" in result.output
+def test_help_renders_without_error() -> None:
+    for argv in (
+        ["--help"],
+        ["quiz", "import-qti", "--help"],
+        ["status", "--help"],
+        ["recordings", "panopto-captions", "--help"],
+    ):
+        result = runner.invoke(app, argv)
+        assert result.exit_code == 0, argv
 
 
-def test_recordings_panopto_captions_help() -> None:
-    result = runner.invoke(app, ["recordings", "panopto-captions", "--help"])
+def test_quiz_import_qti_defines_expected_options() -> None:
+    options = option_names("quiz", "import-qti")
 
-    assert result.exit_code == 0
-    assert "Panopto" in result.output
-    assert "--folder-id" in result.output
+    assert {"--match-title", "--dry-run", "--no-publish", "--course-id"} <= options
+
+
+def test_status_is_read_only() -> None:
+    assert "Read-only" in (command("status").help or "")
+    assert "--report-md" in option_names("status")
+
+
+def test_recordings_panopto_captions_options() -> None:
+    assert "Panopto" in (command("recordings", "panopto-captions").help or "")
+    assert {"--folder-id", "--session-id"} <= option_names("recordings", "panopto-captions")

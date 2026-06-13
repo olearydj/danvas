@@ -10,9 +10,9 @@ Remote: `origin git@github.com:olearydj/danvas.git`
 
 Branch: `main`
 
-Latest tag: `v0.1.2` (sprint 1 delivered and verified live 2026-06-12; `v0.1.1` added the `--version` flag and documentation fixes; `v0.1.2` fixes width-dependent CLI help tests that failed in headless CI; sprint plans in `docs/sprint-1.md` through `docs/sprint-3.md`).
+Latest tag: `v0.1.3` (sprint 1 delivered and verified live 2026-06-12; `v0.1.1` added the `--version` flag and documentation fixes; `v0.1.2`/`v0.1.3` fixed CLI help tests that failed in headless CI; sprint plans in `docs/sprint-1.md` through `docs/sprint-3.md`).
 
-CLI help tests: Typer renders `--help` as a width-dependent Rich table, so `tests/conftest.py` forces `COLUMNS=200` to keep flag substrings from wrapping in headless CI. Assert option flags only with that fixture active.
+CLI help tests: Typer renders `--help` as a width-dependent Rich table that wraps option flags in headless CI, so never assert option flags against rendered `--help` output (`v0.1.2`'s `COLUMNS` fixture did not fix it). Use the Click introspection helpers in `tests/test_cli.py` (`command(...)`, `option_names(...)`) to check option presence width-independently. Tag only after CI is confirmed green on the pushed commit.
 
 `danvas` is a unified operational Canvas CLI for course work. It handles rosters, assignments, submissions, grading, discussions, and local export audits. It is intentionally separate from archival/history tooling such as Canvas ledger databases and from report-specific scripts under teaching/report trees.
 
