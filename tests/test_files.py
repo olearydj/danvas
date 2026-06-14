@@ -9,6 +9,8 @@ import pytest
 from danvas.files import (
     build_file_inventory,
     command_files_download,
+    command_files_upload,
+    content_type_for,
     download_relative_path,
     local_files,
     write_missing_report,
@@ -62,6 +64,56 @@ class FakeCanvas:
     def get_course(self, course_id: int) -> FakeCourse:
         assert course_id == 101
         return FakeCourse()
+
+
+class FakeUploadFolder(SimpleNamespace):
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(uploads=[], **kwargs)
+
+    def upload(self, source: str, *, on_duplicate: str, content_type: str):
+        self.uploads.append(
+            {
+                "source": source,
+                "on_duplicate": on_duplicate,
+                "content_type": content_type,
+            }
+        )
+        path = Path(source)
+        return True, {
+            "id": len(self.uploads) + 1000,
+            "display_name": path.name,
+            "filename": path.name.replace(" ", "+"),
+            "folder_id": self.id,
+            "size": path.stat().st_size,
+            "content_type": content_type,
+            "url": "https://canvas.example/files/download?verifier=secret",
+        }
+
+
+class FakeUploadCourse:
+    id = 101
+    name = "Example Course"
+
+    def __init__(self) -> None:
+        self.slides = FakeUploadFolder(id=20, full_name="course files/slides")
+        self.cases = FakeUploadFolder(id=21, full_name="course files/cases")
+
+    def get_folders(self) -> list[FakeUploadFolder]:
+        return [self.slides, self.cases]
+
+
+class FakeUploadCanvas:
+    def __init__(self, course: FakeUploadCourse | None = None) -> None:
+        self.course = course or FakeUploadCourse()
+        self.folder_requested: int | None = None
+
+    def get_course(self, course_id: int) -> FakeUploadCourse:
+        assert course_id == 101
+        return self.course
+
+    def get_folder(self, folder_id: int) -> FakeUploadFolder:
+        self.folder_requested = folder_id
+        return self.course.slides
 
 
 def test_build_file_inventory_compares_local_files_without_urls(tmp_path: Path) -> None:
@@ -169,3 +221,447 @@ def test_command_files_download_deduplicates_colliding_names(
     )
     assert [row["deduplicated"] for row in manifest["files"]] == [True, True]
     assert [row["status"] for row in manifest["files"]] == ["downloaded", "downloaded"]
+
+
+def test_content_type_for_uses_office_mappings() -> None:
+    assert (
+        content_type_for(Path("slides.pptx"))
+        == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    )
+    assert content_type_for(Path("unknown.notreal")) == "application/octet-stream"
+
+
+def test_command_files_upload_dry_run_resolves_folder_without_uploading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "Lecture 14.pptx"
+    source.write_bytes(b"deck")
+    canvas = FakeUploadCanvas()
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=True,
+        output=str(output),
+    )
+
+    command_files_upload(args)
+
+    assert canvas.course.slides.uploads == []
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["dry_run"] is True
+    assert report["folder_full_name"] == "course files/slides"
+    assert report["files"][0]["status"] == "dry-run"
+    assert "verifier" not in output.read_text(encoding="utf-8")
+    assert "Dry run - no files uploaded." in capsys.readouterr().out
+
+
+def test_command_files_upload_missing_file_exits_before_canvas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_canvas(args: object) -> object:
+        raise AssertionError("Canvas should not be contacted")
+
+    monkeypatch.setattr("danvas.files.canvas_from_args", fail_canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(tmp_path / "missing.pdf")],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=False,
+        output=None,
+    )
+
+    with pytest.raises(SystemExit, match="Upload source not found"):
+        command_files_upload(args)
+
+
+def test_command_files_upload_rejects_folder_conflict_before_canvas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_text("pdf", encoding="utf-8")
+
+    def fail_canvas(args: object) -> object:
+        raise AssertionError("Canvas should not be contacted")
+
+    monkeypatch.setattr("danvas.files.canvas_from_args", fail_canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=20,
+        on_duplicate="overwrite",
+        dry_run=True,
+        output=None,
+    )
+
+    with pytest.raises(SystemExit, match="Use either --folder or --folder-id"):
+        command_files_upload(args)
+
+
+def test_command_files_upload_rejects_duplicate_basenames_without_rename(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "one" / "slides.pdf"
+    second = tmp_path / "two" / "slides.pdf"
+    first.parent.mkdir()
+    second.parent.mkdir()
+    first.write_text("one", encoding="utf-8")
+    second.write_text("two", encoding="utf-8")
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(first), str(second)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=False,
+        output=None,
+    )
+
+    with pytest.raises(SystemExit, match="Duplicate local filenames"):
+        command_files_upload(args)
+
+
+def test_command_files_upload_folder_id_uses_canvas_get_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_text("pdf", encoding="utf-8")
+    canvas = FakeUploadCanvas()
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder=None,
+        folder_id=20,
+        on_duplicate="overwrite",
+        dry_run=True,
+        output=None,
+    )
+
+    command_files_upload(args)
+
+    assert canvas.folder_requested == 20
+
+
+def test_command_files_upload_folder_id_allows_matching_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_text("pdf", encoding="utf-8")
+    canvas = FakeUploadCanvas()
+    canvas.course.slides.context_type = "Course"
+    canvas.course.slides.context_id = 101
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder=None,
+        folder_id=20,
+        on_duplicate="overwrite",
+        dry_run=True,
+        output=None,
+    )
+
+    command_files_upload(args)
+
+    assert canvas.folder_requested == 20
+
+
+def test_command_files_upload_folder_id_rejects_mismatched_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_text("pdf", encoding="utf-8")
+    canvas = FakeUploadCanvas()
+    canvas.course.slides.context_type = "Course"
+    canvas.course.slides.context_id = 999
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder=None,
+        folder_id=20,
+        on_duplicate="overwrite",
+        dry_run=True,
+        output=None,
+    )
+
+    with pytest.raises(SystemExit, match="does not belong to course 101"):
+        command_files_upload(args)
+
+
+def test_command_files_upload_folder_id_rejects_absent_context_not_in_course(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_text("pdf", encoding="utf-8")
+    external_folder = FakeUploadFolder(id=99, full_name="course files/other")
+
+    class ExternalFolderCanvas(FakeUploadCanvas):
+        def get_folder(self, folder_id: int) -> FakeUploadFolder:
+            assert folder_id == 99
+            return external_folder
+
+    canvas = ExternalFolderCanvas()
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder=None,
+        folder_id=99,
+        on_duplicate="overwrite",
+        dry_run=True,
+        output=None,
+    )
+
+    with pytest.raises(SystemExit, match="was not found in course 101"):
+        command_files_upload(args)
+
+
+def test_command_files_upload_rejects_missing_and_ambiguous_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_text("pdf", encoding="utf-8")
+    canvas = FakeUploadCanvas()
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/unknown",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=True,
+        output=None,
+    )
+
+    with pytest.raises(SystemExit, match="Canvas folder not found"):
+        command_files_upload(args)
+
+    class AmbiguousCourse(FakeUploadCourse):
+        def get_folders(self) -> list[FakeUploadFolder]:
+            return [
+                FakeUploadFolder(id=20, full_name="course files/slides"),
+                FakeUploadFolder(id=21, full_name="course files/slides"),
+            ]
+
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(AmbiguousCourse())
+    )
+    args.folder = "course files/slides"
+
+    with pytest.raises(SystemExit, match="ambiguous"):
+        command_files_upload(args)
+
+
+def test_command_files_upload_live_uploads_and_writes_safe_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "Lecture 14 - Sheets.xlsx"
+    source.write_bytes(b"sheet")
+    canvas = FakeUploadCanvas()
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="rename",
+        dry_run=False,
+        output=str(output),
+    )
+
+    command_files_upload(args)
+
+    assert canvas.course.slides.uploads == [
+        {
+            "source": str(source),
+            "on_duplicate": "rename",
+            "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+    ]
+    report_text = output.read_text(encoding="utf-8")
+    report = json.loads(report_text)
+    assert report["files"][0]["status"] == "uploaded"
+    assert report["files"][0]["url_present"] is True
+    assert "verifier" not in report_text
+    captured = capsys.readouterr().out
+    assert "== Canvas write: upload 1 file(s) ==" in captured
+    assert '"status": "uploaded"' in captured
+
+
+def test_command_files_upload_partial_failure_exits_nonzero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class FailingFolder(FakeUploadFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            self.uploads.append(
+                {
+                    "source": source,
+                    "on_duplicate": on_duplicate,
+                    "content_type": content_type,
+                }
+            )
+            if Path(source).name == "bad.pdf":
+                return False, {"message": "upload rejected"}
+            return super().upload(
+                source, on_duplicate=on_duplicate, content_type=content_type
+            )
+
+    class FailingCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.slides = FailingFolder(id=20, full_name="course files/slides")
+
+    good = tmp_path / "good.pdf"
+    bad = tmp_path / "bad.pdf"
+    good.write_text("good", encoding="utf-8")
+    bad.write_text("bad", encoding="utf-8")
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(FailingCourse())
+    )
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(good), str(bad)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=False,
+        output=None,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        command_files_upload(args)
+
+    assert exc.value.code == 1
+    output = capsys.readouterr().out
+    assert '"status": "uploaded"' in output
+    assert '"status": "failed"' in output
+    assert "Upload incomplete: 1 uploaded, 1 failed." in output
+
+
+def test_command_files_upload_failure_payload_does_not_leak_urls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class UrlOnlyFailureFolder(FakeUploadFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            return False, {
+                "download_url": "https://canvas.example/files/download?verifier=secret",
+                "verifier": "secret",
+            }
+
+    class UrlOnlyFailureCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.slides = UrlOnlyFailureFolder(id=20, full_name="course files/slides")
+
+    source = tmp_path / "bad.pdf"
+    source.write_text("bad", encoding="utf-8")
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args",
+        lambda args: FakeUploadCanvas(UrlOnlyFailureCourse()),
+    )
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=False,
+        output=str(output),
+    )
+
+    with pytest.raises(SystemExit):
+        command_files_upload(args)
+
+    report_text = output.read_text(encoding="utf-8")
+    report = json.loads(report_text)
+    assert report["files"][0]["error"] == "Upload failed without a Canvas error message."
+    assert "download_url" not in report_text
+    assert "verifier" not in report_text
+    assert "secret" not in report_text
+
+
+def test_command_files_upload_empty_failure_payload_gets_generic_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class EmptyFailureFolder(FakeUploadFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            return False, {}
+
+    class EmptyFailureCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.slides = EmptyFailureFolder(id=20, full_name="course files/slides")
+
+    source = tmp_path / "bad.pdf"
+    source.write_text("bad", encoding="utf-8")
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args",
+        lambda args: FakeUploadCanvas(EmptyFailureCourse()),
+    )
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=False,
+        output=str(output),
+    )
+
+    with pytest.raises(SystemExit):
+        command_files_upload(args)
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["files"][0]["status"] == "failed"
+    assert report["files"][0]["error"] == "Upload failed without a Canvas error message."
+
+
+def test_command_files_upload_exception_text_is_redacted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ExceptionFolder(FakeUploadFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            raise RuntimeError(
+                "POST https://canvas.example/upload?verifier=secret-token failed"
+            )
+
+    class ExceptionCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.slides = ExceptionFolder(id=20, full_name="course files/slides")
+
+    source = tmp_path / "bad.pdf"
+    source.write_text("bad", encoding="utf-8")
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(ExceptionCourse())
+    )
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=False,
+        output=str(output),
+    )
+
+    with pytest.raises(SystemExit):
+        command_files_upload(args)
+
+    report_text = output.read_text(encoding="utf-8")
+    assert "RuntimeError: POST [redacted-url] failed" in report_text
+    assert "canvas.example" not in report_text
+    assert "secret-token" not in report_text

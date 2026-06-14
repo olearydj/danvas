@@ -170,6 +170,9 @@ Desired behavior:
 
 ## Canvas File Upload Helper
 
+Status: basic v1 delivered by `danvas files upload`. Markdown asset rewriting and
+folder creation remain future work.
+
 Add a file upload command that returns Canvas file metadata needed by local Markdown
 sources.
 
@@ -181,9 +184,13 @@ danvas files upload content/cases/case1-prompt.docx --folder "Case Studies"
 
 Desired behavior:
 
-- Upload to a named Canvas Files folder, resolving or creating the folder as needed.
-- Print and optionally write file ID, display name, URL, folder, size, and updated time.
-- Support `--dry-run` where Canvas allows a meaningful preview.
+- Upload one or more local files to an existing named Canvas Files folder or folder
+  ID.
+- Print and optionally write file ID, display name, folder, size, content type, and
+  URL presence without storing verifier/download URLs.
+- Support `--dry-run` with a meaningful preview.
+- Support `--on-duplicate overwrite|rename`.
+- Do not create folders in v1.
 - Later, integrate with Markdown-backed assignments, announcements, and discussions so local asset links can be uploaded and rewritten before posting.
 
 ## Single Canvas File Download And Compare

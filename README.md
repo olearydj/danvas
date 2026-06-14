@@ -72,10 +72,11 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - optional JSON, CSV, or Markdown output
   - filters replies to the authenticated user by default, so student replies are excluded
 
-- inventory course files
+- inventory, upload, and download course files
   - exports Canvas Files metadata to JSON and CSV without download URLs
   - optionally compares Canvas filenames and sizes to a local course root (`--local-root`)
   - writes a Markdown missing-file report for archive checks
+  - uploads one or more local files to an existing Canvas Files folder with dry-run support
   - downloads Canvas Files into a local folder tree with a manifest
 
 - download Panopto captions
@@ -273,6 +274,15 @@ danvas discussions score https://auburn.instructure.com/courses/1655780/discussi
 danvas announcements create --course-id 1706414 announcements/welcome.md --dry-run
 danvas announcements export --course-id 1655780 --output announcements.md
 
+# Files
+danvas files inventory --course-id 1742717 --output-dir .danvas/files-inventory \
+  --local-root .
+danvas files upload --course-id 1742717 --folder "course files/slides" \
+  --dry-run content/slides/example.pptx
+danvas files upload --course-id 1742717 --folder-id 15968602 \
+  --on-duplicate overwrite --output .danvas/uploaded-files.json content/slides/example.pptx
+danvas files download --course-id 1742717 --output-dir .danvas/canvas-files
+
 # Recordings
 danvas recordings panopto-captions --course-id 1742717 \
   --folder-id b4e2a2bc-0b9f-439e-9095-b44e00f269c4 --dry-run
@@ -305,6 +315,7 @@ danvas submissions feedback ... --dry-run
 danvas grades post ... --dry-run
 danvas discussions score ... --dry-run
 danvas quiz import-qti ... --dry-run
+danvas files upload ... --dry-run
 danvas recordings panopto-captions ... --dry-run
 ```
 

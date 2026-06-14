@@ -57,7 +57,7 @@ Main files:
 - `src/danvas/gradebook.py`: Canvas gradebook CSV parsing/check/audit.
 - `src/danvas/quiz.py`: Canvas Classic Quiz/Survey student-analysis CSV parsing.
 - `src/danvas/assignment_audit.py`: assignment setup audit helpers.
-- `src/danvas/files.py`: Canvas Files inventory/download operations.
+- `src/danvas/files.py`: Canvas Files inventory/upload/download operations.
 - `src/danvas/panopto.py`: Panopto caption downloads via the Canvas LTI launch.
 - `docs/course-yaml.md`: supported course policy YAML shape.
 - `docs/backlog.md`: planned feature work and design notes.
@@ -87,7 +87,7 @@ Optional future `danvas` work:
 - Clean up remaining non-urgent `gradebook.py` complexity.
 - Add `danvas discussions create` for Markdown-authored discussion topics, including graded discussion settings and the attached Canvas assignment payload. This should cover the workflow where `assignments create` is not enough because the Canvas object is a discussion topic with assignment metadata.
 - Resolve assignment groups by name in write commands, for example `assignment_group_name: Introductions`, and fail clearly on missing or ambiguous matches. Creating a new group should require an explicit option rather than happening implicitly.
-- Add `danvas files upload` and integrate it with Markdown-backed announcements, discussions, and assignments so local image references can be uploaded to Canvas Files and rewritten to Canvas file URLs before posting.
+- Integrate `danvas files upload` with Markdown-backed announcements, discussions, and assignments so local image references can be uploaded to Canvas Files and rewritten to Canvas file URLs before posting. The basic `files upload` command exists; this future work is the source-rewriting layer.
 - Add update/upsert support for Canvas write commands, keyed by Canvas ID when present and by title only with explicit confirmation. Dry-run should show a useful before/after diff to avoid duplicate assignments, discussions, or announcements.
 - Add a sidecar manifest or other round-trip metadata output for posted Canvas objects, including assignment IDs, discussion topic IDs, Canvas file IDs, and HTML URLs. Prefer keeping reusable Markdown clean unless course-specific IDs are intentionally stored in front matter.
 - Improve due-date ergonomics for course workflows: support local course timezone, end-of-day defaults, and date-only front matter such as `due_date: 2026-05-29` instead of requiring UTC timestamps.

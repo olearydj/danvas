@@ -18,7 +18,7 @@ from danvas.auth import DEFAULT_API_URL
 from danvas.config import command_init, command_refresh, resolve_api_url, resolve_course_id
 from danvas.courses import command_courses, command_roster
 from danvas.discussions import command_discussions_export, command_discussions_score
-from danvas.files import command_files_download, command_files_inventory
+from danvas.files import command_files_download, command_files_inventory, command_files_upload
 from danvas.grades import command_grades_post, command_grades_verify
 from danvas.panopto import command_panopto_captions
 from danvas.quiz_import import command_quiz_import_qti
@@ -30,6 +30,7 @@ SecretProvider = Literal["auto", "1password", "env"]
 AssignmentExportFormat = Literal["auto", "json", "csv", "markdown"]
 DiscussionExportFormat = Literal["json", "csv"]
 AnnouncementExportFormat = Literal["auto", "json", "csv", "markdown"]
+FileDuplicatePolicy = Literal["overwrite", "rename"]
 
 
 app = typer.Typer(
@@ -990,6 +991,65 @@ def files_download(
             course_id=course_id,
             output_dir=str(output_dir),
             overwrite=overwrite,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@files_app.command(
+    "upload",
+    help="Upload one or more local files to an existing Canvas Files folder.",
+)
+def files_upload(
+    files: Annotated[
+        list[Path],
+        typer.Argument(help="One or more local files to upload. Directories are rejected."),
+    ],
+    course_id: CourseId = None,
+    folder: Annotated[
+        str | None,
+        typer.Option(
+            "--folder",
+            help="Exact Canvas folder full_name, for example 'course files/slides'.",
+        ),
+    ] = None,
+    folder_id: Annotated[
+        int | None,
+        typer.Option("--folder-id", help="Canvas folder ID. Mutually exclusive with --folder."),
+    ] = None,
+    on_duplicate: Annotated[
+        FileDuplicatePolicy,
+        typer.Option(
+            "--on-duplicate",
+            help="Canvas duplicate filename behavior.",
+        ),
+    ] = "overwrite",
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Resolve the upload plan without uploading files."),
+    ] = False,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Optional JSON upload report path."),
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_files_upload,
+        args_for(
+            course_id=course_id,
+            files=[str(path) for path in files],
+            folder=folder,
+            folder_id=folder_id,
+            on_duplicate=on_duplicate,
+            dry_run=dry_run,
+            output=str(output) if output else None,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

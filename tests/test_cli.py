@@ -138,3 +138,46 @@ def test_status_is_read_only() -> None:
 def test_recordings_panopto_captions_options() -> None:
     assert "Panopto" in (command("recordings", "panopto-captions").help or "")
     assert {"--folder-id", "--session-id"} <= option_names("recordings", "panopto-captions")
+
+
+def test_files_upload_cli_options_and_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pptx"
+    source.write_text("slides", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_upload(args: SimpleNamespace) -> None:
+        captured.update(vars(args))
+
+    monkeypatch.setattr("danvas.cli.command_files_upload", fake_upload)
+
+    result = runner.invoke(
+        app,
+        [
+            "files",
+            "upload",
+            "--course-id",
+            "101",
+            "--folder",
+            "course files/slides",
+            "--on-duplicate",
+            "rename",
+            "--dry-run",
+            "--output",
+            "upload.json",
+            str(source),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["course_id"] == 101
+    assert captured["files"] == [str(source)]
+    assert captured["folder"] == "course files/slides"
+    assert captured["folder_id"] is None
+    assert captured["on_duplicate"] == "rename"
+    assert captured["dry_run"] is True
+    assert captured["output"] == "upload.json"
+    assert {"--folder", "--folder-id", "--on-duplicate", "--dry-run", "--course-id"} <= (
+        option_names("files", "upload")
+    )

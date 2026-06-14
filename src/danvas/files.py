@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import re
 import unicodedata
 from collections import Counter, defaultdict
@@ -12,7 +13,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from danvas.auth import canvas_from_args
-from danvas.utils import canvas_object_to_dict, write_rows
+from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_json, write_rows
 
 GENERATED_INVENTORY_NAMES = {
     "files-inventory.csv",
@@ -42,6 +43,26 @@ INVENTORY_CSV_FIELDS = [
     "updated_at",
     "local_matches",
 ]
+
+OFFICE_CONTENT_TYPES = {
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pdf": "application/pdf",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+SENSITIVE_UPLOAD_KEYS = {
+    "download_url",
+    "error_url",
+    "file_param",
+    "file_url",
+    "token",
+    "upload_url",
+    "url",
+    "verifier",
+}
+SAFE_UPLOAD_ERROR_KEYS = ("error", "message", "errors", "status", "status_code")
+URLISH_RE = re.compile(r"https?://\S+|[A-Za-z]+://\S+")
+VERIFIER_RE = re.compile(r"(?i)(verifier|token|secret)=([^&\s]+)")
 
 
 def command_files_inventory(args: Any) -> None:
@@ -124,6 +145,67 @@ def command_files_download(args: Any) -> None:
     print(json.dumps(dict(sorted(statuses.items())), indent=2, sort_keys=True))
 
 
+def command_files_upload(args: Any) -> None:
+    local_rows = validate_upload_files([Path(path) for path in args.files], args.on_duplicate)
+    validate_upload_destination(args.folder, args.folder_id)
+    canvas = canvas_from_args(args)
+    course = canvas.get_course(args.course_id)
+    folder = resolve_upload_folder(canvas, course, folder=args.folder, folder_id=args.folder_id)
+    folder_id = getattr(folder, "id", None)
+    folder_full_name = str(getattr(folder, "full_name", "") or "")
+    report = {
+        "course_id": getattr(course, "id", args.course_id),
+        "course_name": str(getattr(course, "name", "") or ""),
+        "folder_id": folder_id,
+        "folder_full_name": folder_full_name,
+        "on_duplicate": args.on_duplicate,
+        "dry_run": bool(args.dry_run),
+        "files": [],
+    }
+    if args.dry_run:
+        report["files"] = [{**row, "status": "dry-run"} for row in local_rows]
+        print("Dry run - no files uploaded.")
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        if args.output:
+            write_json(Path(args.output), report)
+            print(f"Wrote {args.output}")
+        return
+
+    print_mutation_banner(
+        f"upload {len(local_rows)} file(s)",
+        {
+            "course": report["course_id"],
+            "folder": folder_full_name or folder_id,
+            "on_duplicate": args.on_duplicate,
+        },
+    )
+    failures = 0
+    results = []
+    for row in local_rows:
+        try:
+            ok, response = folder.upload(
+                row["source"],
+                on_duplicate=args.on_duplicate,
+                content_type=row["content_type"],
+            )
+        except Exception as exc:  # pragma: no cover - exact CanvasAPI exceptions vary.
+            ok = False
+            response = {"error": safe_upload_error_text(f"{type(exc).__name__}: {exc}")}
+        result = upload_result_row(row, ok=bool(ok), response=response, folder=folder)
+        results.append(result)
+        report["files"] = results
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        if result["status"] != "uploaded":
+            failures += 1
+    if args.output:
+        write_json(Path(args.output), report)
+        print(f"Wrote {args.output}")
+    if failures:
+        uploaded = sum(1 for row in results if row["status"] == "uploaded")
+        print(f"Upload incomplete: {uploaded} uploaded, {failures} failed.")
+        raise SystemExit(1)
+
+
 def build_file_inventory(course: Any, local_root: Path | None = None) -> dict[str, Any]:
     folders = list(course.get_folders())
     folders_by_id = {int(folder.id): folder for folder in folders if getattr(folder, "id", None)}
@@ -157,6 +239,204 @@ def build_file_inventory(course: Any, local_root: Path | None = None) -> dict[st
         "canvas_files": canvas_rows,
         "comparison": comparison_rows,
     }
+
+
+def validate_upload_files(files: list[Path], on_duplicate: str) -> list[dict[str, Any]]:
+    if not files:
+        raise SystemExit("At least one FILE is required.")
+    rows = []
+    basenames = Counter(path.name for path in files)
+    duplicates = sorted(name for name, count in basenames.items() if count > 1)
+    if duplicates and on_duplicate != "rename":
+        raise SystemExit(
+            "Duplicate local filenames require --on-duplicate rename: "
+            + ", ".join(duplicates)
+        )
+    for path in files:
+        if not path.exists():
+            raise SystemExit(f"Upload source not found: {path}")
+        if not path.is_file():
+            raise SystemExit(f"Upload source is not a file: {path}")
+        try:
+            with path.open("rb"):
+                pass
+        except OSError as exc:
+            raise SystemExit(f"Upload source is not readable: {path}: {exc}") from exc
+        stat = path.stat()
+        rows.append(
+            {
+                "source": str(path),
+                "name": path.name,
+                "size": stat.st_size,
+                "content_type": content_type_for(path),
+            }
+        )
+    return rows
+
+
+def validate_upload_destination(folder: str | None, folder_id: int | None) -> None:
+    if folder and folder_id is not None:
+        raise SystemExit("Use either --folder or --folder-id, not both.")
+    if not folder and folder_id is None:
+        raise SystemExit("Destination folder required. Pass --folder or --folder-id.")
+
+
+def resolve_upload_folder(
+    canvas: Any,
+    course: Any,
+    *,
+    folder: str | None,
+    folder_id: int | None,
+) -> Any:
+    if folder_id is not None:
+        resolved = canvas.get_folder(folder_id)
+        validate_folder_belongs_to_course(resolved, course)
+        return resolved
+
+    requested = str(folder or "")
+    matches = [
+        candidate
+        for candidate in course.get_folders()
+        if str(getattr(candidate, "full_name", "") or "") == requested
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise SystemExit(f"Canvas folder name is ambiguous: {requested}")
+    folders = sorted(str(getattr(candidate, "full_name", "") or "") for candidate in course.get_folders())
+    suggestions = nearby_folder_names(requested, folders)
+    message = f"Canvas folder not found: {requested}"
+    if suggestions:
+        message += ". Available nearby folders: " + ", ".join(suggestions)
+    raise SystemExit(message)
+
+
+def validate_folder_belongs_to_course(folder: Any, course: Any) -> None:
+    course_id = int(get_canvas_value(course, "id"))
+    folder_id = get_canvas_value(folder, "id")
+    context_type = get_canvas_value(folder, "context_type", "context-type")
+    context_id = get_canvas_value(folder, "context_id", "context-id")
+    if context_type is not None or context_id is not None:
+        if str(context_type) != "Course" or int_or_none(context_id) != course_id:
+            raise SystemExit(
+                f"Canvas folder {folder_id} does not belong to course {course_id}."
+            )
+        return
+
+    course_folder_ids = {
+        int(candidate_id)
+        for candidate in course.get_folders()
+        if (candidate_id := get_canvas_value(candidate, "id")) is not None
+    }
+    if folder_id is None or int(folder_id) not in course_folder_ids:
+        raise SystemExit(f"Canvas folder {folder_id} was not found in course {course_id}.")
+
+
+def get_canvas_value(obj: Any, *keys: str) -> Any:
+    if isinstance(obj, dict):
+        for key in keys:
+            if key in obj:
+                return obj[key]
+        return None
+    for key in keys:
+        attr = key.replace("-", "_")
+        if hasattr(obj, attr):
+            return getattr(obj, attr)
+    return None
+
+
+def int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def nearby_folder_names(requested: str, folders: list[str], limit: int = 5) -> list[str]:
+    requested_lower = requested.lower()
+    requested_parts = [part for part in requested_lower.split("/") if part]
+    suggestions = [
+        folder
+        for folder in folders
+        if requested_lower in folder.lower()
+        or folder.lower() in requested_lower
+        or any(part in folder.lower() for part in requested_parts)
+    ]
+    if not suggestions:
+        suggestions = folders
+    return suggestions[:limit]
+
+
+def content_type_for(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in OFFICE_CONTENT_TYPES:
+        return OFFICE_CONTENT_TYPES[suffix]
+    guessed, _encoding = mimetypes.guess_type(str(path))
+    return guessed or "application/octet-stream"
+
+
+def upload_result_row(
+    local_row: dict[str, Any],
+    *,
+    ok: bool,
+    response: Any,
+    folder: Any,
+) -> dict[str, Any]:
+    payload = canvas_object_to_dict(response)
+    content_type = payload.get("content-type") or payload.get("content_type") or local_row[
+        "content_type"
+    ]
+    row = {
+        **local_row,
+        "status": "uploaded" if ok else "failed",
+        "canvas_id": payload.get("id"),
+        "display_name": payload.get("display_name") or payload.get("filename") or local_row["name"],
+        "filename": payload.get("filename") or local_row["name"],
+        "folder_id": payload.get("folder_id") or getattr(folder, "id", None),
+        "content_type": content_type,
+        "url_present": bool(payload.get("url") or payload.get("download_url")),
+    }
+    if payload.get("size") is not None:
+        row["size"] = payload.get("size")
+    if not ok:
+        row["error"] = safe_upload_error(payload)
+    return row
+
+
+def safe_upload_error(payload: dict[str, Any]) -> str:
+    scrubbed = scrub_sensitive_upload_payload(payload)
+    for key in SAFE_UPLOAD_ERROR_KEYS:
+        if key in scrubbed and scrubbed[key]:
+            return safe_upload_error_text(scrubbed[key])
+    return "Upload failed without a Canvas error message."
+
+
+def scrub_sensitive_upload_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): scrub_sensitive_upload_payload(item)
+            for key, item in value.items()
+            if not is_sensitive_upload_key(str(key))
+        }
+    if isinstance(value, list):
+        return [scrub_sensitive_upload_payload(item) for item in value]
+    if isinstance(value, tuple):
+        return [scrub_sensitive_upload_payload(item) for item in value]
+    if isinstance(value, str):
+        return safe_upload_error_text(value)
+    return value
+
+
+def is_sensitive_upload_key(key: str) -> bool:
+    normalized = key.lower().replace("-", "_")
+    return any(part in normalized for part in SENSITIVE_UPLOAD_KEYS)
+
+
+def safe_upload_error_text(value: Any) -> str:
+    text = str(value)
+    text = URLISH_RE.sub("[redacted-url]", text)
+    text = VERIFIER_RE.sub(r"\1=[redacted]", text)
+    return text
 
 
 def download_relative_path(record: dict[str, Any]) -> Path:
