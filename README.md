@@ -188,6 +188,33 @@ points_possible: 100
 
 Use `assignment_group_id` when you want to bypass project-local name resolution.
 
+`danvas status` has default local-source conventions:
+
+- `content/announcements/*.md`
+- `content/discussions/*.md`
+- `content/quizzes/chap*.md`
+- `content/cases/*-assignment.md`
+
+Override them per course in `.danvas/config.toml` when a teaching repo uses a
+different layout:
+
+```toml
+[sources.assignments]
+include = ["content/assignments/*.md", "content/cases/*-assignment.md"]
+exclude = [
+  "content/assignments/*-draft-notes.md",
+  "content/assignments/*-starter-spec.md",
+]
+```
+
+When custom assignment include patterns are configured, `danvas status` only
+treats Markdown files with assignment metadata beyond `title`/`name` as
+assignment sources. This keeps broad folders such as `content/assignments/` from
+turning support notes into noisy local-only or unsupported status rows. Set
+`require_assignment_metadata = false` in `[sources.assignments]` for a narrow
+glob where every matched file should be reported, even when front matter is
+missing.
+
 `danvas status` warns when the snapshot is older than 24 hours. Override the
 threshold per project with a `[status]` table in `config.toml`:
 

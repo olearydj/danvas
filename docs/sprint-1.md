@@ -42,7 +42,7 @@ One command that replaces the multi-command audit from the June session.
 
 Scope:
 
-- A local source scanner module implementing the documented conventions: `content/announcements/*.md`, `content/discussions/*.md`, `content/quizzes/chap*.md`, `content/cases/*-assignment.md`. It classifies source type, title, comparable metadata, and generated artifacts such as QTI zips.
+- A local source scanner module implementing the documented default conventions: `content/announcements/*.md`, `content/discussions/*.md`, `content/quizzes/chap*.md`, `content/cases/*-assignment.md`. It classifies source type, title, comparable metadata, and generated artifacts such as QTI zips. After sprint 1, the scanner gained per-project `[sources]` overrides in `.danvas/config.toml` for course repos that use layouts such as `content/assignments/`.
 - `danvas status`: compare the snapshot against local sources and report each item as `exact`, `metadata mismatch`, `local-only`, `Canvas-only`, `filename-only match`, `unsupported comparison`, or `snapshot stale`.
 - Coverage across assignments, quiz shells, announcements, discussions, and files. Group categories appear as summary counts only.
 - Human-readable output by default, JSON via `--output`, optional Markdown report via `--report-md`.

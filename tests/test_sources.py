@@ -55,6 +55,64 @@ def test_scan_sources_discovers_conventional_sources(tmp_path: Path) -> None:
     assert quiz["artifacts"]["qti_zip"] == "content/quizzes/chap07.zip"
 
 
+def test_scan_sources_uses_configured_assignment_patterns(tmp_path: Path) -> None:
+    write(
+        tmp_path / "content" / "assignments" / "01-setup-check.md",
+        "---\ntitle: 'Week 1: Setup Check'\npoints_possible: 10\npublished: true\n---\n\nDo it.\n",
+    )
+    write(
+        tmp_path / "content" / "assignments" / "02-draft-assignment.md",
+        "---\ntitle: Draft Assignment\npoints_possible: 10\n---\n\nDraft.\n",
+    )
+    write(
+        tmp_path / "content" / "assignments" / "draft-notes.md",
+        "# Draft Notes\n\nNot a Canvas assignment source.\n",
+    )
+    write(
+        tmp_path / "content" / "assignments" / "starter-spec.md",
+        "# Starter Spec\n\nSupport material for an assignment.\n",
+    )
+
+    records = scan_sources(
+        tmp_path,
+        source_config={
+            "assignments": {
+                "include": ["content/assignments/*.md"],
+                "exclude": ["content/assignments/*-draft-assignment.md"],
+            }
+        },
+    )
+
+    assert [(record["kind"], record["path"]) for record in records] == [
+        ("assignment", "content/assignments/01-setup-check.md")
+    ]
+    assert records[0]["title"] == "Week 1: Setup Check"
+    assert records[0]["metadata"] == {"points_possible": 10, "published": True}
+
+
+def test_scan_sources_can_report_unmarked_configured_assignment_errors(
+    tmp_path: Path,
+) -> None:
+    write(
+        tmp_path / "content" / "assignments" / "notes.md",
+        "# Notes\n\nNot a Canvas assignment source.\n",
+    )
+
+    records = scan_sources(
+        tmp_path,
+        source_config={
+            "assignments": {
+                "include": ["content/assignments/*.md"],
+                "require_assignment_metadata": False,
+            }
+        },
+    )
+
+    assert len(records) == 1
+    assert records[0]["kind"] == "assignment"
+    assert "front matter" in records[0]["error"]
+
+
 def test_scan_sources_records_parse_errors_without_raising(tmp_path: Path) -> None:
     write(tmp_path / "content" / "announcements" / "bad.md", "no front matter here\n")
 

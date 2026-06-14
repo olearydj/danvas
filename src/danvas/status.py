@@ -42,8 +42,14 @@ def command_status(args: Any) -> None:
         raise SystemExit(
             "Course snapshot predates the current format. Run `danvas refresh` first."
         )
+    config = load_project_config(config_dir)
     max_age_hours = resolve_max_age_hours(args.max_age_hours, config_dir)
-    payload = build_status(snapshot, config_dir.parent, max_age_hours=max_age_hours)
+    payload = build_status(
+        snapshot,
+        config_dir.parent,
+        max_age_hours=max_age_hours,
+        source_config=config.get("sources") or {},
+    )
     payload["snapshot"]["path"] = str(snapshot_path)
     for line in render_status_lines(payload):
         print(line)
@@ -71,8 +77,9 @@ def build_status(
     *,
     max_age_hours: float = DEFAULT_MAX_SNAPSHOT_AGE_HOURS,
     now: dt.datetime | None = None,
+    source_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    sources = scan_sources(root)
+    sources = scan_sources(root, source_config=source_config)
     by_kind: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in sources:
         by_kind[record["kind"]].append(record)

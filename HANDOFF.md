@@ -74,6 +74,10 @@ Design decisions:
 - Use local-file-first gradebook and quiz audit behavior.
 - Live Canvas gradebook export/download support is a possible future feature, not implemented.
 - `danvas quiz analysis` analyzes Canvas student-analysis CSV exports, not quiz source Markdown.
+- `danvas status` uses default local source conventions, but course repos can override
+  them with `[sources.<kind>]` tables in `.danvas/config.toml`. Custom assignment
+  include globs require assignment metadata by default so broad folders such as
+  `content/assignments/` do not report support notes as local-only assignments.
 
 Optional future `danvas` work:
 

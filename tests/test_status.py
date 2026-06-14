@@ -249,6 +249,45 @@ def test_status_cli_writes_json_and_markdown(
     assert "Canvas-only: Chapter 8 Quiz" in report
 
 
+def test_status_cli_uses_configured_assignment_sources(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    write(
+        tmp_path / "content" / "assignments" / "01-setup-check.md",
+        "---\ntitle: Case Study 1\npoints_possible: 100\n"
+        "due_at: 2026-06-15T04:59:00Z\npublished: true\n---\n\nSubmit.\n",
+    )
+    write(
+        tmp_path / "content" / "assignments" / "assignment-notes.md",
+        "# Assignment Notes\n\nSupport notes, not Canvas source.\n",
+    )
+    write(
+        tmp_path / ".danvas" / "config.toml",
+        "\n".join(
+            [
+                "[canvas]",
+                "course_id = 101",
+                "",
+                "[sources.assignments]",
+                'include = ["content/assignments/*.md"]',
+            ]
+        ),
+    )
+    snapshot = build_snapshot()
+    snapshot["assignments"] = [snapshot["assignments"][0]]
+    snapshot["generated_at"] = (
+        dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
+    )
+    write(tmp_path / ".danvas" / "course.json", json.dumps(snapshot))
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["status"])
+
+    assert result.exit_code == 0, result.output
+    assert "Assignments: exact: 1" in result.output
+    assert "Canvas-only: Case Study 1" not in result.output
+
+
 def test_command_status_requires_current_snapshot_schema(tmp_path: Path) -> None:
     write(tmp_path / ".danvas" / "config.toml", "[canvas]\ncourse_id = 101\n")
     snapshot = build_snapshot()

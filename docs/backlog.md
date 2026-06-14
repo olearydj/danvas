@@ -21,7 +21,9 @@ Likely inputs:
 
 - `.danvas/config.toml`
 - `.danvas/course.json`
-- local source conventions such as `content/announcements/`, `content/discussions/`, `content/quizzes/`, and `content/cases/`.
+- local source conventions such as `content/announcements/`, `content/discussions/`,
+  `content/quizzes/`, `content/cases/`, or project-configured `[sources]`
+  patterns in `.danvas/config.toml`.
 
 ## Expanded Course Snapshot
 
@@ -225,7 +227,8 @@ Minimum desired behavior:
 
 ## Local Source Discovery
 
-Status: delivered in sprint 1 (`danvas.sources`).
+Status: delivered in sprint 1 (`danvas.sources`) and expanded after sprint 1 with
+project-configured source patterns in `.danvas/config.toml`.
 
 Add a shared source scanner that understands project conventions and can power
 future sync/update commands.
@@ -236,6 +239,11 @@ Initial conventions:
 - `content/discussions/*.md`
 - `content/quizzes/chap*.md`
 - `content/cases/*-assignment.md`
+
+Course repos can override these with `[sources.<kind>]` tables in
+`.danvas/config.toml`, for example `[sources.assignments] include =
+["content/assignments/*.md"]`. Custom assignment globs require assignment
+metadata by default so ordinary support notes are skipped.
 
 The scanner should classify source type, title, comparable metadata, and generated artifacts such as QTI zips when applicable.
 
