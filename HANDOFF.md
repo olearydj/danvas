@@ -10,16 +10,17 @@ Remote: `origin git@github.com:olearydj/danvas.git`
 
 Branch: `main`
 
-Latest tag: `v0.2.0` planned for the configurable status source discovery and
-Canvas Files upload command release. Prior known-good tag: `v0.1.3` (sprint 1
-delivered and verified live 2026-06-12; `v0.1.1` added the `--version` flag and
-documentation fixes; `v0.1.2`/`v0.1.3` fixed CLI help tests that failed in
-headless CI; sprint plans in `docs/sprint-1.md` through `docs/sprint-3.md`).
+Latest tag: `v0.2.0` (configurable status source discovery and Canvas Files
+upload command release; CI confirmed green 2026-06-14). Prior known-good tag:
+`v0.1.3` (sprint 1 delivered and verified live 2026-06-12; `v0.1.1` added the
+`--version` flag and documentation fixes; `v0.1.2`/`v0.1.3` fixed CLI help tests
+that failed in headless CI; sprint plans in `docs/sprint-1.md` through
+`docs/sprint-3.md`).
 
-Release status: `v0.2.0` should be tagged only after CI is confirmed green on
-the pushed version-bump commit. `v0.1.3` is the prior known-good release (green
-CI). `v0.1.1` and `v0.1.2` have failing CI and are superseded; they were left in
-place rather than rewriting published history. Use `v0.1.3` or later.
+Release status: `v0.2.0` is the known-good release (green CI). `v0.1.3` is the
+prior known-good release. `v0.1.1` and `v0.1.2` have failing CI and are
+superseded; they were left in place rather than rewriting published history. Use
+`v0.2.0` or later.
 
 CLI help tests: Typer renders `--help` as a width-dependent Rich table that wraps option flags in headless CI, so never assert option flags against rendered `--help` output (`v0.1.2`'s `COLUMNS` fixture did not fix it). Use the Click introspection helpers in `tests/test_cli.py` (`command(...)`, `option_names(...)`) to check option presence width-independently. Tag only after CI is confirmed green on the pushed commit.
 
