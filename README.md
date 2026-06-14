@@ -102,6 +102,45 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - verifies the resulting Canvas quiz settings and exits nonzero on mismatch
   - dry-run mode shows the package and settings before any Canvas write
 
+## Command Tree
+
+```text
+danvas
+├── init
+├── refresh
+├── status
+├── courses
+├── roster
+├── assignments
+│   ├── export
+│   ├── create
+│   └── audit
+├── gradebook
+│   ├── check
+│   └── audit
+├── quiz
+│   ├── analysis
+│   └── import-qti
+├── submissions
+│   ├── media
+│   └── feedback
+├── grades
+│   ├── post
+│   └── verify
+├── discussions
+│   ├── export
+│   └── score
+├── announcements
+│   ├── create
+│   └── export
+├── files
+│   ├── inventory
+│   ├── download
+│   └── upload
+└── recordings
+    └── panopto-captions
+```
+
 ## Installation
 
 ```bash
