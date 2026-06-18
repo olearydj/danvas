@@ -161,10 +161,11 @@ danvas --version
 
 ## Authentication
 
-`danvas` loads `.env` and can read a Canvas API token from either 1Password or an environment variable.
+`danvas` uses the shared `secretpath` name `canvas`. On this machine the normal
+path is declared in `~/.config/secretpath/config.toml`; `.env` and command-line
+overrides are still supported.
 
 ```bash
-export CANVAS_API_KEY_OP_REFERENCE="op://Dev/Canvas/credential"
 export CANVAS_API_KEY="fallback-token"
 export CANVAS_API_URL="https://auburn.instructure.com/"
 ```
