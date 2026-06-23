@@ -861,6 +861,9 @@ def quiz_analysis(
 def quiz_import_qti(
     package: Annotated[Path, typer.Argument(help="QTI zip produced by text2qti/make-qti.")],
     course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     title: Annotated[
         str | None, typer.Option("--title", help="Quiz title to set after import.")
     ] = None,
@@ -909,6 +912,19 @@ def quiz_import_qti(
         Path | None,
         typer.Option("--output", "-o", help="Optional JSON verification report path."),
     ] = None,
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -918,6 +934,7 @@ def quiz_import_qti(
         command_quiz_import_qti,
         args_for(
             course_id=course_id,
+            project_root=str(project_root),
             package=str(package),
             title=title,
             assignment_group_id=assignment_group_id,
@@ -932,6 +949,10 @@ def quiz_import_qti(
             timeout_seconds=timeout_seconds,
             dry_run=dry_run,
             output=str(output) if output else None,
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
@@ -1324,6 +1345,9 @@ def files_upload(
         typer.Argument(help="One or more local files to upload. Directories are rejected."),
     ],
     course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     folder: Annotated[
         str | None,
         typer.Option(
@@ -1350,6 +1374,19 @@ def files_upload(
         Path | None,
         typer.Option("--output", "-o", help="Optional JSON upload report path."),
     ] = None,
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -1359,12 +1396,17 @@ def files_upload(
         command_files_upload,
         args_for(
             course_id=course_id,
+            project_root=str(project_root),
             files=[str(path) for path in files],
             folder=folder,
             folder_id=folder_id,
             on_duplicate=on_duplicate,
             dry_run=dry_run,
             output=str(output) if output else None,
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

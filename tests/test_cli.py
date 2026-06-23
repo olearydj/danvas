@@ -239,8 +239,10 @@ def test_help_renders_without_error() -> None:
 
 def test_quiz_import_qti_defines_expected_options() -> None:
     options = option_names("quiz", "import-qti")
+    report_options = {"--project-root", "--no-report", "--report-root", "--report-dir", "--report-slug"}
 
     assert {"--match-title", "--dry-run", "--no-publish", "--course-id"} <= options
+    assert report_options <= options
 
 
 def test_local_report_commands_define_report_options() -> None:
@@ -249,6 +251,8 @@ def test_local_report_commands_define_report_options() -> None:
     assert expected <= option_names("gradebook", "check")
     assert expected <= option_names("gradebook", "audit")
     assert expected <= option_names("quiz", "analysis")
+    assert expected <= option_names("files", "upload")
+    assert expected.isdisjoint(option_names("discussions", "score"))
 
 
 def test_status_is_read_only() -> None:
@@ -301,6 +305,19 @@ def test_files_upload_cli_options_and_args(
     assert captured["on_duplicate"] == "rename"
     assert captured["dry_run"] is True
     assert captured["output"] == "upload.json"
-    assert {"--folder", "--folder-id", "--on-duplicate", "--dry-run", "--course-id"} <= (
-        option_names("files", "upload")
-    )
+    assert captured["project_root"] == "."
+    assert captured["no_report"] is False
+    assert captured["report_root"] is None
+    assert captured["report_dir"] is None
+    assert captured["report_slug"] is None
+    assert {
+        "--folder",
+        "--folder-id",
+        "--on-duplicate",
+        "--dry-run",
+        "--course-id",
+        "--report-root",
+        "--report-dir",
+        "--report-slug",
+        "--no-report",
+    } <= option_names("files", "upload")

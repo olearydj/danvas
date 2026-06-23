@@ -110,6 +110,11 @@ def import_args(package: Path, **overrides: Any) -> Any:
         "timeout_seconds": 10.0,
         "dry_run": False,
         "output": None,
+        "project_root": None,
+        "no_report": False,
+        "report_root": None,
+        "report_dir": None,
+        "report_slug": None,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -150,6 +155,53 @@ def test_dry_run_previews_without_canvas(
     assert "Dry run" in out
     assert '"published": true' in out
     assert '"time_limit": 30' in out
+
+
+def test_dry_run_writes_report_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "chap07.zip"
+    package.write_bytes(b"qti")
+
+    def fail(args: Any) -> Any:
+        raise AssertionError("canvas_from_args should not be called in dry run")
+
+    monkeypatch.setattr("danvas.quiz_import.canvas_from_args", fail)
+
+    command_quiz_import_qti(
+        import_args(package, dry_run=True, publish=True, report_dir=str(tmp_path / "report"))
+    )
+
+    report = json.loads((tmp_path / "report" / "quiz-import-qti.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text(encoding="utf-8"))
+    assert report["status"] == "dry-run"
+    assert report["settings"] == {"published": True}
+    assert manifest["status"] == "success"
+
+
+def test_dry_run_defaults_to_project_report_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "chap07.zip"
+    package.write_bytes(b"qti")
+    (tmp_path / ".danvas").mkdir()
+    (tmp_path / ".danvas" / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+        encoding="utf-8",
+    )
+
+    def fail(args: Any) -> Any:
+        raise AssertionError("canvas_from_args should not be called in dry run")
+
+    monkeypatch.setattr("danvas.quiz_import.canvas_from_args", fail)
+
+    command_quiz_import_qti(import_args(package, dry_run=True, project_root=str(tmp_path)))
+
+    report_dirs = list((tmp_path / ".danvas" / "reports").iterdir())
+    assert len(report_dirs) == 1
+    assert report_dirs[0].name.endswith("-quiz-import-qti")
+    assert (report_dirs[0] / "quiz-import-qti.json").is_file()
+    assert (report_dirs[0] / "manifest.json").is_file()
 
 
 def test_import_applies_settings_and_verifies(
@@ -198,6 +250,31 @@ def test_import_applies_settings_and_verifies(
     assert "Verification: verified" in out
 
 
+def test_import_writes_report_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    imported = FakeQuiz(
+        2,
+        "Chapter 7 Quiz",
+        assignment_id=98,
+        html_url="https://canvas.test/quizzes/2",
+        points_possible=20,
+        question_count=10,
+        quiz_type="assignment",
+    )
+    course = FakeCourse([], ["completed"], [imported])
+    package, _requests, _time = setup_import(monkeypatch, tmp_path, course)
+
+    command_quiz_import_qti(import_args(package, report_dir=str(tmp_path / "report")))
+
+    report = json.loads((tmp_path / "report" / "quiz-import-qti.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text(encoding="utf-8"))
+    assert report["status"] == "verified"
+    assert report["migration_id"] == 900
+    assert manifest["command"] == "quiz import-qti"
+    assert manifest["status"] == "success"
+
+
 def test_failed_migration_reports_issues(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -206,6 +283,20 @@ def test_failed_migration_reports_issues(
 
     with pytest.raises(SystemExit, match="failed.*unsupported question type"):
         command_quiz_import_qti(import_args(package))
+
+
+def test_failed_migration_writes_failed_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    course = FakeCourse([], ["failed"], [])
+    package, _requests, _time = setup_import(monkeypatch, tmp_path, course)
+
+    with pytest.raises(SystemExit, match="failed.*unsupported question type"):
+        command_quiz_import_qti(import_args(package, report_dir=str(tmp_path / "report")))
+
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "failed"
+    assert "unsupported question type" in manifest["error"]
 
 
 def test_migration_timeout_exits_with_state(

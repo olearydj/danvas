@@ -659,7 +659,7 @@ Command classification:
 
 | Category | Commands | Default behavior |
 |---|---|---|
-| Default report run | `files inventory`, `assignments audit`, future `exams reconcile`, future verify/readback report commands | Write a report run unless `--no-report` is passed. |
+| Default report run | `files inventory`, `assignments audit`, `quiz import-qti`, `files upload`, future `exams reconcile`, future verify/readback report commands | Write a report run unless `--no-report` is passed. |
 | Compatibility-sensitive | `status` | Keep stdout-first behavior unless `--report-root` or `--report-dir` is passed. Preserve existing `--output` and `--report-md`. |
 | Not report runs by default | `courses`, `roster`, raw exports, `files download`, `submissions media`, `recordings panopto-captions`, grade data downloads/uploads | Keep explicit output files/directories and manifests in their current locations. |
 
@@ -820,11 +820,14 @@ Implementation phases:
      paths and report options are both passed, write both.
    - Include snapshot timestamp/path and stale-snapshot status in the manifest.
 
-3. Extend to existing verification/report commands. Status: partially delivered.
+3. Extend to existing verification/report commands. Status: delivered.
    - Delivered for `gradebook check`, `gradebook audit`, and `quiz analysis` when a
      course project is discoverable or a report option is passed.
-   - Still evaluate `quiz import-qti`, `files upload`, and discussion scoring for
-     report-run adoption.
+   - Delivered for `quiz import-qti` and `files upload`; both are Canvas upload
+     tools, but their local verification/dry-run reports are durable operational
+     evidence and can be saved without changing Canvas state.
+   - Leave discussion scoring on its existing explicit `--output` path; its normal
+     destination is grading workflow output, not `.danvas/reports/`.
    - Migrate only commands whose primary output is an audit, verification, dry-run,
      readback, or comparison report.
    - Keep raw exports, rosters, grade data, downloads, submissions, and caption

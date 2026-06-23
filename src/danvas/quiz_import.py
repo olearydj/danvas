@@ -10,6 +10,7 @@ from typing import Any
 import requests
 
 from danvas.auth import canvas_from_args
+from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.status import normalize_title, values_equal
 from danvas.utils import print_mutation_banner, write_json
 
@@ -30,12 +31,23 @@ def command_quiz_import_qti(args: Any) -> None:
     if not package.is_file():
         raise SystemExit(f"QTI package not found: {package}")
     settings = quiz_settings_from_args(args)
+    report_run = make_quiz_import_report_run(args, package)
     if args.dry_run:
+        report = {
+            "status": "dry-run",
+            "package": str(package),
+            "course_id": args.course_id,
+            "settings": settings,
+        }
         print("Dry run - no QTI import performed.")
         print(f"Package: {package} ({package.stat().st_size} bytes)")
         print(f"Course: {args.course_id}")
         print("Quiz settings to apply after import:")
         print(json.dumps(settings, indent=2))
+        if args.output:
+            write_json(Path(args.output), report)
+            print(f"Wrote {args.output}")
+        write_quiz_import_report_run(report_run, report)
         return
     print_mutation_banner(
         "import QTI quiz package",
@@ -46,32 +58,78 @@ def command_quiz_import_qti(args: Any) -> None:
             "settings": ", ".join(sorted(settings)) or "none",
         },
     )
-    canvas = canvas_from_args(args)
-    course = canvas.get_course(args.course_id)
-    existing_ids = {quiz.id for quiz in course.get_quizzes()}
-    migration = start_qti_migration(course, package)
-    print(f"Created content migration {migration.id}; uploading {package.name}")
-    wait_for_migration(
-        course,
-        migration.id,
-        poll_seconds=args.poll_seconds,
-        timeout_seconds=args.timeout_seconds,
+    try:
+        canvas = canvas_from_args(args)
+        course = canvas.get_course(args.course_id)
+        existing_ids = {quiz.id for quiz in course.get_quizzes()}
+        migration = start_qti_migration(course, package)
+        print(f"Created content migration {migration.id}; uploading {package.name}")
+        wait_for_migration(
+            course,
+            migration.id,
+            poll_seconds=args.poll_seconds,
+            timeout_seconds=args.timeout_seconds,
+        )
+        print(f"Migration {migration.id} completed.")
+        quiz = find_imported_quiz(course, existing_ids, match_title=args.match_title)
+        if settings:
+            quiz.edit(quiz=settings)
+        report = verification_report(course, quiz.id, settings)
+        report["package"] = str(package)
+        report["course_id"] = args.course_id
+        report["migration_id"] = migration.id
+        for line in render_verification_lines(report):
+            print(line)
+        if args.output:
+            write_json(Path(args.output), report)
+            print(f"Wrote {args.output}")
+        write_quiz_import_report_run(report_run, report)
+        report_run = None
+        if report["status"] != "verified":
+            raise SystemExit(1)
+    except BaseException as exc:
+        if report_run is not None:
+            report_run.finish("failed", error=str(exc))
+            print(f"Wrote {report_run.path / 'manifest.json'}")
+            print(f"Report directory: {report_run.path}")
+        raise
+
+
+def make_quiz_import_report_run(args: Any, package: Path) -> ReportRun | None:
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
+    report_slug = getattr(args, "report_slug", None)
+    if not should_write_report_run(
+        no_report=bool(getattr(args, "no_report", False)),
+        legacy_output=bool(getattr(args, "output", None)),
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        return None
+    return create_report_run(
+        command="quiz import-qti",
+        slug=report_slug or "quiz-import-qti",
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        course_id=args.course_id,
+        input_paths=[package],
+        private_data=False,
     )
-    print(f"Migration {migration.id} completed.")
-    quiz = find_imported_quiz(course, existing_ids, match_title=args.match_title)
-    if settings:
-        quiz.edit(quiz=settings)
-    report = verification_report(course, quiz.id, settings)
-    report["package"] = str(package)
-    report["course_id"] = args.course_id
-    report["migration_id"] = migration.id
-    for line in render_verification_lines(report):
-        print(line)
-    if args.output:
-        write_json(Path(args.output), report)
-        print(f"Wrote {args.output}")
-    if report["status"] != "verified":
-        raise SystemExit(1)
+
+
+def write_quiz_import_report_run(report_run: ReportRun | None, report: dict[str, Any]) -> None:
+    if report_run is None:
+        return
+    json_path = report_run.write_json("quiz-import-qti.json", report)
+    status = "success" if report["status"] in {"verified", "dry-run"} else "failed"
+    manifest_path = report_run.finish(status)
+    print(f"Wrote {json_path}")
+    print(f"Wrote {manifest_path}")
+    print(f"Report directory: {report_run.path}")
 
 
 def quiz_settings_from_args(args: Any) -> dict[str, Any]:

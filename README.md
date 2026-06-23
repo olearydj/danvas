@@ -77,7 +77,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - exports Canvas Files metadata to JSON and CSV without download URLs
   - optionally compares Canvas filenames and sizes to a local course root (`--local-root`)
   - writes a dated report run with JSON, CSV, manifest, and Markdown missing-file report by default
-  - uploads one or more local files to an existing Canvas Files folder with dry-run support
+  - uploads one or more local files to an existing Canvas Files folder with dry-run support and report-run support
   - downloads Canvas Files into a local folder tree with a manifest
 
 - download Panopto captions

@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from danvas.auth import canvas_from_args
-from danvas.reports import ReportRun, create_report_run
+from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_json, write_rows
 
 GENERATED_INVENTORY_NAMES = {
@@ -208,6 +208,7 @@ def command_files_upload(args: Any) -> None:
         "dry_run": bool(args.dry_run),
         "files": [],
     }
+    report_run = make_files_upload_report_run(args, report, local_rows)
     if args.dry_run:
         report["files"] = [{**row, "status": "dry-run"} for row in local_rows]
         print("Dry run - no files uploaded.")
@@ -215,6 +216,7 @@ def command_files_upload(args: Any) -> None:
         if args.output:
             write_json(Path(args.output), report)
             print(f"Wrote {args.output}")
+        write_files_upload_report_run(report_run, report)
         return
 
     print_mutation_banner(
@@ -246,10 +248,58 @@ def command_files_upload(args: Any) -> None:
     if args.output:
         write_json(Path(args.output), report)
         print(f"Wrote {args.output}")
+    write_files_upload_report_run(report_run, report)
     if failures:
         uploaded = sum(1 for row in results if row["status"] == "uploaded")
         print(f"Upload incomplete: {uploaded} uploaded, {failures} failed.")
         raise SystemExit(1)
+
+
+def make_files_upload_report_run(
+    args: Any, report: dict[str, Any], local_rows: list[dict[str, Any]]
+) -> ReportRun | None:
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
+    report_slug = getattr(args, "report_slug", None)
+    if not should_write_report_run(
+        no_report=bool(getattr(args, "no_report", False)),
+        legacy_output=bool(getattr(args, "output", None)),
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        return None
+    return create_report_run(
+        command="files upload",
+        slug=report_slug or "files-upload",
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        course_id=report["course_id"],
+        input_paths=[Path(row["source"]) for row in local_rows],
+        private_data=False,
+    )
+
+
+def write_files_upload_report_run(report_run: ReportRun | None, report: dict[str, Any]) -> None:
+    if report_run is None:
+        return
+    try:
+        json_path = report_run.write_json("files-upload.json", report)
+        status = (
+            "failed"
+            if any(row.get("status") == "failed" for row in report["files"])
+            else "success"
+        )
+        manifest_path = report_run.finish(status)
+        print(f"Wrote {json_path}")
+        print(f"Wrote {manifest_path}")
+        print(f"Report directory: {report_run.path}")
+    except Exception as exc:
+        report_run.finish("failed", error=str(exc))
+        raise
 
 
 def build_file_inventory(course: Any, local_root: Path | None = None) -> dict[str, Any]:

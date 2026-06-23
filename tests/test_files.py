@@ -315,6 +315,75 @@ def test_command_files_upload_dry_run_resolves_folder_without_uploading(
     assert "Dry run - no files uploaded." in capsys.readouterr().out
 
 
+def test_command_files_upload_dry_run_writes_report_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "Lecture 14.pptx"
+    source.write_bytes(b"deck")
+    canvas = FakeUploadCanvas()
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=True,
+        output=None,
+        project_root=None,
+        no_report=False,
+        report_root=None,
+        report_dir=str(tmp_path / "report"),
+        report_slug=None,
+    )
+
+    command_files_upload(args)
+
+    report = json.loads((tmp_path / "report" / "files-upload.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text(encoding="utf-8"))
+    assert report["dry_run"] is True
+    assert report["files"][0]["status"] == "dry-run"
+    assert manifest["command"] == "files upload"
+    assert manifest["status"] == "success"
+    assert manifest["may_contain_private_student_data"] is False
+
+
+def test_command_files_upload_defaults_to_project_report_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "Lecture 14.pptx"
+    source.write_bytes(b"deck")
+    (tmp_path / ".danvas").mkdir()
+    (tmp_path / ".danvas" / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+        encoding="utf-8",
+    )
+    canvas = FakeUploadCanvas()
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=True,
+        output=None,
+        project_root=str(tmp_path),
+        no_report=False,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    command_files_upload(args)
+
+    report_dirs = list((tmp_path / ".danvas" / "reports").iterdir())
+    assert len(report_dirs) == 1
+    assert report_dirs[0].name.endswith("-files-upload")
+    assert (report_dirs[0] / "files-upload.json").is_file()
+    assert (report_dirs[0] / "manifest.json").is_file()
+
+
 def test_command_files_upload_missing_file_exits_before_canvas(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -553,6 +622,39 @@ def test_command_files_upload_live_uploads_and_writes_safe_report(
     assert '"status": "uploaded"' in captured
 
 
+def test_command_files_upload_live_writes_legacy_and_report_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "Lecture 14 - Sheets.xlsx"
+    source.write_bytes(b"sheet")
+    canvas = FakeUploadCanvas()
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="rename",
+        dry_run=False,
+        output=str(output),
+        project_root=None,
+        no_report=False,
+        report_root=None,
+        report_dir=str(tmp_path / "report"),
+        report_slug=None,
+    )
+
+    command_files_upload(args)
+
+    legacy_report = json.loads(output.read_text(encoding="utf-8"))
+    run_report = json.loads((tmp_path / "report" / "files-upload.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text(encoding="utf-8"))
+    assert legacy_report["files"][0]["status"] == "uploaded"
+    assert run_report["files"][0]["status"] == "uploaded"
+    assert manifest["status"] == "success"
+
+
 def test_command_files_upload_partial_failure_exits_nonzero(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -601,6 +703,53 @@ def test_command_files_upload_partial_failure_exits_nonzero(
     assert '"status": "uploaded"' in output
     assert '"status": "failed"' in output
     assert "Upload incomplete: 1 uploaded, 1 failed." in output
+
+
+def test_command_files_upload_partial_failure_writes_failed_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FailingFolder(FakeUploadFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            if Path(source).name == "bad.pdf":
+                return False, {"message": "upload rejected"}
+            return super().upload(
+                source, on_duplicate=on_duplicate, content_type=content_type
+            )
+
+    class FailingCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.slides = FailingFolder(id=20, full_name="course files/slides")
+
+    good = tmp_path / "good.pdf"
+    bad = tmp_path / "bad.pdf"
+    good.write_text("good", encoding="utf-8")
+    bad.write_text("bad", encoding="utf-8")
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(FailingCourse())
+    )
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(good), str(bad)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=False,
+        output=None,
+        project_root=None,
+        no_report=False,
+        report_root=None,
+        report_dir=str(tmp_path / "report"),
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit):
+        command_files_upload(args)
+
+    report = json.loads((tmp_path / "report" / "files-upload.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text(encoding="utf-8"))
+    assert [row["status"] for row in report["files"]] == ["uploaded", "failed"]
+    assert manifest["status"] == "failed"
 
 
 def test_command_files_upload_failure_payload_does_not_leak_urls(
