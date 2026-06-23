@@ -41,7 +41,7 @@ def assignment_group_weights(snapshot: dict[str, Any]) -> dict[str, float]:
 
 
 def audit_assignment_setup(
-    snapshot: dict[str, Any], policy: dict[str, Any] | None = None
+    snapshot: dict[str, Any], policy: dict[str, Any] | None = None, *, policy_provided: bool = False
 ) -> dict[str, Any]:
     policy = policy or {}
     expected = weights_from_policy(policy)
@@ -68,9 +68,16 @@ def audit_assignment_setup(
         }
         for group in expected
     }
+    expected_status = "loaded" if expected else "not_provided"
+    expected_note = ""
+    if not expected and policy_provided:
+        expected_status = "unavailable"
+        expected_note = "Expected weights unavailable: unsupported course YAML schema or no weights found."
     return {
         "source": snapshot.get("source"),
         "expected_weights": expected,
+        "expected_weights_status": expected_status,
+        "expected_weights_note": expected_note,
         "canvas_weights": actual,
         "weight_sum": sum(actual.values()) if actual else None,
         "missing_groups": [group for group in expected if group not in actual],
@@ -89,7 +96,9 @@ def audit_assignment_file(
     assignments_path: Path, policy_path: Path | None = None
 ) -> dict[str, Any]:
     return audit_assignment_setup(
-        load_assignment_snapshot(assignments_path), load_policy(policy_path)
+        load_assignment_snapshot(assignments_path),
+        load_policy(policy_path),
+        policy_provided=policy_path is not None,
     )
 
 
@@ -114,6 +123,8 @@ def render_assignment_audit_markdown(payload: dict[str, Any]) -> str:
             lines.append(f"- {group}: `{weight}`")
     else:
         lines.append("- No Canvas assignment group weights found.")
+    if payload.get("expected_weights_note"):
+        lines.extend(["", "## Expected Weights", "", f"- {payload['expected_weights_note']}"])
     if payload["missing_groups"]:
         lines.extend(["", "## Missing Expected Groups", ""])
         lines.extend(f"- {group}" for group in payload["missing_groups"])

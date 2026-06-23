@@ -56,6 +56,20 @@ def test_create_report_run_writes_manifest(tmp_path: Path) -> None:
     assert manifest["files"] == ["assignment-audit.md"]
 
 
+def test_create_report_run_uses_config_course_id_when_omitted(tmp_path: Path) -> None:
+    write_config(tmp_path)
+
+    run = create_report_run(
+        command="assignments audit",
+        slug="assignment-audit",
+        project_root=tmp_path,
+    )
+    manifest_path = run.finish()
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["course_id"] == 101
+
+
 def test_report_run_can_record_failed_status(tmp_path: Path) -> None:
     run = create_report_run(command="files inventory", slug="files-inventory", report_dir=tmp_path / "run")
 

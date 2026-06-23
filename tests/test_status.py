@@ -191,6 +191,17 @@ def test_build_status_classifies_each_section(tmp_path: Path) -> None:
         item for item in sections["assignments"] if item["title"] == "Case Study 2"
     )
     assert mismatch["details"] == ["points_possible: local 100 != Canvas 50"]
+    assert "next_action" in mismatch
+    local_only = next(
+        item for item in sections["assignments"] if item["title"] == "Case Study 3"
+    )
+    assert "assignments create" in local_only["next_action"]
+    filename_only = next(
+        item for item in sections["files"] if item["title"] == "course files/rename.pdf"
+    )
+    assert "timestamps" in filename_only["next_action"]
+    assert filename_only["canvas_size"] == 99
+    assert filename_only["local_matches"][0]["size"] == 1
 
 
 def test_build_status_excludes_discussion_backed_assignments(tmp_path: Path) -> None:
@@ -244,9 +255,15 @@ def test_status_cli_writes_json_and_markdown(
     assert "metadata mismatch: Case Study 2" in result.output
     payload = json.loads((tmp_path / "status.json").read_text(encoding="utf-8"))
     assert payload["summary"]["exact"] == 5
+    assert any(
+        item.get("next_action")
+        for section in payload["sections"].values()
+        for item in section
+    )
     report = (tmp_path / "status.md").read_text(encoding="utf-8")
     assert "# Course Status Report" in report
     assert "Canvas-only: Chapter 8 Quiz" in report
+    assert "Next action:" in report
 
 
 def test_status_cli_does_not_write_report_run_by_default(

@@ -43,6 +43,8 @@ INVENTORY_CSV_FIELDS = [
     "created_at",
     "updated_at",
     "local_matches",
+    "local_match_sizes",
+    "local_match_mtimes",
 ]
 
 OFFICE_CONTENT_TYPES = {
@@ -126,7 +128,7 @@ def write_file_inventory_bundle(
         inventory_csv,
         [
             {
-                key: "; ".join(row[key]) if key == "local_matches" else row.get(key)
+                key: csv_inventory_value(row, key)
                 for key in INVENTORY_CSV_FIELDS
             }
             for row in inventory["comparison"]
@@ -324,6 +326,7 @@ def build_file_inventory(course: Any, local_root: Path | None = None) -> dict[st
                 **record,
                 "status": status,
                 "local_matches": [match["relative_path"] for match in matches],
+                "local_match_details": [local_match_detail(match) for match in matches],
             }
         )
 
@@ -593,9 +596,38 @@ def local_files(root: Path) -> list[dict[str, Any]]:
                 "normalized_name": normalize_text(path.name),
                 "normalized_path": normalize_text(rel),
                 "size": stat.st_size,
+                "mtime": datetime.fromtimestamp(stat.st_mtime).astimezone().isoformat(
+                    timespec="seconds"
+                ),
             }
         )
     return rows
+
+
+def local_match_detail(match: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "relative_path": match.get("relative_path") or "",
+        "size": match.get("size"),
+        "mtime": match.get("mtime") or "",
+    }
+
+
+def csv_inventory_value(row: dict[str, Any], key: str) -> Any:
+    if key == "local_matches":
+        return "; ".join(row.get("local_matches") or [])
+    if key == "local_match_sizes":
+        return "; ".join(
+            str(match.get("size"))
+            for match in row.get("local_match_details") or []
+            if match.get("size") is not None
+        )
+    if key == "local_match_mtimes":
+        return "; ".join(
+            str(match.get("mtime"))
+            for match in row.get("local_match_details") or []
+            if match.get("mtime")
+        )
+    return row.get(key)
 
 
 def should_skip_local(path: Path, root: Path) -> bool:
@@ -686,14 +718,41 @@ def write_missing_report(output: Path, inventory: dict[str, Any]) -> None:
             )
     else:
         lines.append("No Canvas files are missing by filename.")
-    lines.extend(["", "## Present Or Matched", "", "| Status | Canvas file | Local match(es) |", "|---|---|---|"])
+    lines.extend(
+        [
+            "",
+            "## Present Or Matched",
+            "",
+            "| Status | Canvas file | Canvas size | Canvas updated | Local match(es) | Local size(s) | Local mtime(s) |",
+            "|---|---|---:|---|---|---:|---|",
+        ]
+    )
     for row in sorted(
         [r for r in comparison_rows if r["status"] not in {"missing", "not_compared"}],
         key=lambda r: (r["status"], r["folder_full_name"], r["display_name"]),
     ):
-        matches = "<br>".join(escape_markdown_table(match) for match in row.get("local_matches", []))
+        details = row.get("local_match_details") or []
+        matches = "<br>".join(
+            escape_markdown_table(str(match.get("relative_path") or "")) for match in details
+        )
+        local_sizes = "<br>".join(human_size(match.get("size")) for match in details)
+        local_mtimes = "<br>".join(
+            escape_markdown_table(str(match.get("mtime") or "")) for match in details
+        )
         lines.append(
-            f"| {row['status']} | {escape_markdown_table(row['canvas_path'])} | {matches} |"
+            "| "
+            + " | ".join(
+                [
+                    str(row["status"]),
+                    escape_markdown_table(str(row["canvas_path"])),
+                    human_size(row.get("size")),
+                    escape_markdown_table(str(row.get("updated_at") or "")),
+                    matches,
+                    local_sizes,
+                    local_mtimes,
+                ]
+            )
+            + " |"
         )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")

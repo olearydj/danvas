@@ -130,6 +130,8 @@ def test_build_file_inventory_compares_local_files_without_urls(tmp_path: Path) 
         "missing",
     ]
     assert inventory["comparison"][0]["local_matches"] == ["content/cases/case.pdf"]
+    assert inventory["comparison"][0]["local_match_details"][0]["size"] == 7
+    assert inventory["comparison"][0]["local_match_details"][0]["mtime"]
     assert "url" not in inventory["canvas_files"][0]
 
 
@@ -169,6 +171,8 @@ def test_write_missing_report_summarizes_missing_files(tmp_path: Path) -> None:
     text = output.read_text(encoding="utf-8")
     assert "Canvas files inventoried: `2`" in text
     assert "missing.pdf" in text
+    assert "Canvas size" in text
+    assert "Local size(s)" in text
     assert "verifier" not in text
 
 

@@ -123,6 +123,7 @@ def build_status(
         "quizzes": compare_quizzes(by_kind["quiz"], snapshot.get("quizzes") or []),
         "files": compare_files(snapshot.get("files") or [], root),
     }
+    add_next_actions(sections)
     summary: Counter[str] = Counter()
     for items in sections.values():
         summary.update(item["classification"] for item in items)
@@ -326,9 +327,43 @@ def compare_files(canvas_files: list[dict[str, Any]], root: Path) -> list[dict[s
                 "local_path": details[0] if matches else "",
                 "canvas_id": record.get("id"),
                 "details": details if status != "present_by_name_and_size" else [],
+                "canvas_size": record.get("size"),
+                "canvas_updated_at": record.get("updated_at") or "",
+                "local_matches": [local_match_detail(match) for match in matches],
             }
         )
     return items
+
+
+def local_match_detail(match: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "relative_path": match.get("relative_path") or "",
+        "size": match.get("size"),
+        "mtime": match.get("mtime") or "",
+    }
+
+
+def add_next_actions(sections: dict[str, list[dict[str, Any]]]) -> None:
+    for section, items in sections.items():
+        for item in items:
+            action = next_action_for(section, item)
+            if action:
+                item["next_action"] = action
+
+
+def next_action_for(section: str, item: dict[str, Any]) -> str:
+    classification = item.get("classification")
+    if section == "announcements" and classification == "Canvas-only":
+        return "Export or sync the missing Canvas announcement into content/announcements/."
+    if section == "assignments" and classification == "local-only":
+        return "Run `danvas assignments create SOURCE --dry-run` before posting this local assignment."
+    if section == "quizzes" and classification == "Canvas-only":
+        return "Add a local quiz source if this Canvas quiz should be tracked in the course repo."
+    if section == "files" and classification == "filename-only match":
+        return "Inspect Canvas/local size and timestamps before deciding whether Canvas or local content is stale."
+    if classification == "metadata mismatch":
+        return "Review metadata differences before deciding whether local source or Canvas should change."
+    return ""
 
 
 def render_status_lines(payload: dict[str, Any]) -> list[str]:
@@ -359,6 +394,8 @@ def render_status_lines(payload: dict[str, Any]) -> list[str]:
                 continue
             detail = f" ({'; '.join(item['details'])})" if item["details"] else ""
             lines.append(f"  {item['classification']}: {item['title']}{detail}")
+            if item.get("next_action"):
+                lines.append(f"    Next action: {item['next_action']}")
     categories = payload["group_categories"]
     if categories:
         parts = [
@@ -397,6 +434,8 @@ def render_status_markdown(payload: dict[str, Any]) -> str:
             detail = f" ({'; '.join(item['details'])})" if item["details"] else ""
             location = item["local_path"] or f"Canvas ID {item['canvas_id']}"
             lines.append(f"- {item['classification']}: {item['title']} - {location}{detail}")
+            if item.get("next_action"):
+                lines.append(f"  Next action: {item['next_action']}")
     categories = payload["group_categories"]
     lines.extend(["", "## Group Categories", ""])
     if categories:

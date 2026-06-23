@@ -151,6 +151,7 @@ def test_assignments_audit_cli_writes_default_report_run(tmp_path: Path) -> None
     manifest = json.loads((report_dirs[0] / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "success"
     assert manifest["command"] == "assignments audit"
+    assert manifest["course_id"] == 101
 
 
 def test_quiz_analysis_cli(tmp_path: Path) -> None:

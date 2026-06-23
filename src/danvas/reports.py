@@ -86,6 +86,7 @@ def create_report_run(
     created_at = now_for_config(config_dir)
     report_date = created_at.date().isoformat()
     report_slug = slugify(slug, "report")
+    resolved_course_id = course_id if course_id is not None else course_id_for_config(config_dir)
 
     if report_dir:
         path = report_dir
@@ -109,7 +110,7 @@ def create_report_run(
         "report_slug": report_slug,
         "run_directory": str(path),
         "danvas_version": __version__,
-        "course_id": course_id,
+        "course_id": resolved_course_id,
         "project_root": str(root) if root else None,
         "input_paths": [str(path) for path in input_paths or []],
         "snapshot_timestamp": snapshot_timestamp,
@@ -188,6 +189,19 @@ def now_for_config(config_dir: Path | None) -> dt.datetime:
         except ZoneInfoNotFoundError:
             pass
     return dt.datetime.now().astimezone()
+
+
+def course_id_for_config(config_dir: Path | None) -> int | None:
+    if not config_dir:
+        return None
+    data = tomllib.loads((config_dir / CONFIG_FILE_NAME).read_text(encoding="utf-8"))
+    course_id = (data.get("canvas") or {}).get("course_id")
+    if course_id is None:
+        return None
+    try:
+        return int(course_id)
+    except (TypeError, ValueError):
+        return None
 
 
 def safe_error(error: str) -> str:

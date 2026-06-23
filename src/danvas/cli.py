@@ -577,6 +577,8 @@ def assignments_audit(
     typer.echo(f"Assignment setup audit: {assignments_path}")
     if payload["canvas_weights"]:
         typer.echo(f"  Canvas weight sum: {payload['weight_sum']}")
+    if payload.get("expected_weights_note"):
+        typer.echo(f"  {payload['expected_weights_note']}")
     if payload["missing_groups"]:
         typer.echo(f"  Missing groups: {', '.join(payload['missing_groups'])}")
     if payload["extra_groups"]:

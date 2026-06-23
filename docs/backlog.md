@@ -842,6 +842,64 @@ Implementation phases:
      such as involved assignment IDs, upload windows, snapshot timestamps, source
      export timestamps, and private/student-data classification.
 
+Field-test follow-ups from INSY 7970 on 2026-06-23:
+
+- The report-run convention worked as intended for:
+  - `danvas status --report-root .danvas/reports`
+  - `danvas files inventory --local-root .`
+  - `danvas assignments audit .danvas/assignments.json --course-yaml syllabus/course.yaml`
+- Generated report directories confirmed same-day global sequencing:
+
+  ```text
+  .danvas/reports/2026-06-23-001-status/
+  .danvas/reports/2026-06-23-002-files-inventory/
+  .danvas/reports/2026-06-23-003-assignment-audit/
+  .danvas/reports/2026-06-23-004-status/
+  ```
+
+- Near-term report polish implemented after the field test:
+  - Added `status` next-action hints to Markdown and JSON output, for example:
+    Canvas-only announcement -> export/sync announcements; local-only assignment
+    -> dry-run assignment create; Canvas-only quiz -> local quiz source absent;
+    filename-only match -> inspect size/timestamp before deciding which side is
+    stale.
+  - Made `files inventory` more diagnostic for filename-only matches by recording
+    Canvas size, local size, Canvas updated time, and local mtime.
+  - Improved `assignments audit` expected-weight handling. If `syllabus/course.yaml`
+    uses an unsupported schema or no weights can be parsed, report an explicit
+    `Expected weights unavailable: ...` note instead of silently emitting empty
+    expected weights.
+  - Populated report manifests with course ID when it can be discovered from
+    `.danvas/config.toml`, even when the command input itself is a plain file such
+    as `.danvas/assignments.json`.
+- Larger follow-on ideas to keep in the backlog:
+  - Add local-source sync helpers:
+
+    ```bash
+    danvas announcements sync --output-dir content/announcements --dry-run
+    danvas discussions sync-prompts --output-dir content/discussions --dry-run
+    ```
+
+    These should create missing Markdown files with front matter, avoid
+    overwriting existing files, generate numbered filenames safely, include Canvas
+    IDs/URLs, and skip replies/student content by default.
+  - Add report discovery helpers:
+
+    ```bash
+    danvas reports list
+    danvas reports latest status
+    danvas reports latest files-inventory
+    ```
+
+  - Make `refresh --diff` reportable, likely via:
+
+    ```bash
+    danvas refresh --diff --report-root .danvas/reports
+    ```
+
+    Defer deciding whether plain `refresh --diff` should create a default report
+    run, since refresh still primarily maintains the local snapshot.
+
 Why priority P2:
 
 - This reduces workflow friction and prevents accidental report overwrites.
