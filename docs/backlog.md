@@ -417,6 +417,65 @@ Why priority P0:
   or "do not overwrite."
 - It turns the current multi-command audit into a single repeatable workflow.
 
+### Test 1 Reconciliation Workflow Improvements
+
+1. Add `danvas submissions export`
+Current `danvas submissions media` downloads files, but there is no metadata-only export. A command like this would have avoided the direct Canvas API script:
+
+```bash
+danvas submissions export --assignment-id 19901542 --output .danvas/proctoru-submissions.json
+```
+
+It should include `user_id`, name, workflow state, `submitted_at`, score, attempt, attachment count/names, late/missing flags, and optionally submission history.
+
+2. Add assignment override member export
+`assignments export --full` showed "12 students" / "4 students" overrides, but not the actual student IDs. A command like this would be useful:
+
+```bash
+danvas assignments overrides --assignment-id 19901488
+```
+
+or include `student_ids` directly in `assignments export --full`.
+
+3. Include sections in `danvas roster`
+The roster export gave Canvas ID/name/login/SIS ID, but not section. For hybrid courses, section is operationally important. Add fields like:
+
+```text
+SectionID, SectionName, EnrollmentState, LastActivityAt
+```
+
+This would have answered the Quinton Beyer `001` vs `DL1` question without an extra API lookup.
+
+4. Add a reconciliation command for multi-version exams
+This session's workflow was common enough to deserve a first-class command:
+
+```bash
+danvas exams reconcile \
+  --roster .danvas/roster.csv \
+  --variant in_class:assignment_override:19901488 \
+  --variant zoom:override_or_submission:19901485 \
+  --variant proctoru:submission:19901542 \
+  --upload-assignment 19901660 \
+  --upload-window-minutes 15
+```
+
+Output: `.md`, `.csv`, `.json` with accounted/unaccounted, overlaps, upload compliance, and late/missing uploads.
+
+5. Add `danvas auth doctor`
+The auth behavior was confusing: `op whoami` reported not signed in, but `danvas` could still resolve the 1Password secret after the desktop prompt. A diagnostic command should say exactly which auth path works:
+
+```bash
+danvas auth doctor
+```
+
+Expected output: provider available, token resolved yes/no, Canvas ping yes/no, without exposing the token.
+
+6. Add sections to `.danvas/course.json`
+The snapshot tracks assignments/quizzes/files/etc., but not sections/enrollment mappings. Including sections would make status reports and roster investigations more self-contained.
+
+7. Avoid writing raw submission payloads by default
+For privacy, reconciliation commands should default to sanitized outputs and require something explicit like `--save-raw` for raw Canvas payloads.
+
 ### P1: File Inventory And Comparison Report Improvements
 
 Observed context:
@@ -554,3 +613,298 @@ Why priority P2:
 
 - This is less urgent than QTI import or status/diff, but it improves handoffs and
   makes CLI output easier for agents and humans to review.
+
+### P2: Generated Report Run Directories
+
+Add a common generated-report convention so first-class audit, verification,
+reconciliation, and comparison commands leave durable evidence without wrapper
+scripts or per-course naming decisions.
+
+Observed context:
+
+- Course workspaces already keep local Canvas state in `.danvas/`.
+- Existing commands use several output styles:
+  - `danvas status` prints a summary and can optionally write `--output` JSON and
+    `--report-md` Markdown.
+  - `danvas files inventory` already writes a bundle directory containing
+    `files-inventory.json`, `files-inventory.csv`, and
+    `files-missing-report.md`.
+  - `assignments audit`, `gradebook check`, `gradebook audit`, `quiz analysis`,
+    `quiz import-qti`, and `files upload` can write explicit JSON/CSV report
+    files with `--output`.
+  - Downloads such as `files download`, `submissions media`, and
+    `recordings panopto-captions` write operational artifacts or media bundles,
+    not just reports.
+- Agents need collision-safe, dated report paths without having to decide whether a
+  generated report belongs in authored course source.
+- Ad hoc shell wrappers can enforce naming, but the policy belongs in `danvas` so
+  every report-producing command behaves consistently.
+- `danvas init` currently ignores `.danvas/course.json` in git repos, but it does
+  not ignore all future generated report output.
+
+Scope:
+
+- A report run is for generated operational evidence: audit, verification,
+  reconciliation, status/comparison, dry-run/readback summaries, or other outputs
+  whose primary value is a durable human- and machine-readable record.
+- Raw exports, rosters, submissions, grades, downloaded Canvas Files, caption
+  downloads, and other source/data artifacts should keep their existing explicit
+  output paths or output directories. They may include a manifest, but they are
+  not report runs by default.
+- Existing explicit `--output`, `--report-md`, and `--output-dir` behavior should
+  continue to work. The report-run helper should reduce future inconsistency, not
+  break scripts that already pass concrete paths.
+
+Command classification:
+
+| Category | Commands | Default behavior |
+|---|---|---|
+| Default report run | `files inventory`, `assignments audit`, future `exams reconcile`, future verify/readback report commands | Write a report run unless `--no-report` is passed. |
+| Compatibility-sensitive | `status` | Keep stdout-first behavior unless `--report-root` or `--report-dir` is passed. Preserve existing `--output` and `--report-md`. |
+| Not report runs by default | `courses`, `roster`, raw exports, `files download`, `submissions media`, `recordings panopto-captions`, grade data downloads/uploads | Keep explicit output files/directories and manifests in their current locations. |
+
+Recommended behavior:
+
+- Add a shared report-run helper used by report-producing commands. Put it in a
+  shared module such as `danvas.reports` or `danvas.utils` rather than duplicating
+  path logic in each command.
+- Commands whose primary purpose is a report should save a report run by default.
+  Do not require a universal `--save-report` flag.
+- Quick inspection commands may keep stdout-only behavior if their existing
+  contract is mainly terminal feedback. When a command grows into a durable
+  audit/reconciliation workflow, make the saved report run the default.
+- Default report root: `.danvas/reports/` under the resolved course project root.
+  For commands that do not currently resolve a project root, add an explicit
+  `--project-root` or `--report-root`; do not silently choose a surprising
+  directory when no `.danvas` project can be found.
+- Use a run directory per report invocation:
+
+  ```text
+  .danvas/reports/YYYY-MM-DD-NNN-command-slug/
+  ```
+
+- Examples:
+
+  ```text
+  .danvas/reports/2026-06-23-001-status/
+    manifest.json
+    status.json
+    status.md
+  .danvas/reports/2026-06-23-002-files-inventory/
+    manifest.json
+    files-inventory.json
+    files-inventory.csv
+    files-missing-report.md
+  .danvas/reports/2026-06-23-003-assignment-audit/
+    manifest.json
+    assignment-audit.json
+    assignment-audit.md
+  .danvas/reports/2026-06-23-004-exams-reconcile/
+    manifest.json
+    exams-reconcile.json
+    exams-reconcile.csv
+    exams-reconcile.md
+  ```
+
+- Use the course/project timezone from `.danvas/config.toml` when available to
+  choose the ISO date prefix. If no project timezone is available, use the system
+  local date. Choose the next unused three-digit sequence globally for that date,
+  not per slug. This preserves chronological order in directory listings.
+- Create the run directory with no overwrite behavior. Use an atomic
+  `mkdir(exist_ok=False)`-style flow after choosing the candidate path; if a race
+  creates the same path, choose the next sequence and retry.
+- Print `Report directory: PATH` at the end of the command after all report files
+  have been written.
+- Include `manifest.json` in every report run directory. At minimum, include:
+  command name, `argv`, `generated_at`, report date, report slug, run directory,
+  `danvas` version, course ID when known, project root when known, input paths,
+  snapshot timestamp when relevant, report file list, `status`, and a boolean or
+  classification indicating whether the report may contain private/student data.
+- Keep raw snapshots, exports, rosters, submissions, grades, downloaded files, and
+  transcript downloads in their existing `.danvas/` locations.
+- Keep report outputs free of secrets, verifier URLs, and student-sensitive data
+  unless a command is explicitly private and the output path makes that clear.
+- `danvas init` should add `.danvas/reports/` to `.gitignore` in git repos, and
+  the report helper should create the directory under `.danvas/` so generated
+  evidence does not mix with authored course content.
+
+Common options:
+
+```text
+--no-report               Suppress the default report run for commands that save
+                          one by default.
+--report-root DIR         Override the root while still creating a dated run
+                          directory below it.
+--report-dir DIR          Write the report bundle exactly in DIR. Refuse if DIR
+                          exists unless the command explicitly supports overwrite.
+--report-slug SLUG        Override the command-derived slug.
+```
+
+Option semantics:
+
+- Do not add `--overwrite` as a common report-run option initially. Most reports
+  are evidence and should be append-only. If an individual command truly needs
+  replacement semantics, keep that opt-in command-specific.
+- If both `--report-root` and `--report-dir` are provided, fail with a clear
+  conflict message.
+- If legacy explicit outputs are provided and no report options are provided, write
+  only the explicit outputs. If `--report-root` or `--report-dir` is also provided,
+  write the explicit outputs and the report run, unless the command documents a
+  narrower rule. Print every path written.
+- For new commands with no legacy output contract, report-run output should be the
+  default and `--no-report` should mean stdout-only or terminal-summary-only.
+- If a command creates a report directory and later fails, keep the directory when
+  possible. Write or update `manifest.json` with `status: "failed"`, an error
+  summary safe for logs, and the files successfully written before failure. Failed
+  audits are often useful operational evidence.
+
+Likely command shapes after migration:
+
+```bash
+danvas files inventory --course-id 1742717 --local-root .
+# writes .danvas/reports/YYYY-MM-DD-NNN-files-inventory/
+
+danvas assignments audit .danvas/assignments.json --course-yaml syllabus/course.yaml
+# writes .danvas/reports/YYYY-MM-DD-NNN-assignment-audit/
+
+danvas exams reconcile --roster .danvas/roster.csv ...
+# writes .danvas/reports/YYYY-MM-DD-NNN-exams-reconcile/
+
+danvas status
+# may remain stdout-only for compatibility
+
+danvas status --report-root .danvas/reports
+# writes a dated status report run
+
+danvas status --output status.json --report-md status.md
+# preserves the existing explicit-path behavior
+```
+
+Implementation notes:
+
+- Prefer command-specific filenames inside each run directory, such as `status.md`,
+  `status.json`, `files-inventory.csv`, or `assignment-audit.md`.
+- Directory-per-run generalizes better than sibling `.md`/`.json` files because
+  some commands naturally produce bundles.
+- The helper should expose a small object or return value with at least `path`,
+  `slug`, `created_at`, `manifest`, `record_file(...)`, and `finish(...)`, plus
+  convenience methods or helpers for writing JSON, CSV, and Markdown through the
+  existing `write_json` and `write_rows` conventions.
+- Reuse the existing `slugify` helper for slugs, with a command-specific fallback.
+- Add tests for sequence selection, no-overwrite creation, `--report-root` versus
+  `--report-dir`, explicit-output compatibility, failed-run manifests, timezone
+  date prefixes, and `.gitignore` maintenance.
+- Good first adopters are `files inventory` and `assignments audit` because they
+  already produce report-like output. Treat `status` as a compatibility-sensitive
+  migration because existing tests and docs show stdout plus optional
+  `--output`/`--report-md`.
+
+Implementation phases:
+
+1. Foundation and first adopters.
+   - Add the shared report-run helper, dated directory creation, manifest writing,
+     timezone-aware date prefixes, no-overwrite behavior, and failed-run manifest
+     support.
+   - Update `danvas init` / gitignore handling for `.danvas/reports/`.
+   - Migrate `files inventory` and `assignments audit` to default report-run output
+     while preserving explicit legacy output paths.
+   - Add focused tests for helper behavior, gitignore updates, first adopters,
+     explicit-output compatibility, failed manifests, and timezone date prefixes.
+
+2. Compatibility-sensitive `status` migration.
+   - Keep plain `danvas status` stdout-first.
+   - Add `--report-root`, `--report-dir`, and `--report-slug` to `status`.
+   - When a report option is passed, write `manifest.json`, `status.json`, and
+     `status.md` in a report run.
+   - Preserve existing `--output` and `--report-md` behavior exactly; if explicit
+     paths and report options are both passed, write both.
+   - Include snapshot timestamp/path and stale-snapshot status in the manifest.
+
+3. Extend to existing verification/report commands.
+   - Evaluate `gradebook check`, `gradebook audit`, `quiz analysis`,
+     `quiz import-qti`, `files upload`, and discussion scoring for report-run
+     adoption.
+   - Migrate only commands whose primary output is an audit, verification, dry-run,
+     readback, or comparison report.
+   - Keep raw exports, rosters, grade data, downloads, submissions, and caption
+     artifacts on explicit paths/directories by default.
+
+4. Future command integration.
+   - Make new reconciliation and verify/readback commands report-run-first from
+     their initial implementation.
+   - Use command-specific Markdown/CSV/JSON filenames and record all produced files
+     in `manifest.json`.
+   - Add command-specific manifest fields when they materially improve handoffs,
+     such as involved assignment IDs, upload windows, snapshot timestamps, source
+     export timestamps, and private/student-data classification.
+
+Why priority P2:
+
+- This reduces workflow friction and prevents accidental report overwrites.
+- It makes generated operational evidence easy to cite in handoffs.
+- It keeps report-storage policy inside `danvas` instead of duplicating it in agent
+  skills or per-course shell scripts.
+
+### P1: Case Submission Grading Workflow Improvements
+
+Yes. A few practical `danvas` improvements came up.
+
+1. Add a read-only grade/comment pull command
+
+Something like:
+
+```bash
+danvas submissions grades --assignment-id 19838584 \
+  --output grading/.../case1-graded-comments.csv \
+  --json grading/.../case1-graded-comments.json
+```
+
+It should fetch `score`, `grade`, `graded_at`, `grader_id`, `submission_comments`, and optionally filter to graded submissions. We had to write a local script for this.
+
+2. Add attachment integrity checks during `submissions media`
+
+The Crawford workbook downloaded without error but was malformed. `danvas` could detect this cheaply for `.xlsx`, `.docx`, `.pptx`, and `.zip` by running a zip integrity check after download and writing a warning such as:
+
+```text
+WARNING: downloaded file is not a valid OOXML zip: Crawford...xlsx
+```
+
+It could also store that status in the `.info.json`.
+
+3. Add a repair/provenance-friendly replacement workflow
+
+A small helper could support:
+
+```bash
+danvas submissions replace-local-file \
+  --original Crawford...xlsx \
+  --replacement ~/Downloads/CaseStudy1.xlsx \
+  --backup-suffix .corrupt-original
+```
+
+This is not a Canvas operation, just local filing hygiene. It would prevent overwriting evidence without keeping the original.
+
+4. Add a submission manifest
+
+After downloading submissions, `danvas` should write a top-level manifest like:
+
+```text
+Case_Study_1/submissions-manifest.csv
+```
+
+with student, Canvas user ID, submission ID, attempt, submitted_at, attachment filenames, local paths, content type, file size, download status, and integrity status. The sidecar `.info.json` files are useful, but a manifest would make grading workflows much easier.
+
+5. Add `--only-graded` / `--include-grades` options to media download
+
+For workflows like this one, it would be useful to download all submissions but also annotate which ones are graded, or download just graded submissions for audit:
+
+```bash
+danvas submissions media --assignment-id ... --include-grades
+danvas submissions media --assignment-id ... --only-graded
+```
+
+6. Preserve comments separately from media
+
+`submissions media` downloads attachments and media comments, but text comments are not emitted as a readable report. A companion `submission-comments.csv/json` would be useful even when not pulling grades.
+
+The highest-value changes are the grade/comment pull command and OOXML integrity checks. Those would have eliminated most of the custom scripting and caught Crawford’s bad workbook immediately.
