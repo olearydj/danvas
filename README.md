@@ -267,8 +267,9 @@ max_snapshot_age_hours = 72
 
 ## Report Runs
 
-Report-first commands write dated run directories under `.danvas/reports/` by
-default when a course project is available:
+Report-first commands such as assignment audits, file inventories, gradebook
+checks/audits, and quiz analyses write dated run directories under
+`.danvas/reports/` by default when a course project is available:
 
 ```text
 .danvas/reports/YYYY-MM-DD-NNN-command-slug/

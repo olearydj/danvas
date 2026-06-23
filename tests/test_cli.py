@@ -43,6 +43,7 @@ def test_gradebook_check_cli(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Included rows: 2" in result.output
+    assert not (tmp_path / ".danvas" / "reports").exists()
 
 
 def test_gradebook_audit_cli(tmp_path: Path) -> None:
@@ -60,6 +61,56 @@ def test_gradebook_audit_cli(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Status: matches" in result.output
+    assert not (tmp_path / ".danvas" / "reports").exists()
+
+
+def test_gradebook_check_cli_writes_report_run_in_project(tmp_path: Path) -> None:
+    gradebook = tmp_path / "gradebook.csv"
+    write_gradebook_fixture(gradebook)
+    (tmp_path / ".danvas").mkdir()
+    (tmp_path / ".danvas" / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app, ["gradebook", "check", str(gradebook), "--project-root", str(tmp_path)]
+    )
+
+    assert result.exit_code == 0, result.output
+    report_dirs = list((tmp_path / ".danvas" / "reports").iterdir())
+    assert len(report_dirs) == 1
+    report_dir = report_dirs[0]
+    assert report_dir.name.endswith("-gradebook-check")
+    assert (report_dir / "gradebook-check.json").is_file()
+    assert (report_dir / "gradebook-check.md").is_file()
+    manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["command"] == "gradebook check"
+    assert manifest["may_contain_private_student_data"] is True
+
+
+def test_gradebook_audit_cli_writes_legacy_and_report_outputs(tmp_path: Path) -> None:
+    gradebook = tmp_path / "gradebook.csv"
+    write_gradebook_fixture(gradebook)
+    output = tmp_path / "audit.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "gradebook",
+            "audit",
+            str(gradebook),
+            "--output",
+            str(output),
+            "--report-dir",
+            str(tmp_path / "audit-report"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert output.is_file()
+    assert (tmp_path / "audit-report" / "gradebook-audit.json").is_file()
+    assert (tmp_path / "audit-report" / "gradebook-audit.md").is_file()
 
 
 def test_assignments_audit_cli(tmp_path: Path) -> None:
@@ -113,6 +164,41 @@ def test_quiz_analysis_cli(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "Students: 2" in result.output
+    assert not (tmp_path / ".danvas" / "reports").exists()
+
+
+def test_quiz_analysis_cli_writes_report_run_in_project(tmp_path: Path) -> None:
+    quiz = tmp_path / "student-analysis.csv"
+    write_quiz_fixture(quiz)
+    (tmp_path / ".danvas").mkdir()
+    (tmp_path / ".danvas" / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "quiz",
+            "analysis",
+            str(quiz),
+            "--answer-term",
+            "which version",
+            "--project-root",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    report_dirs = list((tmp_path / ".danvas" / "reports").iterdir())
+    assert len(report_dirs) == 1
+    report_dir = report_dirs[0]
+    assert report_dir.name.endswith("-quiz-analysis")
+    assert (report_dir / "quiz-analysis.json").is_file()
+    assert (report_dir / "quiz-analysis.md").is_file()
+    manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["command"] == "quiz analysis"
+    assert manifest["may_contain_private_student_data"] is True
 
 
 def test_run_command_echoes_string_exits_only(capsys: pytest.CaptureFixture[str]) -> None:
@@ -155,6 +241,14 @@ def test_quiz_import_qti_defines_expected_options() -> None:
     options = option_names("quiz", "import-qti")
 
     assert {"--match-title", "--dry-run", "--no-publish", "--course-id"} <= options
+
+
+def test_local_report_commands_define_report_options() -> None:
+    expected = {"--project-root", "--no-report", "--report-root", "--report-dir", "--report-slug"}
+
+    assert expected <= option_names("gradebook", "check")
+    assert expected <= option_names("gradebook", "audit")
+    assert expected <= option_names("quiz", "analysis")
 
 
 def test_status_is_read_only() -> None:

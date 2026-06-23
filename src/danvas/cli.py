@@ -22,7 +22,7 @@ from danvas.files import command_files_download, command_files_inventory, comman
 from danvas.grades import command_grades_post, command_grades_verify
 from danvas.panopto import command_panopto_captions
 from danvas.quiz_import import command_quiz_import_qti
-from danvas.reports import create_report_run
+from danvas.reports import create_report_run, should_write_report_run
 from danvas.status import command_status
 from danvas.submissions import command_submissions_feedback, command_submissions_media
 from danvas.utils import write_json
@@ -178,6 +178,124 @@ def run_command(func: Any, args: SimpleNamespace) -> None:
         if isinstance(exc.code, str) and exc.code:
             typer.echo(exc.code, err=True)
         raise typer.Exit(code=exc.code if isinstance(exc.code, int) else 1) from exc
+
+
+def write_cli_report_run(
+    *,
+    command: str,
+    slug: str,
+    project_root: Path,
+    report_root: Path | None,
+    report_dir: Path | None,
+    input_paths: list[Path],
+    private_data: bool,
+    json_filename: str,
+    markdown_filename: str,
+    payload: dict[str, Any],
+    markdown: str,
+) -> None:
+    report_run = create_report_run(
+        command=command,
+        slug=slug,
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        input_paths=input_paths,
+        private_data=private_data,
+    )
+    try:
+        json_path = report_run.write_json(json_filename, payload)
+        md_path = report_run.write_text(markdown_filename, markdown)
+        manifest_path = report_run.finish()
+        typer.echo(f"Wrote {json_path}")
+        typer.echo(f"Wrote {md_path}")
+        typer.echo(f"Wrote {manifest_path}")
+        typer.echo(f"Report directory: {report_run.path}")
+    except Exception as exc:
+        report_run.finish("failed", error=str(exc))
+        raise
+
+
+def render_gradebook_check_markdown(payload: dict[str, Any]) -> str:
+    structure = payload["structure"]
+    assignments = payload["assignments"]
+    score_variants = payload["score_variants"]
+    lines = [
+        "# Gradebook Check Report",
+        "",
+        f"Source: `{payload['source']}`",
+        "",
+        "## Summary",
+        "",
+        f"- Included rows: `{structure['included_rows']}`",
+        f"- Columns: `{structure['columns']}`",
+        f"- Final score column: `{structure['final_score_column']}`",
+        f"- Assignment columns: `{assignments['detected_columns']}`",
+        f"- Assignment groups: `{assignments['detected_groups']}`",
+        f"- Score variant diff rows: `{score_variants['rows_with_differences']}`",
+        "",
+        "## Missing Or Nonnumeric Values",
+        "",
+    ]
+    totals = payload["missing"]["totals"]
+    if totals:
+        for label, count in sorted(totals.items()):
+            lines.append(f"- {label}: `{count}`")
+    else:
+        lines.append("- None.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_gradebook_audit_markdown(payload: dict[str, Any]) -> str:
+    recon = payload["reconstruction"]
+    lines = [
+        "# Gradebook Audit Report",
+        "",
+        f"Source: `{payload['source']}`",
+        "",
+        "## Summary",
+        "",
+        f"- Final score column: `{payload['final_score_column']}`",
+        f"- Weight sum: `{payload['weight_sum']}`",
+        f"- Matched groups: `{len(payload['matched_group_columns'])}`",
+        f"- Rows compared: `{recon['rows_compared']}`",
+        f"- Max absolute difference: `{recon['max_abs_diff']}`",
+        f"- Rows over tolerance: `{recon['rows_over_tolerance']}`",
+        f"- Status: `{recon['status']}`",
+        "",
+        "## Missing Weighted Groups",
+        "",
+    ]
+    if payload["missing_weight_groups"]:
+        lines.extend(f"- {group}" for group in payload["missing_weight_groups"])
+    else:
+        lines.append("- None.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_quiz_analysis_markdown(payload: dict[str, Any]) -> str:
+    rows = payload["rows"]
+    earned = payload["score_summary"]["earned"]
+    lines = [
+        "# Quiz Analysis Report",
+        "",
+        f"Source: `{payload['source']}`",
+        "",
+        "## Summary",
+        "",
+        f"- Students: `{rows['students']}`",
+        f"- Submitted: `{rows['submitted']}`",
+        f"- Missing submissions: `{rows['missing_submissions']}`",
+        f"- Question pairs: `{len(payload['questions'])}`",
+        f"- Mean earned: `{earned['mean']}`",
+    ]
+    if "answer_counts" in payload:
+        lines.extend(["", "## Answer Counts", ""])
+        for term, counts in payload["answer_counts"].items():
+            lines.append(f"### {term}")
+            for answer, count in sorted(counts.items()):
+                lines.append(f"- {answer}: `{count}`")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 @app.command(
@@ -505,6 +623,9 @@ def assignments_audit(
 )
 def gradebook_check(
     gradebook_csv: Annotated[Path, typer.Argument(help="Canvas gradebook CSV export.")],
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     course_yaml: Annotated[
         Path | None,
         typer.Option(
@@ -513,6 +634,19 @@ def gradebook_check(
     ] = None,
     output: Annotated[
         Path | None, typer.Option("--output", "-o", help="Optional JSON check output path.")
+    ] = None,
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
 ) -> None:
     policy = gradebook.load_policy(course_yaml)
@@ -530,6 +664,27 @@ def gradebook_check(
     if output:
         write_json(output, payload)
         typer.echo(f"Wrote {output}")
+    if should_write_report_run(
+        no_report=no_report,
+        legacy_output=output is not None,
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        write_cli_report_run(
+            command="gradebook check",
+            slug=report_slug or "gradebook-check",
+            project_root=project_root,
+            report_root=report_root,
+            report_dir=report_dir,
+            input_paths=[gradebook_csv, *([course_yaml] if course_yaml else [])],
+            private_data=True,
+            json_filename="gradebook-check.json",
+            markdown_filename="gradebook-check.md",
+            payload=payload,
+            markdown=render_gradebook_check_markdown(payload),
+        )
 
 
 @gradebook_app.command(
@@ -538,6 +693,9 @@ def gradebook_check(
 )
 def gradebook_audit(
     gradebook_csv: Annotated[Path, typer.Argument(help="Canvas gradebook CSV export.")],
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     course_yaml: Annotated[
         Path | None,
         typer.Option(
@@ -556,6 +714,19 @@ def gradebook_audit(
     ] = 0.05,
     output: Annotated[
         Path | None, typer.Option("--output", "-o", help="Optional JSON audit output path.")
+    ] = None,
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
 ) -> None:
     policy = gradebook.load_policy(course_yaml)
@@ -585,6 +756,31 @@ def gradebook_audit(
     if output:
         write_json(output, payload)
         typer.echo(f"Wrote {output}")
+    if should_write_report_run(
+        no_report=no_report,
+        legacy_output=output is not None,
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        write_cli_report_run(
+            command="gradebook audit",
+            slug=report_slug or "gradebook-audit",
+            project_root=project_root,
+            report_root=report_root,
+            report_dir=report_dir,
+            input_paths=[
+                gradebook_csv,
+                *([course_yaml] if course_yaml else []),
+                *([assignments_path] if assignments_path else []),
+            ],
+            private_data=True,
+            json_filename="gradebook-audit.json",
+            markdown_filename="gradebook-audit.md",
+            payload=payload,
+            markdown=render_gradebook_audit_markdown(payload),
+        )
 
 
 @quiz_app.command(
@@ -594,6 +790,9 @@ def quiz_analysis(
     student_analysis_csv: Annotated[
         Path, typer.Argument(help="Canvas student-analysis CSV export.")
     ],
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     answer_term: Annotated[
         list[str] | None,
         typer.Option(
@@ -603,6 +802,19 @@ def quiz_analysis(
     ] = None,
     output: Annotated[
         Path | None, typer.Option("--output", "-o", help="Optional JSON analysis output path.")
+    ] = None,
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
 ) -> None:
     payload = quiz.analyze_student_analysis(student_analysis_csv, answer_terms=answer_term)
@@ -616,6 +828,27 @@ def quiz_analysis(
     if output:
         write_json(output, payload)
         typer.echo(f"Wrote {output}")
+    if should_write_report_run(
+        no_report=no_report,
+        legacy_output=output is not None,
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        write_cli_report_run(
+            command="quiz analysis",
+            slug=report_slug or "quiz-analysis",
+            project_root=project_root,
+            report_root=report_root,
+            report_dir=report_dir,
+            input_paths=[student_analysis_csv],
+            private_data=True,
+            json_filename="quiz-analysis.json",
+            markdown_filename="quiz-analysis.md",
+            payload=payload,
+            markdown=render_quiz_analysis_markdown(payload),
+        )
 
 
 @quiz_app.command(

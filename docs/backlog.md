@@ -820,10 +820,11 @@ Implementation phases:
      paths and report options are both passed, write both.
    - Include snapshot timestamp/path and stale-snapshot status in the manifest.
 
-3. Extend to existing verification/report commands.
-   - Evaluate `gradebook check`, `gradebook audit`, `quiz analysis`,
-     `quiz import-qti`, `files upload`, and discussion scoring for report-run
-     adoption.
+3. Extend to existing verification/report commands. Status: partially delivered.
+   - Delivered for `gradebook check`, `gradebook audit`, and `quiz analysis` when a
+     course project is discoverable or a report option is passed.
+   - Still evaluate `quiz import-qti`, `files upload`, and discussion scoring for
+     report-run adoption.
    - Migrate only commands whose primary output is an audit, verification, dry-run,
      readback, or comparison report.
    - Keep raw exports, rosters, grade data, downloads, submissions, and caption

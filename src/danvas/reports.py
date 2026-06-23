@@ -120,6 +120,27 @@ def create_report_run(
     return ReportRun(path=path, slug=report_slug, created_at=created_at, manifest=manifest)
 
 
+def should_write_report_run(
+    *,
+    no_report: bool,
+    legacy_output: bool,
+    report_root: Path | None,
+    report_dir: Path | None,
+    report_slug: str | None,
+    project_root: Path | None,
+) -> bool:
+    report_option = bool(report_root or report_dir or report_slug)
+    if no_report and report_option:
+        raise SystemExit("Use either --no-report or report output options, not both.")
+    if no_report:
+        return False
+    if report_option:
+        return True
+    if legacy_output:
+        return False
+    return find_config_dir(project_root) is not None
+
+
 def create_sequenced_run_dir(root: Path, report_date: str, slug: str) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     sequence = next_sequence(root, report_date)
