@@ -188,7 +188,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.31" },
-    { name = "secretpath", directory = "../secretpath" },
+    { name = "secretpath", specifier = ">=0.2.0" },
     { name = "typer", specifier = ">=0.19" },
 ]
 
@@ -421,11 +421,15 @@ wheels = [
 
 [[package]]
 name = "secretpath"
-version = "0.1.0"
-source = { directory = "../secretpath" }
-
-[package.metadata]
-requires-dist = [{ name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.0" }]
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1b/a9/b9fe863f4ad62f27de5525fa0176fc5c45bc91d465cc943b9ebb66b90196/secretpath-0.2.0.tar.gz", hash = "sha256:e1f66933ac3849668b303913224831daac9cffe913525a197bb26dde1d61fc3e", size = 11424, upload-time = "2026-06-18T19:08:07.157Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/95/db/62d777a73deb04a4ad52399fe7d2f18e7fbb86372df7033e71bdc9ca03ff/secretpath-0.2.0-py3-none-any.whl", hash = "sha256:f8c3c06777363dd4625d5c2974abba1bed8d2b1b043d32b93271a191f5acd579", size = 13853, upload-time = "2026-06-18T19:08:08.138Z" },
+]
 
 [[package]]
 name = "shellingham"

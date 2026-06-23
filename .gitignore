@@ -45,3 +45,5 @@ downloads/
 assignments-md/
 discussion*.json
 discussion*.csv
+
+.ho/
