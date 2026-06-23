@@ -276,6 +276,17 @@ def test_maybe_ignore_course_snapshot_adds_missing_trailing_newline(tmp_path: Pa
     assert gitignore.read_text(encoding="utf-8") == "existing\n.danvas/course.json\n"
 
 
+def test_maybe_ignore_reports_appends_once(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    gitignore = tmp_path / ".gitignore"
+    gitignore.write_text("existing\n", encoding="utf-8")
+
+    config.maybe_ignore_reports(tmp_path)
+    config.maybe_ignore_reports(tmp_path)
+
+    assert gitignore.read_text(encoding="utf-8") == "existing\n.danvas/reports/\n"
+
+
 def test_assignment_group_name_resolves_in_dry_run(tmp_path: Path, capsys) -> None:
     (tmp_path / ".danvas").mkdir()
     (tmp_path / ".danvas" / "config.toml").write_text(

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -68,11 +69,37 @@ def test_assignments_audit_cli(tmp_path: Path) -> None:
     policy.write_text("weights:\n  Homework: 40\n  Tests: 60\n", encoding="utf-8")
 
     result = runner.invoke(
-        app, ["assignments", "audit", str(assignments), "--course-yaml", str(policy)]
+        app, ["assignments", "audit", str(assignments), "--course-yaml", str(policy), "--no-report"]
     )
 
     assert result.exit_code == 0
     assert "Assignments: 2" in result.output
+
+
+def test_assignments_audit_cli_writes_default_report_run(tmp_path: Path) -> None:
+    assignments = tmp_path / "assignments.json"
+    write_assignment_fixture(assignments)
+    config_dir = tmp_path / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["assignments", "audit", str(assignments), "--project-root", str(tmp_path)],
+    )
+
+    assert result.exit_code == 0, result.output
+    report_dirs = list((tmp_path / ".danvas" / "reports").iterdir())
+    assert len(report_dirs) == 1
+    assert report_dirs[0].name.endswith("-assignment-audit")
+    assert (report_dirs[0] / "assignment-audit.json").is_file()
+    assert (report_dirs[0] / "assignment-audit.md").is_file()
+    manifest = json.loads((report_dirs[0] / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "success"
+    assert manifest["command"] == "assignments audit"
 
 
 def test_quiz_analysis_cli(tmp_path: Path) -> None:

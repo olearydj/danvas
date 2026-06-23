@@ -29,6 +29,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - compare Canvas assignment group weights to `course.yaml`
   - summarize assignments by group
   - identify unpublished assignments and missing due dates
+  - writes a dated report run by default in course projects
 
 - create assignments in Canvas
   - Markdown body with YAML (`---`) or TOML (`+++`) front matter
@@ -75,7 +76,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 - inventory, upload, and download course files
   - exports Canvas Files metadata to JSON and CSV without download URLs
   - optionally compares Canvas filenames and sizes to a local course root (`--local-root`)
-  - writes a Markdown missing-file report for archive checks
+  - writes a dated report run with JSON, CSV, manifest, and Markdown missing-file report by default
   - uploads one or more local files to an existing Canvas Files folder with dry-run support
   - downloads Canvas Files into a local folder tree with a manifest
 
@@ -264,6 +265,27 @@ threshold per project with a `[status]` table in `config.toml`:
 max_snapshot_age_hours = 72
 ```
 
+## Report Runs
+
+Report-first commands write dated run directories under `.danvas/reports/` by
+default when a course project is available:
+
+```text
+.danvas/reports/YYYY-MM-DD-NNN-command-slug/
+  manifest.json
+  command-output.json
+  command-output.md
+```
+
+The date prefix uses the course timezone from `.danvas/config.toml` when present,
+then falls back to the system local date. `danvas init` adds `.danvas/reports/` to
+`.gitignore` in git repositories.
+
+Use `--output`, `--report-md`, or `--output-dir` when you need a specific legacy
+path. Use `--report-root` to choose a different root while keeping the dated run
+directory, `--report-dir` to create one exact report directory, and `--no-report`
+to suppress default report output where the command supports it.
+
 ## Examples
 
 ```bash
@@ -280,7 +302,7 @@ danvas assignments export --course-id 1706414 --output assignments.json
 danvas assignments export --course-id 1706414 --output assignments.csv
 danvas assignments export --course-id 1706414 --output assignments-md --format markdown
 danvas assignments create --course-id 1706414 assignments/hw1.md --dry-run
-danvas assignments audit assignments-full.json --course-yaml course.yaml --output assignment-audit.json
+danvas assignments audit assignments-full.json --course-yaml course.yaml
 
 # Submissions and feedback
 danvas submissions media --course-id 1706414 --assignment-id 19413569 --output-dir downloads
@@ -315,8 +337,8 @@ danvas announcements create --course-id 1706414 announcements/welcome.md --dry-r
 danvas announcements export --course-id 1655780 --output announcements.md
 
 # Files
-danvas files inventory --course-id 1742717 --output-dir .danvas/files-inventory \
-  --local-root .
+danvas files inventory --course-id 1742717 --local-root .
+danvas files inventory --course-id 1742717 --output-dir .danvas/files-inventory --local-root .
 danvas files upload --course-id 1742717 --folder "course files/slides" \
   --dry-run content/slides/example.pptx
 danvas files upload --course-id 1742717 --folder-id 15968602 \

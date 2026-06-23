@@ -22,6 +22,7 @@ from danvas.files import command_files_download, command_files_inventory, comman
 from danvas.grades import command_grades_post, command_grades_verify
 from danvas.panopto import command_panopto_captions
 from danvas.quiz_import import command_quiz_import_qti
+from danvas.reports import create_report_run
 from danvas.status import command_status
 from danvas.submissions import command_submissions_feedback, command_submissions_media
 from danvas.utils import write_json
@@ -417,12 +418,28 @@ def assignments_audit(
     assignments_path: Annotated[
         Path, typer.Argument(help="Assignments JSON file or Markdown export directory.")
     ],
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     course_yaml: Annotated[
         Path | None,
         typer.Option("--course-yaml", help="Optional course policy YAML with expected weights."),
     ] = None,
     output: Annotated[
         Path | None, typer.Option("--output", "-o", help="Optional JSON audit output path.")
+    ] = None,
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
 ) -> None:
     payload = assignment_audit.audit_assignment_file(assignments_path, course_yaml)
@@ -436,9 +453,37 @@ def assignments_audit(
     typer.echo(f"  Assignments: {payload['assignments']['count']}")
     typer.echo(f"  Unpublished: {len(payload['assignments']['unpublished'])}")
     typer.echo(f"  Missing due dates: {len(payload['assignments']['missing_due_dates'])}")
+    report_option = bool(report_root or report_dir or report_slug)
+    if no_report and report_option:
+        raise typer.BadParameter("Use either --no-report or report output options, not both.")
     if output:
         write_json(output, payload)
         typer.echo(f"Wrote {output}")
+    report_enabled = not no_report and (not output or report_option)
+    if report_enabled:
+        report_run = create_report_run(
+            command="assignments audit",
+            slug=report_slug or "assignment-audit",
+            project_root=project_root,
+            report_root=report_root,
+            report_dir=report_dir,
+            input_paths=[assignments_path, *([course_yaml] if course_yaml else [])],
+            private_data=False,
+        )
+        try:
+            json_path = report_run.write_json("assignment-audit.json", payload)
+            md_path = report_run.write_text(
+                "assignment-audit.md",
+                assignment_audit.render_assignment_audit_markdown(payload),
+            )
+            manifest_path = report_run.finish()
+            typer.echo(f"Wrote {json_path}")
+            typer.echo(f"Wrote {md_path}")
+            typer.echo(f"Wrote {manifest_path}")
+            typer.echo(f"Report directory: {report_run.path}")
+        except Exception as exc:
+            report_run.finish("failed", error=str(exc))
+            raise
 
 
 @gradebook_app.command(
@@ -928,20 +973,39 @@ def announcements_export(
 )
 def files_inventory(
     course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     output_dir: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--output-dir",
             "-o",
-            help="Directory for files-inventory.json, files-inventory.csv, and files-missing-report.md.",
+            help=(
+                "Legacy output directory for files-inventory.json, files-inventory.csv, "
+                "and files-missing-report.md. Omit to write a report run."
+            ),
         ),
-    ] = Path("canvas-files-inventory"),
+    ] = None,
     local_root: Annotated[
         Path | None,
         typer.Option(
             "--local-root",
             help="Local course root for filename/size comparison. Omit to inventory Canvas only.",
         ),
+    ] = None,
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
@@ -952,8 +1016,13 @@ def files_inventory(
         command_files_inventory,
         args_for(
             course_id=course_id,
-            output_dir=str(output_dir),
+            project_root=str(project_root),
+            output_dir=str(output_dir) if output_dir else None,
             local_root=str(local_root) if local_root else None,
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

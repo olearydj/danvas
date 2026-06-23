@@ -9,6 +9,7 @@ import pytest
 from danvas.files import (
     build_file_inventory,
     command_files_download,
+    command_files_inventory,
     command_files_upload,
     content_type_for,
     download_relative_path,
@@ -169,6 +170,60 @@ def test_write_missing_report_summarizes_missing_files(tmp_path: Path) -> None:
     assert "Canvas files inventoried: `2`" in text
     assert "missing.pdf" in text
     assert "verifier" not in text
+
+
+def test_command_files_inventory_writes_default_report_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+    (tmp_path / ".danvas" / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=str(tmp_path),
+        output_dir=None,
+        local_root=None,
+        no_report=False,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    command_files_inventory(args)
+
+    report_dirs = list((tmp_path / ".danvas" / "reports").iterdir())
+    assert len(report_dirs) == 1
+    report_dir = report_dirs[0]
+    assert report_dir.name.endswith("-files-inventory")
+    assert (report_dir / "manifest.json").is_file()
+    assert (report_dir / "files-inventory.json").is_file()
+    assert (report_dir / "files-inventory.csv").is_file()
+    assert (report_dir / "files-missing-report.md").is_file()
+
+
+def test_command_files_inventory_preserves_explicit_output_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: FakeCanvas())
+    output_dir = tmp_path / "legacy"
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=str(tmp_path),
+        output_dir=str(output_dir),
+        local_root=None,
+        no_report=False,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    command_files_inventory(args)
+
+    assert (output_dir / "files-inventory.json").is_file()
+    assert not (tmp_path / ".danvas" / "reports").exists()
 
 
 def test_download_relative_path_strips_course_files_prefix() -> None:

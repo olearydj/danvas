@@ -117,6 +117,7 @@ def command_init(args: Any) -> None:
     )
     write_course_snapshot(snapshot, payload)
     maybe_ignore_course_snapshot(root)
+    maybe_ignore_reports(root)
     print(f"Wrote {config}")
     print(f"Wrote {snapshot}")
 
@@ -408,10 +409,17 @@ def write_project_config(
 
 
 def maybe_ignore_course_snapshot(root: Path) -> None:
+    maybe_append_gitignore(root, f"{CONFIG_DIR_NAME}/{COURSE_SNAPSHOT_NAME}")
+
+
+def maybe_ignore_reports(root: Path) -> None:
+    maybe_append_gitignore(root, f"{CONFIG_DIR_NAME}/reports/")
+
+
+def maybe_append_gitignore(root: Path, ignore_line: str) -> None:
     if not (root / ".git").exists():
         return
     gitignore = root / ".gitignore"
-    ignore_line = f"{CONFIG_DIR_NAME}/{COURSE_SNAPSHOT_NAME}"
     existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
     if ignore_line in existing.splitlines():
         return

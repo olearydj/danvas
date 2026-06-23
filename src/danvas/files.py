@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from danvas.auth import canvas_from_args
+from danvas.reports import ReportRun, create_report_run
 from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_json, write_rows
 
 GENERATED_INVENTORY_NAMES = {
@@ -68,10 +69,53 @@ VERIFIER_RE = re.compile(r"(?i)(verifier|token|secret)=([^&\s]+)")
 def command_files_inventory(args: Any) -> None:
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
-    output_dir = Path(args.output_dir)
     local_root = Path(args.local_root).resolve() if args.local_root else None
 
     inventory = build_file_inventory(course, local_root=local_root)
+    explicit_output_dir = bool(getattr(args, "output_dir", None))
+    report_root = getattr(args, "report_root", None)
+    report_dir = getattr(args, "report_dir", None)
+    report_slug = getattr(args, "report_slug", None)
+    no_report = bool(getattr(args, "no_report", False))
+    project_root = getattr(args, "project_root", None)
+    report_option = bool(report_root or report_dir or report_slug)
+    if no_report and report_option:
+        raise SystemExit("Use either --no-report or report output options, not both.")
+    if no_report and not explicit_output_dir:
+        raise SystemExit("Pass --output-dir when using --no-report with files inventory.")
+
+    if explicit_output_dir:
+        write_file_inventory_bundle(Path(args.output_dir), inventory)
+
+    report_run = None
+    report_enabled = not no_report and (not explicit_output_dir or report_option)
+    if report_enabled:
+        report_run = create_report_run(
+            command="files inventory",
+            slug=report_slug or "files-inventory",
+            project_root=Path(project_root) if project_root else None,
+            report_root=Path(report_root) if report_root else None,
+            report_dir=Path(report_dir) if report_dir else None,
+            course_id=getattr(course, "id", args.course_id),
+            input_paths=[local_root] if local_root else [],
+            private_data=False,
+        )
+        try:
+            write_file_inventory_bundle(report_run.path, inventory, report_run=report_run)
+            manifest_path = report_run.finish()
+            print(f"Wrote {manifest_path}")
+            print(f"Report directory: {report_run.path}")
+        except Exception as exc:
+            report_run.finish("failed", error=str(exc))
+            raise
+
+    statuses = Counter(row["status"] for row in inventory["comparison"])
+    print(json.dumps(dict(sorted(statuses.items())), indent=2, sort_keys=True))
+
+
+def write_file_inventory_bundle(
+    output_dir: Path, inventory: dict[str, Any], *, report_run: ReportRun | None = None
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     inventory_json = output_dir / "files-inventory.json"
     inventory_csv = output_dir / "files-inventory.csv"
@@ -91,11 +135,13 @@ def command_files_inventory(args: Any) -> None:
     )
     write_missing_report(report_md, inventory)
 
-    statuses = Counter(row["status"] for row in inventory["comparison"])
     print(f"Wrote {inventory_json}")
     print(f"Wrote {inventory_csv}")
     print(f"Wrote {report_md}")
-    print(json.dumps(dict(sorted(statuses.items())), indent=2, sort_keys=True))
+    if report_run:
+        report_run.record_file(inventory_json)
+        report_run.record_file(inventory_csv)
+        report_run.record_file(report_md)
 
 
 def command_files_download(args: Any) -> None:

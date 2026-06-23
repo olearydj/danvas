@@ -91,3 +91,39 @@ def audit_assignment_file(
     return audit_assignment_setup(
         load_assignment_snapshot(assignments_path), load_policy(policy_path)
     )
+
+
+def render_assignment_audit_markdown(payload: dict[str, Any]) -> str:
+    lines = [
+        "# Assignment Audit Report",
+        "",
+        f"Source: `{payload.get('source') or ''}`",
+        "",
+        "## Summary",
+        "",
+        f"- Assignments: `{payload['assignments']['count']}`",
+        f"- Canvas weight sum: `{payload.get('weight_sum')}`",
+        f"- Unpublished: `{len(payload['assignments']['unpublished'])}`",
+        f"- Missing due dates: `{len(payload['assignments']['missing_due_dates'])}`",
+        "",
+        "## Assignment Groups",
+        "",
+    ]
+    if payload["canvas_weights"]:
+        for group, weight in sorted(payload["canvas_weights"].items()):
+            lines.append(f"- {group}: `{weight}`")
+    else:
+        lines.append("- No Canvas assignment group weights found.")
+    if payload["missing_groups"]:
+        lines.extend(["", "## Missing Expected Groups", ""])
+        lines.extend(f"- {group}" for group in payload["missing_groups"])
+    if payload["extra_groups"]:
+        lines.extend(["", "## Extra Canvas Groups", ""])
+        lines.extend(f"- {group}" for group in payload["extra_groups"])
+    if payload["assignments"]["unpublished"]:
+        lines.extend(["", "## Unpublished Assignments", ""])
+        lines.extend(f"- {name}" for name in payload["assignments"]["unpublished"])
+    if payload["assignments"]["missing_due_dates"]:
+        lines.extend(["", "## Missing Due Dates", ""])
+        lines.extend(f"- {name}" for name in payload["assignments"]["missing_due_dates"])
+    return "\n".join(lines).rstrip() + "\n"
