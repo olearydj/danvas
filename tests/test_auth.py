@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Generator
 
 import pytest
 from secretpath import clear_cache
@@ -9,7 +10,7 @@ from danvas.auth import resolve_api_key
 
 
 @pytest.fixture(autouse=True)
-def _clear_secretpath_cache() -> None:
+def _clear_secretpath_cache() -> Generator[None]:
     clear_cache()
     yield
     clear_cache()

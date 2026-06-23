@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from canvasapi import Canvas
-from secretpath import SecretPathError, resolve_named_secret
+from secretpath import SecretMiss, SecretPathError, resolve_named_secret
 
 DEFAULT_API_URL = "https://auburn.instructure.com/"
 
@@ -22,6 +22,8 @@ def resolve_api_key(*, provider: str, op_reference: str, env_var: str) -> tuple[
     except SecretPathError as error:
         raise SystemExit(str(error)) from error
 
+    if isinstance(result, SecretMiss):
+        raise SystemExit("Could not resolve Canvas API key.")
     return result.as_tuple()
 
 
