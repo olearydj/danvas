@@ -267,6 +267,16 @@ def status(
     report_md: Annotated[
         Path | None, typer.Option("--report-md", help="Optional Markdown report output path.")
     ] = None,
+    report_root: Annotated[
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
 ) -> None:
     run_command(
         command_status,
@@ -275,6 +285,9 @@ def status(
             max_age_hours=max_age_hours,
             output=str(output) if output else None,
             report_md=str(report_md) if report_md else None,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
         ),
     )
 

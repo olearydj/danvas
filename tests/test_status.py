@@ -249,6 +249,92 @@ def test_status_cli_writes_json_and_markdown(
     assert "Canvas-only: Chapter 8 Quiz" in report
 
 
+def test_status_cli_does_not_write_report_run_by_default(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    build_workspace(tmp_path)
+    write(
+        tmp_path / ".danvas" / "config.toml",
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+    )
+    snapshot = build_snapshot()
+    snapshot["generated_at"] = (
+        dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
+    )
+    write(tmp_path / ".danvas" / "course.json", json.dumps(snapshot))
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["status"])
+
+    assert result.exit_code == 0, result.output
+    assert not (tmp_path / ".danvas" / "reports").exists()
+
+
+def test_status_cli_writes_report_run_when_report_option_is_passed(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    build_workspace(tmp_path)
+    write(
+        tmp_path / ".danvas" / "config.toml",
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+    )
+    snapshot = build_snapshot()
+    snapshot["generated_at"] = (
+        dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
+    )
+    write(tmp_path / ".danvas" / "course.json", json.dumps(snapshot))
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(app, ["status", "--report-root", ".danvas/reports"])
+
+    assert result.exit_code == 0, result.output
+    report_dirs = list((tmp_path / ".danvas" / "reports").iterdir())
+    assert len(report_dirs) == 1
+    report_dir = report_dirs[0]
+    assert report_dir.name.endswith("-status")
+    assert (report_dir / "status.json").is_file()
+    assert (report_dir / "status.md").is_file()
+    manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["command"] == "status"
+    assert manifest["course_id"] == 101
+    assert manifest["snapshot_timestamp"] == snapshot["generated_at"]
+    assert manifest["snapshot_path"].endswith(".danvas/course.json")
+    assert manifest["snapshot_stale"] is False
+
+
+def test_status_cli_writes_legacy_outputs_and_report_run(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    build_workspace(tmp_path)
+    write(tmp_path / ".danvas" / "config.toml", "[canvas]\ncourse_id = 101\n")
+    snapshot = build_snapshot()
+    snapshot["generated_at"] = (
+        dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
+    )
+    write(tmp_path / ".danvas" / "course.json", json.dumps(snapshot))
+    monkeypatch.chdir(tmp_path)
+
+    result = runner.invoke(
+        app,
+        [
+            "status",
+            "--output",
+            "status.json",
+            "--report-md",
+            "status.md",
+            "--report-dir",
+            "status-report-run",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "status.json").is_file()
+    assert (tmp_path / "status.md").is_file()
+    assert (tmp_path / "status-report-run" / "status.json").is_file()
+    assert (tmp_path / "status-report-run" / "status.md").is_file()
+    assert (tmp_path / "status-report-run" / "manifest.json").is_file()
+
+
 def test_status_cli_uses_configured_assignment_sources(
     tmp_path: Path, monkeypatch: Any
 ) -> None:

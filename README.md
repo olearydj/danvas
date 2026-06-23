@@ -291,6 +291,7 @@ to suppress default report output where the command supports it.
 ```bash
 # Course status (read-only, from the .danvas snapshot)
 danvas status
+danvas status --report-root .danvas/reports
 danvas status --output status.json --report-md status.md
 
 # Courses and rosters

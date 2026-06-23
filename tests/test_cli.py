@@ -159,7 +159,9 @@ def test_quiz_import_qti_defines_expected_options() -> None:
 
 def test_status_is_read_only() -> None:
     assert "Read-only" in (command("status").help or "")
-    assert "--report-md" in option_names("status")
+    assert {"--report-md", "--report-root", "--report-dir", "--report-slug"} <= option_names(
+        "status"
+    )
 
 
 def test_recordings_panopto_captions_options() -> None:

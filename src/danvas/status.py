@@ -15,6 +15,7 @@ from danvas.config import (
     load_project_config,
 )
 from danvas.files import local_files, status_for
+from danvas.reports import create_report_run
 from danvas.sources import scan_sources
 from danvas.utils import write_json
 
@@ -61,6 +62,33 @@ def command_status(args: Any) -> None:
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(render_status_markdown(payload), encoding="utf-8")
         print(f"Wrote {args.report_md}")
+    report_root = getattr(args, "report_root", None)
+    report_dir = getattr(args, "report_dir", None)
+    report_slug = getattr(args, "report_slug", None)
+    if report_root or report_dir or report_slug:
+        report_run = create_report_run(
+            command="status",
+            slug=report_slug or "status",
+            project_root=config_dir.parent,
+            report_root=Path(report_root) if report_root else None,
+            report_dir=Path(report_dir) if report_dir else None,
+            course_id=payload["course"]["id"],
+            snapshot_timestamp=str(payload["snapshot"].get("generated_at") or ""),
+            private_data=False,
+        )
+        report_run.manifest["snapshot_path"] = str(snapshot_path)
+        report_run.manifest["snapshot_stale"] = payload["snapshot"]["stale"]
+        try:
+            json_path = report_run.write_json("status.json", payload)
+            md_path = report_run.write_text("status.md", render_status_markdown(payload))
+            manifest_path = report_run.finish()
+            print(f"Wrote {json_path}")
+            print(f"Wrote {md_path}")
+            print(f"Wrote {manifest_path}")
+            print(f"Report directory: {report_run.path}")
+        except Exception as exc:
+            report_run.finish("failed", error=str(exc))
+            raise
 
 
 def resolve_max_age_hours(explicit: float | None, config_dir: Path) -> float:

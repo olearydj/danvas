@@ -801,7 +801,7 @@ Implementation notes:
 
 Implementation phases:
 
-1. Foundation and first adopters.
+1. Foundation and first adopters. Status: delivered.
    - Add the shared report-run helper, dated directory creation, manifest writing,
      timezone-aware date prefixes, no-overwrite behavior, and failed-run manifest
      support.
@@ -811,7 +811,7 @@ Implementation phases:
    - Add focused tests for helper behavior, gitignore updates, first adopters,
      explicit-output compatibility, failed manifests, and timezone date prefixes.
 
-2. Compatibility-sensitive `status` migration.
+2. Compatibility-sensitive `status` migration. Status: delivered.
    - Keep plain `danvas status` stdout-first.
    - Add `--report-root`, `--report-dir`, and `--report-slug` to `status`.
    - When a report option is passed, write `manifest.json`, `status.json`, and
