@@ -262,10 +262,10 @@ Recommended goals:
    danvas discussions sync-prompts --output-dir content/discussions --dry-run
    ```
 
-   Status: partial. Delivered: `danvas announcements sync` creates a report-first
-   plan for Canvas-only announcements and can create missing local Markdown files
-   without overwriting existing authored sources. Remaining: `discussions
-   sync-prompts`.
+   Status: delivered. `danvas announcements sync` and `danvas discussions
+   sync-prompts` create report-first plans for Canvas-only instructional content
+   and can create missing local Markdown files without overwriting existing
+   authored sources.
 
    Desired behavior:
 

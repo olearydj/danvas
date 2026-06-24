@@ -61,6 +61,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 
 - grade discussions
   - export discussion posts by discussion URL
+  - sync missing Canvas discussion prompts into local Markdown sources without overwriting
   - score discussions by original post count and response count
   - configurable points and caps
   - optional CSV output of scored rows
@@ -134,6 +135,7 @@ danvas
 │   └── verify
 ├── discussions
 │   ├── export
+│   ├── sync-prompts
 │   └── score
 ├── announcements
 │   ├── create
@@ -372,6 +374,7 @@ danvas quiz import-qti chap07.zip --course-id 1742717 \
 # Discussions
 danvas discussions export https://auburn.instructure.com/courses/1655780/discussion_topics/9772349 \
   --output discussion.json
+danvas discussions sync-prompts --course-id 1655780 --output-dir content/discussions --dry-run
 danvas discussions score https://auburn.instructure.com/courses/1655780/discussion_topics/9772349 \
   2 2 3 2 --output discussion-scores.csv
 

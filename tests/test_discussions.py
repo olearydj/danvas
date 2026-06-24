@@ -1,16 +1,73 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from danvas.discussions import (
+    command_discussions_sync_prompts,
     discussion_posts,
+    discussion_prompt_records,
     parse_discussion_url,
     score_discussion,
     upload_discussion_scores,
 )
+
+
+class FakeDiscussionCourse:
+    id = 101
+    name = "Example Course"
+    course_code = "EX-101"
+
+    def __init__(self) -> None:
+        self.topics = [
+            SimpleNamespace(
+                id=2,
+                title="Week 2 Discussion",
+                posted_at="2026-06-02T14:00:00Z",
+                html_url="https://canvas.example/courses/101/discussion_topics/2",
+                message="<p>Discuss week 2.</p>",
+                published=True,
+                due_at="2026-06-07T04:59:00Z",
+                assignment_id=2002,
+                points_possible=10,
+            ),
+            SimpleNamespace(
+                id=1,
+                title="Week 1 Discussion",
+                posted_at="2026-06-01T14:00:00Z",
+                html_url="https://canvas.example/courses/101/discussion_topics/1",
+                message="<p>Discuss <strong>week 1</strong>.</p>",
+                published=True,
+                due_at="2026-06-06T04:59:00Z",
+                assignment_id=2001,
+                points_possible=10,
+            ),
+            SimpleNamespace(
+                id=9,
+                title="Announcement Topic",
+                posted_at="2026-06-03T14:00:00Z",
+                html_url="https://canvas.example/courses/101/discussion_topics/9",
+                message="<p>Announcement</p>",
+                is_announcement=True,
+            ),
+        ]
+
+    def get_discussion_topics(self, **kwargs: object) -> list[Any]:
+        assert kwargs == {}
+        return self.topics
+
+
+class FakeDiscussionCanvas:
+    def __init__(self) -> None:
+        self.course = FakeDiscussionCourse()
+
+    def get_course(self, course_id: int) -> FakeDiscussionCourse:
+        assert course_id == 101
+        return self.course
 
 
 def test_parse_discussion_url_extracts_course_and_topic() -> None:
@@ -66,6 +123,131 @@ def test_discussion_posts_flattens_view_and_strips_html() -> None:
         "is_reply": True,
         "depth": 1,
     }
+
+
+def test_discussion_prompt_records_skip_announcements() -> None:
+    records = discussion_prompt_records(FakeDiscussionCourse())
+
+    assert [record["title"] for record in records] == [
+        "Week 1 Discussion",
+        "Week 2 Discussion",
+    ]
+    assert records[0]["message"] == "Discuss week 1 ."
+    assert records[0]["assignment_id"] == 2001
+    assert records[0]["points_possible"] == 10
+
+
+def test_command_discussions_sync_prompts_dry_run_writes_report_without_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output_dir = tmp_path / "content" / "discussions"
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr("danvas.discussions.canvas_from_args", lambda args: FakeDiscussionCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        output_dir=str(output_dir),
+        dry_run=True,
+        no_report=False,
+        report_root=None,
+        report_dir=str(report_dir),
+        report_slug=None,
+    )
+
+    command_discussions_sync_prompts(args)
+
+    assert not output_dir.exists()
+    report = json.loads((report_dir / "discussions-sync-prompts.json").read_text(encoding="utf-8"))
+    manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert report["dry_run"] is True
+    assert [action["status"] for action in report["actions"]] == ["would_create", "would_create"]
+    assert report["actions"][0]["target_relative_path"] == "001-week-1-discussion.md"
+    assert "markdown" not in report["actions"][0]
+    assert manifest["command"] == "discussions sync-prompts"
+    assert manifest["report_slug"] == "discussions-sync-prompts"
+    assert "would_create" in capsys.readouterr().out
+
+
+def test_command_discussions_sync_prompts_live_creates_missing_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_dir = tmp_path / "content" / "discussions"
+    monkeypatch.setattr("danvas.discussions.canvas_from_args", lambda args: FakeDiscussionCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        output_dir=str(output_dir),
+        dry_run=False,
+        no_report=True,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    command_discussions_sync_prompts(args)
+
+    first = output_dir / "001-week-1-discussion.md"
+    second = output_dir / "002-week-2-discussion.md"
+    assert first.is_file()
+    assert second.is_file()
+    text = first.read_text(encoding="utf-8")
+    assert "canvas_id: 1" in text
+    assert "canvas_url: https://canvas.example/courses/101/discussion_topics/1" in text
+    assert "assignment_id: 2001" in text
+    assert "points_possible: 10" in text
+    assert "Discuss week 1 ." in text
+    assert "Announcement" not in text
+
+
+def test_command_discussions_sync_prompts_skips_known_local_and_conflicts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_dir = tmp_path / "content" / "discussions"
+    output_dir.mkdir(parents=True)
+    (output_dir / "existing-week-1.md").write_text(
+        """---
+title: Week 1 Discussion
+canvas_id: 1
+---
+
+Edited locally.
+""",
+        encoding="utf-8",
+    )
+    (output_dir / "002-week-2-discussion.md").write_text(
+        """---
+title: Different Discussion
+canvas_id: 999
+---
+
+Different content.
+""",
+        encoding="utf-8",
+    )
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr("danvas.discussions.canvas_from_args", lambda args: FakeDiscussionCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        output_dir=str(output_dir),
+        dry_run=False,
+        no_report=False,
+        report_root=None,
+        report_dir=str(report_dir),
+        report_slug=None,
+    )
+
+    command_discussions_sync_prompts(args)
+
+    report = json.loads((report_dir / "discussions-sync-prompts.json").read_text(encoding="utf-8"))
+    assert [action["status"] for action in report["actions"]] == [
+        "skipped_known_local",
+        "conflict",
+    ]
+    assert (output_dir / "existing-week-1.md").read_text(encoding="utf-8").endswith(
+        "Edited locally.\n"
+    )
+    assert "different canvas_id 999" in report["actions"][1]["reason"]
 
 
 def make_posts() -> list[dict[str, Any]]:

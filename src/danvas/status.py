@@ -358,6 +358,11 @@ def next_action_for(section: str, item: dict[str, Any]) -> str:
             "Run `danvas announcements sync --output-dir content/announcements --dry-run` "
             "to plan a local source file."
         )
+    if section == "discussions" and classification == "Canvas-only":
+        return (
+            "Run `danvas discussions sync-prompts --output-dir content/discussions --dry-run` "
+            "to plan a local prompt source file."
+        )
     if section == "assignments" and classification == "local-only":
         return "Run `danvas assignments create SOURCE --dry-run` before posting this local assignment."
     if section == "quizzes" and classification == "Canvas-only":

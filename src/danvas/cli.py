@@ -22,7 +22,11 @@ from danvas.assignments import command_assignments_create, command_assignments_e
 from danvas.auth import DEFAULT_API_URL
 from danvas.config import command_init, command_refresh, resolve_api_url, resolve_course_id
 from danvas.courses import command_courses, command_roster
-from danvas.discussions import command_discussions_export, command_discussions_score
+from danvas.discussions import (
+    command_discussions_export,
+    command_discussions_score,
+    command_discussions_sync_prompts,
+)
 from danvas.files import (
     command_files_compare,
     command_files_download,
@@ -1278,6 +1282,62 @@ def discussions_export(
             discussion_url=discussion_url,
             output=str(output),
             format=output_format,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@discussions_app.command(
+    "sync-prompts",
+    help="Create missing local Markdown prompt sources from Canvas discussions.",
+)
+def discussions_sync_prompts(
+    course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            help="Directory for created discussion prompt Markdown sources.",
+        ),
+    ] = Path("content/discussions"),
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Plan source creation without writing content files."),
+    ] = False,
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_discussions_sync_prompts,
+        args_for(
+            course_id=course_id,
+            project_root=str(project_root),
+            output_dir=str(output_dir),
+            dry_run=dry_run,
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
