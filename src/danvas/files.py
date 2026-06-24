@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import mimetypes
 import re
@@ -193,12 +194,42 @@ def command_files_download(args: Any) -> None:
     print(json.dumps(dict(sorted(statuses.items())), indent=2, sort_keys=True))
 
 
+def command_files_download_one(args: Any) -> None:
+    validate_compare_target(getattr(args, "file_id", None), getattr(args, "canvas_path", None))
+    if not getattr(args, "output", None):
+        raise SystemExit("Output file required. Pass --output.")
+    output = Path(args.output)
+    if output.exists() and not getattr(args, "overwrite", False):
+        raise SystemExit(f"Output file already exists: {output}. Pass --overwrite to replace it.")
+
+    canvas = canvas_from_args(args)
+    course = canvas.get_course(args.course_id)
+    file_obj, record = resolve_canvas_file_pair(
+        course,
+        file_id=getattr(args, "file_id", None),
+        canvas_path=getattr(args, "canvas_path", None),
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    file_obj.download(str(output))
+    downloaded = {
+        "status": "downloaded",
+        "output": str(output),
+        "canvas": record,
+        "local": local_file_compare_record(output),
+    }
+    print(json.dumps(downloaded, indent=2, ensure_ascii=False, sort_keys=True))
+
+
 def command_files_compare(args: Any) -> None:
     validate_compare_target(getattr(args, "file_id", None), getattr(args, "canvas_path", None))
     if not getattr(args, "local", None):
         raise SystemExit("Local file required. Pass --local.")
     local_path = Path(args.local)
     local_row = local_file_compare_record(local_path)
+    downloaded_canvas_row = None
+    if getattr(args, "downloaded_canvas", None):
+        downloaded_canvas_row = downloaded_canvas_compare_record(Path(args.downloaded_canvas))
+        local_row = {**local_row, "sha256": sha256_for_file(local_path)}
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     canvas_row = resolve_canvas_file_record(
@@ -210,6 +241,7 @@ def command_files_compare(args: Any) -> None:
         course=course,
         canvas_row=canvas_row,
         local_row=local_row,
+        downloaded_canvas_row=downloaded_canvas_row,
     )
 
     if getattr(args, "output", None):
@@ -353,7 +385,7 @@ def make_files_compare_report_run(
         report_root=report_root,
         report_dir=report_dir,
         course_id=report["course_id"],
-        input_paths=[local_path],
+        input_paths=file_compare_input_paths(report, local_path),
         private_data=False,
     )
 
@@ -436,24 +468,53 @@ def local_file_compare_record(path: Path) -> dict[str, Any]:
     }
 
 
+def downloaded_canvas_compare_record(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise SystemExit(f"Downloaded Canvas file not found: {path}")
+    if not path.is_file():
+        raise SystemExit(f"Downloaded Canvas path is not a file: {path}")
+    row = local_file_compare_record(path)
+    row["sha256"] = sha256_for_file(path)
+    return row
+
+
+def sha256_for_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def resolve_canvas_file_record(
     course: Any, *, file_id: int | None, canvas_path: str | None
 ) -> dict[str, Any]:
+    _file_obj, record = resolve_canvas_file_pair(
+        course,
+        file_id=file_id,
+        canvas_path=canvas_path,
+    )
+    return record
+
+
+def resolve_canvas_file_pair(
+    course: Any, *, file_id: int | None, canvas_path: str | None
+) -> tuple[Any, dict[str, Any]]:
     folders = list(course.get_folders())
     folders_by_id = {int(folder.id): folder for folder in folders if getattr(folder, "id", None)}
-    records = [
-        canvas_file_record(file_obj, folders_by_id) for file_obj in course.get_files()
+    pairs = [
+        (file_obj, canvas_file_record(file_obj, folders_by_id)) for file_obj in course.get_files()
     ]
     if file_id is not None:
-        for record in records:
+        for file_obj, record in pairs:
             if int_or_none(record.get("id")) == int(file_id):
-                return record
+                return file_obj, record
         raise SystemExit(f"Canvas file not found by ID: {file_id}")
 
     requested = str(canvas_path or "")
     matches = [
-        record
-        for record in records
+        (file_obj, record)
+        for file_obj, record in pairs
         if requested in canvas_file_path_candidates(record)
     ]
     if len(matches) == 1:
@@ -476,7 +537,11 @@ def canvas_file_path_candidates(record: dict[str, Any]) -> set[str]:
 
 
 def build_file_compare_report(
-    *, course: Any, canvas_row: dict[str, Any], local_row: dict[str, Any]
+    *,
+    course: Any,
+    canvas_row: dict[str, Any],
+    local_row: dict[str, Any],
+    downloaded_canvas_row: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     comparisons = {
         "name": {
@@ -496,12 +561,19 @@ def build_file_compare_report(
             "local": local_row["content_type"],
         },
     }
+    if downloaded_canvas_row:
+        comparisons["checksum"] = {
+            "matches": downloaded_canvas_row["sha256"] == local_row["sha256"],
+            "algorithm": "sha256",
+            "canvas": downloaded_canvas_row["sha256"],
+            "local": local_row["sha256"],
+        }
     status = (
         "matches"
         if all(bool(item["matches"]) for item in comparisons.values())
         else "mismatch"
     )
-    return {
+    report = {
         "course_id": get_canvas_value(course, "id"),
         "course_name": str(get_canvas_value(course, "name") or ""),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -520,6 +592,17 @@ def build_file_compare_report(
         "local": local_row,
         "comparisons": comparisons,
     }
+    if downloaded_canvas_row:
+        report["downloaded_canvas"] = downloaded_canvas_row
+    return report
+
+
+def file_compare_input_paths(report: dict[str, Any], local_path: Path) -> list[Path]:
+    paths = [local_path]
+    downloaded_path = (report.get("downloaded_canvas") or {}).get("path")
+    if downloaded_path:
+        paths.append(Path(str(downloaded_path)))
+    return paths
 
 
 def print_file_compare_summary(report: dict[str, Any]) -> None:
@@ -549,8 +632,11 @@ def render_file_compare_markdown(report: dict[str, Any]) -> str:
         "name": "Name",
         "size": "Size",
         "content_type": "Content type",
+        "checksum": "SHA-256",
     }
     for key, label in labels.items():
+        if key not in report["comparisons"]:
+            continue
         row = report["comparisons"][key]
         status = "matches" if row["matches"] else "mismatch"
         lines.append(f"| {label} | `{row['canvas']}` | `{row['local']}` | `{status}` |")
@@ -559,11 +645,24 @@ def render_file_compare_markdown(report: dict[str, Any]) -> str:
             f"| Updated time | `{report['canvas']['updated_at']}` | "
             f"`{report['local']['mtime']}` | `diagnostic` |",
             "",
+        ]
+    )
+    if report.get("downloaded_canvas"):
+        lines.extend(
+            [
+                "Checksum comparison uses the supplied downloaded Canvas file "
+                f"`{report['downloaded_canvas']['path']}`. The command did not download it.",
+                "",
+            ]
+        )
+    else:
+        lines.extend(
+            [
             "This is a metadata-only comparison. It does not download the Canvas file "
             "or compare file contents.",
             "",
-        ]
-    )
+            ]
+        )
     return "\n".join(lines)
 
 

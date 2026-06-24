@@ -21,7 +21,7 @@ closed.
 | Quiz shell awareness | `danvas status` | Do not compare quiz question bodies unless snapshots later include item data. |
 | QTI import, publish, verify | `danvas quiz import-qti` | Resolve assignment groups by configured name, if useful. |
 | Canvas Files upload v1 | `danvas files upload` | Markdown asset rewriting and optional folder creation remain separate future work. |
-| Targeted file metadata compare | `danvas files compare` | Single-file download, checksum/content compare, Office package-part compare, and richer ignore rules remain Candidate B follow-ups. |
+| Targeted file download/compare | `danvas files download-one`, `danvas files compare` | One-file explicit download, metadata compare, and SHA-256 compare against a supplied downloaded Canvas file are delivered; inventory ignore rules remain Candidate B follow-up, and Office package-part comparison is deferred. |
 | Generated report runs | `danvas.reports`; adopted by report-producing commands | Add report discovery commands and make new verify/reconcile commands report-first. |
 | Report polish | status next actions, file diagnostics, assignment-audit notes | Continue improving command-specific reports as field use reveals friction. |
 | Mutation banners | shared guardrail pattern | Apply consistently to future mutating commands. |
@@ -36,7 +36,7 @@ Current command families include:
 - `grades post/verify`
 - `discussions export/score`
 - `announcements create/export`
-- `files inventory/download/compare/upload`
+- `files inventory/download/download-one/compare/upload`
 - `recordings panopto-captions`
 
 ## Merged Sprint 2 And 3 Status
@@ -60,8 +60,8 @@ sprint sequence as canonical.
 | Sprint 3: readback verification | Not started | Sprint Candidate C. |
 | Sprint 3: round-trip metadata | Not started | Sprint Candidate C, before broad update/upsert work. |
 | Sprint 3: Markdown asset rewriting | Not started | Sprint Candidate D, building on delivered `files upload`. |
-| Sprint 3: single-file download and compare | Partial | Candidate B; metadata-only `files compare` is delivered, while `download-one`, checksum/content compare, and Office package-part comparison remain open. |
-| Sprint 3: file inventory report improvements | Partial | Candidate B; report-run foundation, filename diagnostics, and targeted metadata compare are delivered, while ignore rules remain open. |
+| Sprint 3: single-file download and compare | Done | Candidate B; `files download-one`, `files compare` metadata, and optional checksum against a supplied downloaded Canvas file are delivered. |
+| Sprint 3: file inventory report improvements | Partial | Candidate B; report-run foundation, filename diagnostics, targeted metadata compare, and downloaded-file checksum compare are delivered, while ignore rules remain open. |
 | Sprint 3 stretch: human-readable operation reports | Partial | Delivered for several report-run commands; Candidate B keeps report consistency work alive for new commands. |
 | Sprint 3 beyond: rubric support | Deferred | Smaller Backlog Items; wait until update/upsert behavior is stable. |
 | Sprint 3 beyond: activity logging | Not recommended as a sprint | Not Recommended Or No Longer Relevant. |
@@ -79,9 +79,10 @@ sprint sequence as canonical.
 ### Partially Delivered From Sprint 2/3
 
 - File inventory/report improvements are partial: report-run output, targeted
-  metadata compare, and some diagnostics are delivered; richer ignore rules,
-  single-file download, and Office package-part comparison remain open in
-  Candidate B.
+  metadata compare, optional checksum against a supplied downloaded Canvas file,
+  and some diagnostics are delivered; richer ignore rules remain open in
+  Candidate B. Office package-part comparison is deferred out of the current
+  Candidate B scope.
 - Human-readable operation reports are partial: several report-producing commands
   now emit Markdown/JSON report runs; future verify, reconcile, compare, and
   readback commands should start with report-run output.
@@ -192,21 +193,30 @@ Recommended goals:
    file by `--file-id` or exact `--canvas-path`, compares Canvas metadata against
    one local file, prints a terminal summary, and writes `files-compare.json`,
    `files-compare.md`, and `manifest.json` as a report run when enabled.
+   Delivered in B.3b: `danvas files download-one` writes exactly one Canvas file
+   to an explicit output path, and `--downloaded-canvas PATH` adds SHA-256
+   comparison against a supplied downloaded Canvas file without downloading
+   anything implicitly.
 
    Desired behavior:
 
    - Download exactly one Canvas file by file ID or by an unambiguous Canvas
-     folder path. Remaining.
+     folder path. Delivered.
+   - Keep `files download-one` explicit-output, not report-run-first: require an
+     output path, refuse overwrite unless `--overwrite`, and print metadata that
+     can be reused with `files compare`. Delivered.
    - Refuse ambiguous path matches unless a file ID is supplied. Delivered for
-     `files compare`; still needed for future `download-one`.
+     `files compare` and `files download-one`.
    - Compare Canvas metadata against a local file by filename, size, content type,
      and updated time diagnostics. Delivered.
-   - Compare file contents by checksum when both sides are available. Remaining.
+   - Compare file contents by SHA-256 only when a downloaded Canvas-side file is
+     supplied with `--downloaded-canvas`. Delivered.
    - For Office files, optionally compare internal ZIP entries and report added,
-     missing, and changed package parts. Remaining.
+     missing, and changed package parts. Deferred; implement later as an explicit
+     option such as `--office-parts` only if basic compare workflows need it.
    - Improve `files inventory` ignore rules for generated/cache/archive paths such
      as `.danvas/`, `_archive/`, rendered artifacts, and local scratch outputs.
-     Remaining.
+     Remaining as B.3c.
 
 Definition of done:
 

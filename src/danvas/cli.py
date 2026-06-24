@@ -22,6 +22,7 @@ from danvas.discussions import command_discussions_export, command_discussions_s
 from danvas.files import (
     command_files_compare,
     command_files_download,
+    command_files_download_one,
     command_files_inventory,
     command_files_upload,
 )
@@ -1462,6 +1463,59 @@ def files_download(
 
 
 @files_app.command(
+    "download-one",
+    help="Download exactly one Canvas course file to an explicit output path.",
+)
+def files_download_one(
+    course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Output file for the downloaded Canvas file."),
+    ] = None,
+    file_id: Annotated[
+        int | None,
+        typer.Option("--file-id", help="Canvas file ID. Mutually exclusive with --canvas-path."),
+    ] = None,
+    canvas_path: Annotated[
+        str | None,
+        typer.Option(
+            "--canvas-path",
+            help=(
+                "Exact Canvas Files path, for example "
+                "'course files/slides/example.pptx'."
+            ),
+        ),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace the output file if it already exists."),
+    ] = False,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_files_download_one,
+        args_for(
+            course_id=course_id,
+            project_root=str(project_root),
+            output=str(output) if output else None,
+            file_id=file_id,
+            canvas_path=canvas_path,
+            overwrite=overwrite,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@files_app.command(
     "compare",
     help="Compare Canvas file metadata with one local file and write a report run.",
 )
@@ -1492,6 +1546,13 @@ def files_compare(
         Path | None,
         typer.Option("--output", "-o", help="Optional JSON comparison report path."),
     ] = None,
+    downloaded_canvas: Annotated[
+        Path | None,
+        typer.Option(
+            "--downloaded-canvas",
+            help="Previously downloaded Canvas file to hash against --local.",
+        ),
+    ] = None,
     no_report: Annotated[
         bool, typer.Option("--no-report", help="Suppress the default report run.")
     ] = False,
@@ -1518,6 +1579,7 @@ def files_compare(
             file_id=file_id,
             canvas_path=canvas_path,
             output=str(output) if output else None,
+            downloaded_canvas=str(downloaded_canvas) if downloaded_canvas else None,
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,

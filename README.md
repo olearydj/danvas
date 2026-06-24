@@ -78,6 +78,8 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - optionally compares Canvas filenames and sizes to a local course root (`--local-root`)
   - writes a dated report run with JSON, CSV, manifest, and Markdown missing-file report by default
   - compares one Canvas file's metadata to one local file by file ID or exact Canvas path
+  - can compare SHA-256 checksums against a supplied downloaded Canvas file
+  - downloads exactly one Canvas file to an explicit output path
   - uploads one or more local files to an existing Canvas Files folder with dry-run support and report-run support
   - downloads Canvas Files into a local folder tree with a manifest
 
@@ -138,6 +140,7 @@ danvas
 ├── files
 │   ├── inventory
 │   ├── download
+│   ├── download-one
 │   ├── compare
 │   └── upload
 ├── reports
@@ -371,6 +374,11 @@ danvas files compare --course-id 1742717 --file-id 284879389 \
 danvas files compare --course-id 1742717 \
   --canvas-path "course files/slides/example.pptx" \
   --local content/slides/example.pptx
+danvas files compare --course-id 1742717 --file-id 284879389 \
+  --local content/slides/example.pptx \
+  --downloaded-canvas .danvas/canvas-files/slides/example.pptx
+danvas files download-one --course-id 1742717 --file-id 284879389 \
+  --output .danvas/canvas-files/slides/example.pptx
 danvas files download --course-id 1742717 --output-dir .danvas/canvas-files
 
 # Reports

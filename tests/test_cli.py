@@ -454,6 +454,8 @@ def test_files_compare_cli_options_and_args(
             "10",
             "--local",
             str(source),
+            "--downloaded-canvas",
+            str(tmp_path / "canvas-slides.pptx"),
             "--output",
             "compare.json",
         ],
@@ -464,6 +466,7 @@ def test_files_compare_cli_options_and_args(
     assert captured["file_id"] == 10
     assert captured["canvas_path"] is None
     assert captured["local"] == str(source)
+    assert captured["downloaded_canvas"] == str(tmp_path / "canvas-slides.pptx")
     assert captured["output"] == "compare.json"
     assert captured["project_root"] == "."
     assert captured["no_report"] is False
@@ -474,6 +477,7 @@ def test_files_compare_cli_options_and_args(
         "--file-id",
         "--canvas-path",
         "--local",
+        "--downloaded-canvas",
         "--output",
         "--course-id",
         "--report-root",
@@ -481,3 +485,48 @@ def test_files_compare_cli_options_and_args(
         "--report-slug",
         "--no-report",
     } <= option_names("files", "compare")
+
+
+def test_files_download_one_cli_options_and_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "case.pdf"
+    captured: dict[str, object] = {}
+
+    def fake_download_one(args: SimpleNamespace) -> None:
+        captured.update(vars(args))
+
+    monkeypatch.setattr("danvas.cli.command_files_download_one", fake_download_one)
+
+    result = runner.invoke(
+        app,
+        [
+            "files",
+            "download-one",
+            "--course-id",
+            "101",
+            "--file-id",
+            "10",
+            "--output",
+            str(output),
+            "--overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["course_id"] == 101
+    assert captured["file_id"] == 10
+    assert captured["canvas_path"] is None
+    assert captured["output"] == str(output)
+    assert captured["overwrite"] is True
+    assert captured["project_root"] == "."
+    assert {
+        "--file-id",
+        "--canvas-path",
+        "--output",
+        "--overwrite",
+        "--course-id",
+    } <= option_names("files", "download-one")
+    assert {"--report-root", "--report-dir", "--no-report"}.isdisjoint(
+        option_names("files", "download-one")
+    )
