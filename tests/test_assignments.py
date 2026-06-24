@@ -8,6 +8,7 @@ import pytest
 from danvas.assignments import (
     command_assignments_create,
     command_assignments_update,
+    command_assignments_upsert,
     command_assignments_verify,
     load_assignment_markdown,
     resolve_format,
@@ -488,6 +489,12 @@ def update_args(source: Path, report_dir: Path, **overrides: object) -> SimpleNa
     return SimpleNamespace(**defaults)
 
 
+def upsert_args(source: Path, report_dir: Path, **overrides: object) -> SimpleNamespace:
+    defaults = vars(update_args(source, report_dir)).copy()
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
 class FakeAssignment:
     def __init__(self, **attrs: object) -> None:
         self.id = int(cast(Any, attrs.get("id", 0)) or 0)
@@ -706,3 +713,112 @@ def test_command_assignments_update_refuses_ambiguous_title_match(
     assert excinfo.value.code == 1
     report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
     assert report["lookup"]["status"] == "ambiguous"
+
+
+def test_command_assignments_upsert_plans_update_by_source_map(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text("---\ntitle: Case 1\n---\n\nSubmit the case memo.\n", encoding="utf-8")
+    (tmp_path / ".danvas" / "source-map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "course_id": 101,
+                "generated_at": "2026-06-24T12:00:00-05:00",
+                "sources": [
+                    {
+                        "kind": "assignment",
+                        "path": "content/case.md",
+                        "canvas": {"id": 10},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assignment = FakeAssignment(id=10, name="Case 1", description="<p>Old body.</p>")
+    course = FakeUpdateCourse([assignment])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_upsert(upsert_args(source, tmp_path / "report", project_root=str(tmp_path)))
+
+    report = json.loads((tmp_path / "report" / "assignments-upsert.json").read_text("utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text("utf-8"))
+    assert report["status"] == "would_update"
+    assert report["planned_action"] == "update"
+    assert report["id_resolution"]["source"] == "source_map"
+    assert report["assignment_id"] == 10
+    assert manifest["command"] == "assignments upsert"
+    assert manifest["status"] == "success"
+    assert assignment.edits == []
+
+
+def test_command_assignments_upsert_plans_create_without_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text(
+        "---\ntitle: Case 1\npoints_possible: 100\n---\n\nSubmit the case memo.\n",
+        encoding="utf-8",
+    )
+    course = FakeUpdateCourse([])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_upsert(upsert_args(source, tmp_path / "report"))
+
+    report = json.loads((tmp_path / "report" / "assignments-upsert.json").read_text("utf-8"))
+    assert report["status"] == "would_create"
+    assert report["planned_action"] == "create"
+    assert report["create_payload"]["name"] == "Case 1"
+    assert report["lookup"]["status"] == "would_create"
+
+
+def test_command_assignments_upsert_refuses_non_dry_run(tmp_path: Path) -> None:
+    source = tmp_path / "case.md"
+    source.write_text("---\ntitle: Case 1\n---\n\nBody\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="supports --dry-run only"):
+        command_assignments_upsert(upsert_args(source, tmp_path / "report", dry_run=False))
+
+
+def test_command_assignments_upsert_refuses_ambiguous_title_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text("---\ntitle: Case 1\n---\n\nSubmit the case memo.\n", encoding="utf-8")
+    course = FakeUpdateCourse(
+        [
+            FakeAssignment(id=10, name="Case 1", description=""),
+            FakeAssignment(id=11, name="Case 1", description=""),
+        ]
+    )
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        command_assignments_upsert(
+            upsert_args(source, tmp_path / "report", match_title=True, project_root=str(tmp_path))
+        )
+
+    assert excinfo.value.code == 1
+    report = json.loads((tmp_path / "report" / "assignments-upsert.json").read_text("utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text("utf-8"))
+    assert report["status"] == "error"
+    assert report["planned_action"] == "none"
+    assert report["lookup"]["status"] == "ambiguous"
+    assert manifest["status"] == "failed"

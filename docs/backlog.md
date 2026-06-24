@@ -431,8 +431,9 @@ Recommended goals:
    when no ID is available. Dry-run writes a field-by-field report without
    Canvas mutation. Live mode updates supported assignment fields, reads Canvas
    back, writes report evidence, and updates the source map after verified
-   readback. It does not create missing assignments; that remains a future
-   explicit upsert workflow.
+   readback. `danvas assignments upsert SOURCE.md --dry-run` plans whether an
+   upsert would update an ID/source-map/title match or create a new assignment;
+   live upsert remains deferred.
 
    Desired behavior:
 

@@ -361,6 +361,41 @@ def command_assignments_update(args: Any) -> None:
     print(f"Wrote {source_map_path}")
 
 
+def command_assignments_upsert(args: Any) -> None:
+    if not args.dry_run:
+        raise SystemExit("assignments upsert currently supports --dry-run only.")
+    source = Path(args.source)
+    if not source.is_file():
+        raise SystemExit(f"Assignment Markdown source not found: {source}")
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    local = assignment_update_local_source(source)
+    resolved = resolve_source_canvas_id(
+        kind="assignment",
+        source=source,
+        explicit_id=getattr(args, "assignment_id", None),
+        frontmatter_id=local["frontmatter_id"],
+        project_root=project_root,
+    )
+    canvas = canvas_from_args(args)
+    course = canvas.get_course(args.course_id)
+    assignment, lookup = resolve_assignment_for_upsert(
+        course, local, resolved, bool(args.match_title)
+    )
+    canvas_before = assignment_verify_canvas_record(course, assignment) if assignment else None
+    report = build_assignment_upsert_report(
+        course=course,
+        source=source,
+        local=local,
+        resolved=resolved,
+        lookup=lookup,
+        canvas_before=canvas_before,
+    )
+    write_assignment_upsert_report_run(make_assignment_upsert_report_run(args, report), report)
+    print_assignment_upsert_summary(report)
+    if report["status"] == "error":
+        raise SystemExit(1)
+
+
 def load_assignment_markdown(source: Path) -> dict[str, Any]:
     text = source.read_text(encoding="utf-8-sig")
     metadata, body = parse_frontmatter(text, source, "Assignment")
@@ -537,6 +572,49 @@ def resolve_assignment_for_update(
     }
 
 
+def resolve_assignment_for_upsert(
+    course: Any, local: dict[str, Any], resolved: dict[str, Any], match_title: bool
+) -> tuple[Any | None, dict[str, Any]]:
+    assignment_id = resolved.get("id")
+    if assignment_id is not None:
+        try:
+            assignment = course.get_assignment(assignment_id)
+        except ResourceDoesNotExist:
+            return None, {
+                "method": resolved["source"],
+                "status": "would_create",
+                "reason": f"Canvas assignment ID {assignment_id} was not found.",
+            }
+        return assignment, {"method": resolved["source"], "status": "would_update", "reason": ""}
+    if not match_title:
+        return None, {
+            "method": "none",
+            "status": "would_create",
+            "reason": "No assignment ID resolved; upsert would create a new assignment.",
+        }
+    title = str(local["assignment"].get("name") or "")
+    matches = []
+    for assignment in course.get_assignments():
+        payload = canvas_object_to_dict(assignment)
+        candidate = first_value(assignment, payload, "name", "title")
+        if str(candidate or "").strip() == title:
+            matches.append(assignment)
+    if len(matches) == 1:
+        return matches[0], {"method": "title", "status": "would_update", "reason": ""}
+    if not matches:
+        return None, {
+            "method": "title",
+            "status": "would_create",
+            "reason": f"No Canvas assignment title matched {title!r}; upsert would create.",
+        }
+    ids = ", ".join(str(first_value(item, canvas_object_to_dict(item), "id")) for item in matches)
+    return None, {
+        "method": "title",
+        "status": "ambiguous",
+        "reason": f"Multiple Canvas assignments matched {title!r}: {ids}.",
+    }
+
+
 def assignment_group_name(course: Any, group_id: Any) -> str:
     if group_id in {"", None}:
         return ""
@@ -689,6 +767,48 @@ def build_assignment_update_report(
             "status": readback_status,
             "checks": after_checks,
         },
+    }
+
+
+def build_assignment_upsert_report(
+    *,
+    course: Any,
+    source: Path,
+    local: dict[str, Any],
+    resolved: dict[str, Any],
+    lookup: dict[str, Any],
+    canvas_before: dict[str, Any] | None,
+) -> dict[str, Any]:
+    local_record = assignment_update_local_compare_record(local)
+    diff = assignment_verify_checks(local_record, canvas_before) if canvas_before else []
+    if lookup["status"] == "would_update":
+        action = "update"
+        status = "would_update"
+    elif lookup["status"] == "would_create":
+        action = "create"
+        status = "would_create"
+    else:
+        action = "none"
+        status = "error"
+    return {
+        "course": canvas_object_to_dict(course),
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "source": str(source),
+        "dry_run": True,
+        "status": status,
+        "planned_action": action,
+        "assignment_id": resolved.get("id") or first_value_from_record(canvas_before, "id"),
+        "id_resolution": {
+            "source": resolved.get("source"),
+            "path": resolved.get("path"),
+            "id": resolved.get("id"),
+        },
+        "lookup": lookup,
+        "local": local_record,
+        "canvas_before": canvas_before or {},
+        "create_payload": local["assignment"] if action == "create" else {},
+        "update_payload": assignment_update_payload(local["assignment"]) if action == "update" else {},
+        "diff": diff,
     }
 
 
@@ -897,6 +1017,54 @@ def write_assignment_update_report_run(
         raise
 
 
+def make_assignment_upsert_report_run(args: Any, report: dict[str, Any]) -> ReportRun | None:
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
+    report_slug = getattr(args, "report_slug", None)
+    if not should_write_report_run(
+        no_report=bool(getattr(args, "no_report", False)),
+        legacy_output=False,
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        return None
+    return create_report_run(
+        command="assignments upsert",
+        slug=report_slug or "assignments-upsert",
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        course_id=getattr(args, "course_id", None),
+        input_paths=[Path(report["source"])],
+        private_data=False,
+    )
+
+
+def write_assignment_upsert_report_run(
+    report_run: ReportRun | None, report: dict[str, Any]
+) -> None:
+    if report_run is None:
+        return
+    try:
+        json_path = report_run.write_json("assignments-upsert.json", report)
+        md_path = report_run.write_text(
+            "assignments-upsert.md", render_assignment_upsert_markdown(report)
+        )
+        manifest_path = report_run.finish(
+            "success" if report["status"] in {"would_create", "would_update"} else "failed"
+        )
+        print(f"Wrote {json_path}")
+        print(f"Wrote {md_path}")
+        print(f"Wrote {manifest_path}")
+        print(f"Report directory: {report_run.path}")
+    except Exception as exc:
+        report_run.finish("failed", error=str(exc))
+        raise
+
+
 def render_assignment_verify_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Assignments Verify",
@@ -970,6 +1138,51 @@ def render_assignment_update_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_assignment_upsert_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Assignments Upsert",
+        "",
+        f"- Status: `{report['status']}`",
+        f"- Planned action: `{report['planned_action']}`",
+        f"- Dry run: `{report['dry_run']}`",
+        f"- Source: `{report['source']}`",
+        f"- Assignment ID: `{report.get('assignment_id') or ''}`",
+        f"- ID resolution: `{report['id_resolution']['source']}`",
+        f"- Lookup: `{report['lookup']['status']}` via `{report['lookup']['method']}`",
+    ]
+    if report["lookup"].get("reason"):
+        lines.append(f"- Reason: {report['lookup']['reason']}")
+    if report["planned_action"] == "update":
+        lines.extend(
+            [
+                "",
+                "## Planned Update Diff",
+                "",
+                "| Field | Local | Canvas before | Status |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for check in report["diff"]:
+            status = "matches" if check["matches"] else "would change"
+            lines.append(
+                f"| {check['field']} | `{check['local']}` | `{check['canvas']}` | `{status}` |"
+            )
+    elif report["planned_action"] == "create":
+        lines.extend(
+            [
+                "",
+                "## Planned Create",
+                "",
+                "| Field | Value |",
+                "| --- | --- |",
+            ]
+        )
+        for key, value in sorted(report["local"].items()):
+            if value is not None and value != "":
+                lines.append(f"| {key} | `{value}` |")
+    return "\n".join(lines) + "\n"
+
+
 def print_assignment_verify_summary(report: dict[str, Any]) -> None:
     print(f"Assignment verify: {report['status']}")
     for check in report["checks"]:
@@ -986,3 +1199,13 @@ def print_assignment_update_summary(report: dict[str, Any]) -> None:
         print(f"  {check['field']}: {marker}")
     if report["readback"]["status"] != "skipped":
         print(f"  readback: {report['readback']['status']}")
+
+
+def print_assignment_upsert_summary(report: dict[str, Any]) -> None:
+    print(f"Assignment upsert: {report['status']}")
+    print(f"  planned action: {report['planned_action']}")
+    if report["lookup"].get("reason"):
+        print(f"  {report['lookup']['reason']}")
+    for check in report["diff"]:
+        marker = "OK" if check["matches"] else "CHANGE"
+        print(f"  {check['field']}: {marker}")

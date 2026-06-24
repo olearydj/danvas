@@ -24,6 +24,7 @@ from danvas.assignments import (
     command_assignments_create,
     command_assignments_export,
     command_assignments_update,
+    command_assignments_upsert,
     command_assignments_verify,
 )
 from danvas.auth import DEFAULT_API_URL, command_auth_doctor
@@ -821,6 +822,77 @@ def assignments_update(
 ) -> None:
     run_command(
         command_assignments_update,
+        args_for(
+            course_id=course_id,
+            source=str(source),
+            assignment_id=assignment_id,
+            match_title=match_title,
+            dry_run=dry_run,
+            project_root=str(project_root),
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@assignments_app.command(
+    "upsert",
+    help="Plan whether one assignment source would update an existing assignment or create a new one.",
+)
+def assignments_upsert(
+    source: Annotated[
+        Path,
+        typer.Argument(
+            help="Markdown source to plan as an assignment create-or-update operation."
+        ),
+    ],
+    course_id: CourseId = None,
+    assignment_id: Annotated[
+        int | None,
+        typer.Option("--assignment-id", help="Canvas assignment ID to update if present."),
+    ] = None,
+    match_title: Annotated[
+        bool,
+        typer.Option(
+            "--match-title",
+            help="Resolve by exact Canvas assignment title only when no ID is available.",
+        ),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Required. Plan whether upsert would create or update without mutating Canvas.",
+        ),
+    ] = False,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_assignments_upsert,
         args_for(
             course_id=course_id,
             source=str(source),

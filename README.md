@@ -127,6 +127,7 @@ danvas
 │   ├── create
 │   ├── verify
 │   ├── update
+│   ├── upsert
 │   └── audit
 ├── gradebook
 │   ├── check
@@ -380,6 +381,7 @@ danvas assignments export --course-id 1706414 --output assignments-md --format m
 danvas assignments create --course-id 1706414 assignments/hw1.md --dry-run
 danvas assignments verify --course-id 1706414 assignments/hw1.md
 danvas assignments update --course-id 1706414 assignments/hw1.md --dry-run
+danvas assignments upsert --course-id 1706414 assignments/hw1.md --dry-run
 danvas assignments audit assignments-full.json --course-yaml course.yaml
 
 # Submissions and feedback
