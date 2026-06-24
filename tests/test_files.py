@@ -8,6 +8,7 @@ import pytest
 
 from danvas.files import (
     build_file_inventory,
+    command_files_compare,
     command_files_download,
     command_files_inventory,
     command_files_upload,
@@ -280,6 +281,140 @@ def test_command_files_download_deduplicates_colliding_names(
     )
     assert [row["deduplicated"] for row in manifest["files"]] == [True, True]
     assert [row["status"] for row in manifest["files"]] == ["downloaded", "downloaded"]
+
+
+def test_command_files_compare_writes_report_dir_by_file_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "case.pdf"
+    source.write_bytes(b"x" * 7)
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        local=str(source),
+        file_id=10,
+        canvas_path=None,
+        output=None,
+        no_report=False,
+        report_root=None,
+        report_dir=str(tmp_path / "report"),
+        report_slug=None,
+    )
+
+    command_files_compare(args)
+
+    report = json.loads((tmp_path / "report" / "files-compare.json").read_text(encoding="utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text(encoding="utf-8"))
+    md = (tmp_path / "report" / "files-compare.md").read_text(encoding="utf-8")
+    assert report["status"] == "matches"
+    assert report["canvas"]["id"] == 10
+    assert report["canvas"]["canvas_path"] == "course files/cases/case.pdf"
+    assert report["comparisons"]["size"]["matches"] is True
+    assert manifest["command"] == "files compare"
+    assert manifest["report_slug"] == "files-compare"
+    assert manifest["files"] == ["files-compare.json", "files-compare.md"]
+    assert "metadata-only comparison" in md
+    assert "File compare: matches" in capsys.readouterr().out
+
+
+def test_command_files_compare_by_canvas_path_writes_legacy_output_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "renamed.pdf"
+    source.write_bytes(b"short")
+    output = tmp_path / "compare.json"
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=str(tmp_path),
+        local=str(source),
+        file_id=None,
+        canvas_path="course files/cases/case.pdf",
+        output=str(output),
+        no_report=False,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    command_files_compare(args)
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["status"] == "mismatch"
+    assert report["comparisons"]["name"]["matches"] is False
+    assert report["comparisons"]["size"]["matches"] is False
+    assert not (tmp_path / ".danvas" / "reports").exists()
+
+
+def test_command_files_compare_defaults_to_project_report_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "case.pdf"
+    source.write_bytes(b"x" * 7)
+    (tmp_path / ".danvas").mkdir()
+    (tmp_path / ".danvas" / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=str(tmp_path),
+        local=str(source),
+        file_id=10,
+        canvas_path=None,
+        output=None,
+        no_report=False,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    command_files_compare(args)
+
+    report_dirs = list((tmp_path / ".danvas" / "reports").iterdir())
+    assert len(report_dirs) == 1
+    assert report_dirs[0].name.endswith("-files-compare")
+    assert (report_dirs[0] / "files-compare.json").is_file()
+    assert (report_dirs[0] / "files-compare.md").is_file()
+
+
+def test_command_files_compare_rejects_invalid_targets_before_canvas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "case.pdf"
+    source.write_bytes(b"x" * 7)
+
+    def fail_canvas(args: object) -> object:
+        raise AssertionError("Canvas should not be contacted")
+
+    monkeypatch.setattr("danvas.files.canvas_from_args", fail_canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        local=str(source),
+        file_id=10,
+        canvas_path="course files/cases/case.pdf",
+        output=None,
+        no_report=False,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit, match="Use either --file-id or --canvas-path"):
+        command_files_compare(args)
+
+    args.file_id = None
+    args.canvas_path = None
+    with pytest.raises(SystemExit, match="Canvas file target required"):
+        command_files_compare(args)
+
+    args.file_id = 10
+    args.local = str(tmp_path / "missing.pdf")
+    with pytest.raises(SystemExit, match="Local file not found"):
+        command_files_compare(args)
 
 
 def test_content_type_for_uses_office_mappings() -> None:

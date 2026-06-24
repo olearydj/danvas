@@ -73,10 +73,11 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - optional JSON, CSV, or Markdown output
   - filters replies to the authenticated user by default, so student replies are excluded
 
-- inventory, upload, and download course files
+- inventory, compare, upload, and download course files
   - exports Canvas Files metadata to JSON and CSV without download URLs
   - optionally compares Canvas filenames and sizes to a local course root (`--local-root`)
   - writes a dated report run with JSON, CSV, manifest, and Markdown missing-file report by default
+  - compares one Canvas file's metadata to one local file by file ID or exact Canvas path
   - uploads one or more local files to an existing Canvas Files folder with dry-run support and report-run support
   - downloads Canvas Files into a local folder tree with a manifest
 
@@ -137,6 +138,7 @@ danvas
 ├── files
 │   ├── inventory
 │   ├── download
+│   ├── compare
 │   └── upload
 ├── reports
 │   ├── list
@@ -271,8 +273,8 @@ max_snapshot_age_hours = 72
 
 ## Report Runs
 
-Report-first commands such as assignment audits, file inventories, gradebook
-checks/audits, and quiz analyses write dated run directories under
+Report-first commands such as assignment audits, file inventories, file
+comparisons, gradebook checks/audits, and quiz analyses write dated run directories under
 `.danvas/reports/` by default when a course project is available:
 
 ```text
@@ -364,6 +366,11 @@ danvas files upload --course-id 1742717 --folder "course files/slides" \
   --dry-run content/slides/example.pptx
 danvas files upload --course-id 1742717 --folder-id 15968602 \
   --on-duplicate overwrite --output .danvas/uploaded-files.json content/slides/example.pptx
+danvas files compare --course-id 1742717 --file-id 284879389 \
+  --local content/slides/example.pptx
+danvas files compare --course-id 1742717 \
+  --canvas-path "course files/slides/example.pptx" \
+  --local content/slides/example.pptx
 danvas files download --course-id 1742717 --output-dir .danvas/canvas-files
 
 # Reports

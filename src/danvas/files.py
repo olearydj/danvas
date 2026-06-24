@@ -193,6 +193,32 @@ def command_files_download(args: Any) -> None:
     print(json.dumps(dict(sorted(statuses.items())), indent=2, sort_keys=True))
 
 
+def command_files_compare(args: Any) -> None:
+    validate_compare_target(getattr(args, "file_id", None), getattr(args, "canvas_path", None))
+    if not getattr(args, "local", None):
+        raise SystemExit("Local file required. Pass --local.")
+    local_path = Path(args.local)
+    local_row = local_file_compare_record(local_path)
+    canvas = canvas_from_args(args)
+    course = canvas.get_course(args.course_id)
+    canvas_row = resolve_canvas_file_record(
+        course,
+        file_id=getattr(args, "file_id", None),
+        canvas_path=getattr(args, "canvas_path", None),
+    )
+    report = build_file_compare_report(
+        course=course,
+        canvas_row=canvas_row,
+        local_row=local_row,
+    )
+
+    if getattr(args, "output", None):
+        write_json(Path(args.output), report)
+        print(f"Wrote {args.output}")
+    write_files_compare_report_run(make_files_compare_report_run(args, report, local_path), report)
+    print_file_compare_summary(report)
+
+
 def command_files_upload(args: Any) -> None:
     local_rows = validate_upload_files([Path(path) for path in args.files], args.on_duplicate)
     validate_upload_destination(args.folder, args.folder_id)
@@ -304,6 +330,52 @@ def write_files_upload_report_run(report_run: ReportRun | None, report: dict[str
         raise
 
 
+def make_files_compare_report_run(
+    args: Any, report: dict[str, Any], local_path: Path
+) -> ReportRun | None:
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
+    report_slug = getattr(args, "report_slug", None)
+    if not should_write_report_run(
+        no_report=bool(getattr(args, "no_report", False)),
+        legacy_output=bool(getattr(args, "output", None)),
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        return None
+    return create_report_run(
+        command="files compare",
+        slug=report_slug or "files-compare",
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        course_id=report["course_id"],
+        input_paths=[local_path],
+        private_data=False,
+    )
+
+
+def write_files_compare_report_run(
+    report_run: ReportRun | None, report: dict[str, Any]
+) -> None:
+    if report_run is None:
+        return
+    try:
+        json_path = report_run.write_json("files-compare.json", report)
+        md_path = report_run.write_text("files-compare.md", render_file_compare_markdown(report))
+        manifest_path = report_run.finish()
+        print(f"Wrote {json_path}")
+        print(f"Wrote {md_path}")
+        print(f"Wrote {manifest_path}")
+        print(f"Report directory: {report_run.path}")
+    except Exception as exc:
+        report_run.finish("failed", error=str(exc))
+        raise
+
+
 def build_file_inventory(course: Any, local_root: Path | None = None) -> dict[str, Any]:
     folders = list(course.get_folders())
     folders_by_id = {int(folder.id): folder for folder in folders if getattr(folder, "id", None)}
@@ -338,6 +410,161 @@ def build_file_inventory(course: Any, local_root: Path | None = None) -> dict[st
         "canvas_files": canvas_rows,
         "comparison": comparison_rows,
     }
+
+
+def validate_compare_target(file_id: int | None, canvas_path: str | None) -> None:
+    if file_id is not None and canvas_path:
+        raise SystemExit("Use either --file-id or --canvas-path, not both.")
+    if file_id is None and not canvas_path:
+        raise SystemExit("Canvas file target required. Pass --file-id or --canvas-path.")
+
+
+def local_file_compare_record(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise SystemExit(f"Local file not found: {path}")
+    if not path.is_file():
+        raise SystemExit(f"Local path is not a file: {path}")
+    stat = path.stat()
+    return {
+        "path": str(path),
+        "name": path.name,
+        "size": stat.st_size,
+        "content_type": content_type_for(path),
+        "mtime": datetime.fromtimestamp(stat.st_mtime).astimezone().isoformat(
+            timespec="seconds"
+        ),
+    }
+
+
+def resolve_canvas_file_record(
+    course: Any, *, file_id: int | None, canvas_path: str | None
+) -> dict[str, Any]:
+    folders = list(course.get_folders())
+    folders_by_id = {int(folder.id): folder for folder in folders if getattr(folder, "id", None)}
+    records = [
+        canvas_file_record(file_obj, folders_by_id) for file_obj in course.get_files()
+    ]
+    if file_id is not None:
+        for record in records:
+            if int_or_none(record.get("id")) == int(file_id):
+                return record
+        raise SystemExit(f"Canvas file not found by ID: {file_id}")
+
+    requested = str(canvas_path or "")
+    matches = [
+        record
+        for record in records
+        if requested in canvas_file_path_candidates(record)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise SystemExit(f"Canvas file path is ambiguous: {requested}")
+    raise SystemExit(f"Canvas file not found by path: {requested}")
+
+
+def canvas_file_path_candidates(record: dict[str, Any]) -> set[str]:
+    folder = str(record.get("folder_full_name") or "").strip("/")
+    display_name = str(record.get("display_name") or "")
+    filename = str(record.get("filename") or "")
+    candidates = {str(record.get("canvas_path") or "")}
+    for name in (display_name, filename):
+        if not name:
+            continue
+        candidates.add("/".join(part for part in [folder, name] if part))
+    return {candidate for candidate in candidates if candidate}
+
+
+def build_file_compare_report(
+    *, course: Any, canvas_row: dict[str, Any], local_row: dict[str, Any]
+) -> dict[str, Any]:
+    comparisons = {
+        "name": {
+            "matches": local_row["name"]
+            in {canvas_row["display_name"], canvas_row["filename"]},
+            "canvas": canvas_row["display_name"],
+            "local": local_row["name"],
+        },
+        "size": {
+            "matches": canvas_row.get("size") == local_row["size"],
+            "canvas": canvas_row.get("size"),
+            "local": local_row["size"],
+        },
+        "content_type": {
+            "matches": canvas_row.get("content_type") == local_row["content_type"],
+            "canvas": canvas_row.get("content_type") or "",
+            "local": local_row["content_type"],
+        },
+    }
+    status = (
+        "matches"
+        if all(bool(item["matches"]) for item in comparisons.values())
+        else "mismatch"
+    )
+    return {
+        "course_id": get_canvas_value(course, "id"),
+        "course_name": str(get_canvas_value(course, "name") or ""),
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "status": status,
+        "canvas": {
+            "id": canvas_row.get("id"),
+            "display_name": canvas_row.get("display_name") or "",
+            "filename": canvas_row.get("filename") or "",
+            "folder_id": canvas_row.get("folder_id"),
+            "folder_full_name": canvas_row.get("folder_full_name") or "",
+            "canvas_path": canvas_row.get("canvas_path") or "",
+            "size": canvas_row.get("size"),
+            "content_type": canvas_row.get("content_type") or "",
+            "updated_at": canvas_row.get("updated_at") or "",
+        },
+        "local": local_row,
+        "comparisons": comparisons,
+    }
+
+
+def print_file_compare_summary(report: dict[str, Any]) -> None:
+    print(f"File compare: {report['status']}")
+    print(f"  Canvas: {report['canvas']['canvas_path']} (id {report['canvas']['id']})")
+    print(f"  Local: {report['local']['path']}")
+    for label, row in report["comparisons"].items():
+        marker = "OK" if row["matches"] else "MISMATCH"
+        print(f"  {label}: {marker}")
+
+
+def render_file_compare_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Files Compare",
+        "",
+        f"- Status: `{report['status']}`",
+        f"- Course: `{report['course_id']}` {report['course_name']}".rstrip(),
+        f"- Canvas file: `{report['canvas']['canvas_path']}`",
+        f"- Local file: `{report['local']['path']}`",
+        "",
+        "## Metadata",
+        "",
+        "| Field | Canvas | Local | Status |",
+        "| --- | --- | --- | --- |",
+    ]
+    labels = {
+        "name": "Name",
+        "size": "Size",
+        "content_type": "Content type",
+    }
+    for key, label in labels.items():
+        row = report["comparisons"][key]
+        status = "matches" if row["matches"] else "mismatch"
+        lines.append(f"| {label} | `{row['canvas']}` | `{row['local']}` | `{status}` |")
+    lines.extend(
+        [
+            f"| Updated time | `{report['canvas']['updated_at']}` | "
+            f"`{report['local']['mtime']}` | `diagnostic` |",
+            "",
+            "This is a metadata-only comparison. It does not download the Canvas file "
+            "or compare file contents.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def validate_upload_files(files: list[Path], on_duplicate: str) -> list[dict[str, Any]]:

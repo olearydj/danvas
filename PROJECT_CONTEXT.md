@@ -37,7 +37,8 @@ removed after their useful content was consolidated into this file and
 - `src/danvas/status.py`: read-only Canvas-vs-local status report.
 - `src/danvas/assignments.py`, `announcements.py`, `discussions.py`: course
   object operations.
-- `src/danvas/files.py`: Canvas Files inventory, download, and upload.
+- `src/danvas/files.py`: Canvas Files inventory, targeted metadata compare,
+  download, and upload.
 - `src/danvas/quiz_import.py`, `quiz.py`: QTI import and quiz analysis.
 - `src/danvas/gradebook.py`, `assignment_audit.py`, `grades.py`,
   `submissions.py`: grading and audit workflows.
@@ -81,6 +82,35 @@ and the external Codex teaching skill docs:
   privacy surface.
 - `danvas quiz analysis` analyzes Canvas student-analysis CSV exports. Source
   Markdown quiz analysis remains separate tooling unless explicitly consolidated.
+
+## Report Output Contract
+
+Classify every new command before implementation:
+
+- `report-run-first`: audits, verification, reconciliation, comparisons, and
+  dry-run/readback evidence. These commands should save a report run by default
+  when a course project is discoverable.
+- `explicit-output`: raw exports, rosters, submissions, grades, downloads, and
+  captions. These should keep explicit output files or directories by default.
+- `stdout-first`: quick inspection commands. Preserve existing terminal behavior
+  and add report output only through explicit report options.
+
+Report-run-first commands should normally support `--no-report`, `--report-root`,
+`--report-dir`, and a command-specific slug. They should write `manifest.json`, a
+command-specific JSON file, and a Markdown file when human review matters.
+
+Compatibility-sensitive commands, such as `status` and `refresh --diff`, should
+preserve default behavior and write report runs only when explicit report options
+are passed.
+
+Tests for report-producing commands should cover CLI option presence, default or
+explicit report output behavior, legacy output compatibility, report option
+conflicts, failed manifests when practical, and the absence of verifier URLs or
+unmarked private student data.
+
+Docs for command-surface changes should update `README.md`, relevant backlog
+status, and the external teaching-danvas command reference. Update the main
+teaching-danvas skill only when behavior changes agent defaults.
 
 ## Recurring Pitfalls
 

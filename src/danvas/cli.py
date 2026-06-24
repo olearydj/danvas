@@ -19,7 +19,12 @@ from danvas.auth import DEFAULT_API_URL
 from danvas.config import command_init, command_refresh, resolve_api_url, resolve_course_id
 from danvas.courses import command_courses, command_roster
 from danvas.discussions import command_discussions_export, command_discussions_score
-from danvas.files import command_files_download, command_files_inventory, command_files_upload
+from danvas.files import (
+    command_files_compare,
+    command_files_download,
+    command_files_inventory,
+    command_files_upload,
+)
 from danvas.grades import command_grades_post, command_grades_verify
 from danvas.panopto import command_panopto_captions
 from danvas.quiz_import import command_quiz_import_qti
@@ -1448,6 +1453,75 @@ def files_download(
             course_id=course_id,
             output_dir=str(output_dir),
             overwrite=overwrite,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@files_app.command(
+    "compare",
+    help="Compare Canvas file metadata with one local file and write a report run.",
+)
+def files_compare(
+    course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    local: Annotated[
+        Path | None,
+        typer.Option("--local", help="Local file to compare against Canvas metadata."),
+    ] = None,
+    file_id: Annotated[
+        int | None,
+        typer.Option("--file-id", help="Canvas file ID. Mutually exclusive with --canvas-path."),
+    ] = None,
+    canvas_path: Annotated[
+        str | None,
+        typer.Option(
+            "--canvas-path",
+            help=(
+                "Exact Canvas Files path, for example "
+                "'course files/slides/example.pptx'."
+            ),
+        ),
+    ] = None,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Optional JSON comparison report path."),
+    ] = None,
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_files_compare,
+        args_for(
+            course_id=course_id,
+            project_root=str(project_root),
+            local=str(local) if local else None,
+            file_id=file_id,
+            canvas_path=canvas_path,
+            output=str(output) if output else None,
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

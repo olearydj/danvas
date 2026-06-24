@@ -429,3 +429,55 @@ def test_files_upload_cli_options_and_args(
         "--report-slug",
         "--no-report",
     } <= option_names("files", "upload")
+
+
+def test_files_compare_cli_options_and_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pptx"
+    source.write_text("slides", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_compare(args: SimpleNamespace) -> None:
+        captured.update(vars(args))
+
+    monkeypatch.setattr("danvas.cli.command_files_compare", fake_compare)
+
+    result = runner.invoke(
+        app,
+        [
+            "files",
+            "compare",
+            "--course-id",
+            "101",
+            "--file-id",
+            "10",
+            "--local",
+            str(source),
+            "--output",
+            "compare.json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["course_id"] == 101
+    assert captured["file_id"] == 10
+    assert captured["canvas_path"] is None
+    assert captured["local"] == str(source)
+    assert captured["output"] == "compare.json"
+    assert captured["project_root"] == "."
+    assert captured["no_report"] is False
+    assert captured["report_root"] is None
+    assert captured["report_dir"] is None
+    assert captured["report_slug"] is None
+    assert {
+        "--file-id",
+        "--canvas-path",
+        "--local",
+        "--output",
+        "--course-id",
+        "--report-root",
+        "--report-dir",
+        "--report-slug",
+        "--no-report",
+    } <= option_names("files", "compare")
