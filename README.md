@@ -18,7 +18,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 - discover courses and rosters
   - list active Canvas courses visible to the authenticated user
   - export course rosters by course
-  - roster format includes `CanvasID`, name, email, and SIS ID
+  - roster format includes `CanvasID`, name, Canvas login ID in the `Email` column, and SIS ID
 
 - export assignments from Canvas by course
   - JSON, CSV, Markdown directory formats
@@ -361,6 +361,9 @@ Roster exports include:
 ```text
 CanvasID,Name,Email,SIS_ID
 ```
+
+The `Email` column is populated from Canvas `login_id`; in many courses that is
+an email address, but it should be treated as the Canvas login identifier.
 
 Grade uploads require `CanvasID` and `Grade`; `Name` and `Comment` are optional:
 

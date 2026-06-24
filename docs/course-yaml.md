@@ -36,6 +36,11 @@ danvas gradebook audit final-canvas-gradebook.csv --course-yaml course.yaml
 `weights`
 : Expected assignment group weights as percentages. Group names should match Canvas assignment group names.
 
+`assignment_groups`
+: Alias for `weights`. It may be a mapping of group name to weight or a list of
+  objects with `name` and `weight` fields. Prefer `weights` for new files unless
+  an existing course config already uses `assignment_groups`.
+
 `final_score_reconstruction`
 : Optional rules for courses where the posted final score is a base score plus adjustment assignments.
 
