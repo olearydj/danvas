@@ -330,7 +330,8 @@ may read the source map but do not update it.
 ## Report Runs
 
 Report-first commands such as assignment audits, file inventories, file
-comparisons, gradebook checks/audits, and quiz analyses write dated run directories under
+comparisons, gradebook checks/audits, quiz analyses, source sync, verification,
+and update dry-run/readback workflows write dated run directories under
 `.danvas/reports/` by default when a course project is available:
 
 ```text

@@ -54,9 +54,9 @@ feature sprints or new commands, and the patch version for fixes.
 Recommended local checks:
 
 ```bash
-./.venv/bin/ruff check .
-./.venv/bin/ty check
-./.venv/bin/python -m pytest
+uv run ruff check .
+uv run ty check
+uv run pytest
 ```
 
 CI runs the same checks on push and pull request. Tag releases only after the

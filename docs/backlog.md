@@ -15,15 +15,15 @@ closed.
 | Area | Delivered by | Remaining follow-up, if any |
 |---|---|---|
 | Expanded course snapshot | `danvas refresh`, schema version 2 | Add sections/enrollments if roster workflows need them. |
-| Read-only Canvas/local status | `danvas status` | Add source-sync helpers that create local Markdown from Canvas-only items. |
-| Refresh diff | `danvas refresh --diff` | Make diff output report-run aware. |
-| Local source discovery | `danvas.sources` plus `[sources.<kind>]` config | Reuse in update, verify, and sync commands. |
+| Read-only Canvas/local status | `danvas status` | Continue refining next-action hints as new source workflows land. |
+| Refresh diff | `danvas refresh --diff` | Plain diff remains terminal-first; report output is available through explicit report options. |
+| Local source discovery | `danvas.sources` plus `[sources.<kind>]` config | Continue reusing in future source-aware commands. |
 | Quiz shell awareness | `danvas status` | Do not compare quiz question bodies unless snapshots later include item data. |
 | QTI import, publish, verify | `danvas quiz import-qti` | Resolve assignment groups by configured name, if useful. |
 | Canvas Files upload v1 | `danvas files upload` | Markdown asset rewriting and optional folder creation remain separate future work. |
 | Targeted file download/compare | `danvas files download-one`, `danvas files compare` | One-file explicit download, metadata compare, and SHA-256 compare against a supplied downloaded Canvas file are delivered; Office package-part comparison is deferred. |
 | File inventory ignore rules | `danvas files inventory`; `[files.inventory] ignore` | Configurable local-scan ignores are delivered; keep future inventory filtering scoped to local generated/cache noise. |
-| Generated report runs | `danvas.reports`; adopted by report-producing commands | Add report discovery commands and make new verify/reconcile commands report-first. |
+| Generated report runs | `danvas.reports`; adopted by report-producing commands | Keep future verify/reconcile/compare/readback commands report-first unless they are raw exports or downloads. |
 | Report polish | status next actions, file diagnostics, assignment-audit notes | Continue improving command-specific reports as field use reveals friction. |
 | Mutation banners | shared guardrail pattern | Apply consistently to future mutating commands. |
 
@@ -56,12 +56,12 @@ sprint sequence as canonical.
 | Sprint 2: group planning from roster | Not started | Sprint Candidate E. |
 | Sprint 2: seeded discussion creation | Not started | Sprint Candidate E, only if still needed for grouped-case workflow. |
 | Sprint 2: basic `files upload` | Done | Delivered Baseline; future work is Markdown asset rewriting and optional explicit folder creation. |
-| Sprint 2: due-date ergonomics | Not started | Smaller Backlog Items. |
+| Sprint 2: due-date ergonomics | Done | Smaller Backlog Items; date-only assignment fields are delivered. |
 | Sprint 2 stretch: transcript filing helper | Not started | Smaller Backlog Items. |
 | Sprint 3: assignment update/upsert | Done | Candidate D; assignment create writes source-map provenance, update is live with readback verification, and upsert plans then requires `--confirm create` or `--confirm update` for live mutation. |
 | Sprint 3: announcement/discussion update pattern | Partial | Sprint Candidate D; announcement update is delivered, discussion update remains deferred until needed. |
-| Sprint 3: readback verification | Not started | Sprint Candidate C. |
-| Sprint 3: round-trip metadata | Not started | Sprint Candidate C, before broad update/upsert work. |
+| Sprint 3: readback verification | Partial | Sprint Candidates C and D; delivered for assignment create/update/upsert and announcement update, not yet broad across every write workflow. |
+| Sprint 3: round-trip metadata | Done | Sprint Candidate C; `.danvas/source-map.json` design and helpers are delivered for current update workflows. |
 | Sprint 3: Markdown asset rewriting | Not started | Sprint Candidate D, building on delivered `files upload`. |
 | Sprint 3: single-file download and compare | Done | Candidate B; `files download-one`, `files compare` metadata, and optional checksum against a supplied downloaded Canvas file are delivered. |
 | Sprint 3: file inventory report improvements | Done | Candidate B; report-run foundation, filename diagnostics, targeted metadata compare, downloaded-file checksum compare, and configurable local ignore rules are delivered. |
