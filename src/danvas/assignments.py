@@ -230,9 +230,28 @@ def command_assignments_create(args: Any) -> None:
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     created = course.create_assignment(assignment)
+    created_id = int(first_value(created, canvas_object_to_dict(created), "id"))
+    readback = course.get_assignment(created_id)
+    canvas_record = assignment_verify_canvas_record(course, readback)
     print(f"Created assignment: {created.name} (ID {created.id})")
     if getattr(created, "html_url", None):
         print(f"URL: {created.html_url}")
+    local = assignment_update_local_source(source)
+    source_map_path = write_source_map_entry(
+        kind="assignment",
+        source=source,
+        course_id=getattr(args, "course_id", None),
+        canvas={
+            "id": created_id,
+            "url": canvas_record.get("canvas_url") or getattr(created, "html_url", "") or "",
+            "updated_at": canvas_record.get("assignment", {}).get("updated_at") or "",
+        },
+        command="assignments create",
+        fields=assignment_source_map_fields(local),
+        body_sha256=local["body_sha256"],
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else source,
+    )
+    print(f"Wrote {source_map_path}")
 
 
 def command_assignments_update(args: Any) -> None:

@@ -6,6 +6,7 @@ from typing import Any, cast
 import pytest
 
 from danvas.assignments import (
+    command_assignments_create,
     command_assignments_update,
     command_assignments_verify,
     load_assignment_markdown,
@@ -163,6 +164,85 @@ def test_load_assignment_markdown_rejects_non_mapping_yaml(tmp_path: Path) -> No
 
     with pytest.raises(SystemExit, match="must be a mapping"):
         load_assignment_markdown(source)
+
+
+def test_command_assignments_create_dry_run_does_not_write_source_map(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "assignment.md"
+    source.parent.mkdir()
+    source.write_text("---\ntitle: Case 1\n---\n\nSubmit the case memo.\n", encoding="utf-8")
+
+    def fail_canvas(args: SimpleNamespace) -> None:
+        raise AssertionError("Canvas should not be contacted during create dry-run.")
+
+    monkeypatch.setattr("danvas.assignments.canvas_from_args", fail_canvas)
+
+    command_assignments_create(SimpleNamespace(source=str(source), course_id=101, dry_run=True))
+
+    assert not (tmp_path / ".danvas" / "source-map.json").exists()
+
+
+def test_command_assignments_create_live_reads_back_and_writes_source_map(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "assignment.md"
+    source.parent.mkdir()
+    source.write_text(
+        """---
+title: Case 1
+points_possible: 100
+published: false
+---
+
+Submit the case memo.
+""",
+        encoding="utf-8",
+    )
+
+    created = SimpleNamespace(
+        id=10,
+        name="Case 1",
+        points_possible=100,
+        published=False,
+        description="<p>Submit the case memo.</p>",
+        html_url="https://canvas.example/courses/101/assignments/10",
+        updated_at="2026-06-24T12:00:00Z",
+    )
+
+    class FakeCourse:
+        id = 101
+        name = "Course"
+
+        def create_assignment(self, assignment: dict[str, object]) -> SimpleNamespace:
+            assert assignment["name"] == "Case 1"
+            return created
+
+        def get_assignment(self, assignment_id: int) -> SimpleNamespace:
+            assert assignment_id == 10
+            return created
+
+        def get_assignment_groups(self) -> list[SimpleNamespace]:
+            return []
+
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: FakeCourse()),
+    )
+
+    command_assignments_create(SimpleNamespace(source=str(source), course_id=101, dry_run=False))
+
+    source_map = json.loads((tmp_path / ".danvas" / "source-map.json").read_text("utf-8"))
+    entry = source_map["sources"][0]
+    assert entry["kind"] == "assignment"
+    assert entry["path"] == "content/assignment.md"
+    assert entry["canvas"]["id"] == 10
+    assert entry["canvas"]["url"] == "https://canvas.example/courses/101/assignments/10"
+    assert entry["last_posted"]["command"] == "assignments create"
+    assert entry["last_posted"]["fields"]["title"] == "Case 1"
+    assert "body_sha256" in entry["last_posted"]
 
 
 def test_command_assignments_verify_matches_canvas(

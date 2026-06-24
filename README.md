@@ -316,12 +316,13 @@ max_snapshot_age_hours = 72
 
 ## Source Map
 
-Live update workflows write generated provenance to `.danvas/source-map.json`
-after Canvas readback succeeds. The source map links project-relative authored
-source paths to Canvas object IDs and stores safe comparable metadata plus body
-hashes. It does not store Canvas API tokens, verifier/download URLs, roster data,
-submissions, grades, private comments, or full student content. Dry-runs and
-read-only verification commands may read the source map but do not update it.
+Live assignment create and update workflows write generated provenance to
+`.danvas/source-map.json` after Canvas readback succeeds. The source map links
+project-relative authored source paths to Canvas object IDs and stores safe
+comparable metadata plus body hashes. It does not store Canvas API tokens,
+verifier/download URLs, roster data, submissions, grades, private comments, or
+full student content. Dry-runs and read-only verification commands may read the
+source map but do not update it.
 
 ## Report Runs
 

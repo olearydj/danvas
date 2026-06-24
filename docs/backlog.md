@@ -416,8 +416,8 @@ Recommended goals:
    Status: done. `.danvas/source-map.json` is now backed by reusable helpers for
    load, write, project-relative source keys, ID resolution, and
    front-matter/source-map conflict detection. Dry-runs and read-only commands
-   can read the map; live assignment update writes it only after Canvas readback
-   succeeds.
+   can read the map; live assignment create and update write it only after
+   Canvas readback succeeds.
 
 1. Add conservative assignment update.
 
