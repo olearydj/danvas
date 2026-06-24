@@ -302,15 +302,18 @@ Recommended goals:
    danvas announcements latest --course-id 1742719 --format markdown
    ```
 
-   Status: partial. Delivered: `danvas announcements verify SOURCE` verifies one
+   Status: done. Delivered: `danvas announcements verify SOURCE` verifies one
    local announcement source against Canvas by `canvas_id` front matter or
-   `--announcement-id` and writes report evidence. Remaining: assignment verify
-   and latest-announcement export.
+   `--announcement-id`, and `danvas assignments verify SOURCE` verifies one
+   local assignment source against Canvas by `assignment_id`/`canvas_id`/`id`
+   front matter or `--assignment-id`. Both commands write report evidence.
+   `danvas announcements latest` exports the latest Canvas announcement as
+   Markdown or JSON without mutating Canvas.
 
    Desired behavior:
 
    - Resolve Canvas objects by explicit ID from sidecar metadata, front matter, or
-     CLI option. Delivered for announcements; remaining for assignments.
+     CLI option. Delivered for announcements and assignments.
    - Allow title matching only with an explicit flag and refuse ambiguous matches.
    - Compare stable fields: title, URL, published state, due/unlock/lock dates,
      points, assignment group, submission type, group category, and relevant

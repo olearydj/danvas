@@ -76,6 +76,31 @@ def command_announcements_export(args: Any) -> None:
     print(f"Wrote {len(records)} announcements and {reply_count} filtered replies to {output}")
 
 
+def command_announcements_latest(args: Any) -> None:
+    canvas = canvas_from_args(args)
+    course = canvas.get_course(args.course_id)
+    records = announcement_records(course, reply_user_id=0)
+    if not records:
+        raise SystemExit("No Canvas announcements found.")
+    record = records[-1]
+    payload = {
+        "course": canvas_object_to_dict(course),
+        "announcement": record,
+    }
+    output = Path(args.output) if getattr(args, "output", None) else None
+    fmt = resolve_latest_format(output, args.format)
+    if fmt == "markdown":
+        text = render_latest_announcement_markdown(payload)
+    else:
+        text = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text, encoding="utf-8")
+        print(f"Wrote latest announcement to {output}")
+    else:
+        print(text, end="")
+
+
 def command_announcements_sync(args: Any) -> None:
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
@@ -170,6 +195,14 @@ def resolve_format(output: Path, requested: str) -> str:
     if output.suffix.lower() in {".md", ".markdown"}:
         return "markdown"
     return "json"
+
+
+def resolve_latest_format(output: Path | None, requested: str) -> str:
+    if requested != "auto":
+        return requested
+    if output and output.suffix.lower() == ".json":
+        return "json"
+    return "markdown"
 
 
 def announcement_records(course: Any, reply_user_id: int) -> list[dict[str, Any]]:
@@ -355,6 +388,27 @@ def write_announcements_markdown(output: Path, payload: dict[str, Any]) -> None:
         else:
             lines.extend(["### Filtered Replies", "", "None.", ""])
     output.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def render_latest_announcement_markdown(payload: dict[str, Any]) -> str:
+    course = payload["course"]
+    record = payload["announcement"]
+    lines = [
+        "# Latest Canvas Announcement",
+        "",
+        f"Course: {course.get('name') or course.get('course_code') or course.get('id') or ''}",
+        "",
+        f"## {record['title']}",
+        "",
+        f"- Announcement ID: {record['id']}",
+        f"- Posted: {record['posted_at'] or ''}",
+        f"- URL: {record['html_url'] or ''}",
+        f"- Published: {record['published']}",
+        "",
+        record["message"] or "",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def build_announcements_sync_plan(

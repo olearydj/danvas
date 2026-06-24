@@ -16,10 +16,15 @@ from danvas import __version__, assignment_audit, gradebook, quiz
 from danvas.announcements import (
     command_announcements_create,
     command_announcements_export,
+    command_announcements_latest,
     command_announcements_sync,
     command_announcements_verify,
 )
-from danvas.assignments import command_assignments_create, command_assignments_export
+from danvas.assignments import (
+    command_assignments_create,
+    command_assignments_export,
+    command_assignments_verify,
+)
 from danvas.auth import DEFAULT_API_URL
 from danvas.config import command_init, command_refresh, resolve_api_url, resolve_course_id
 from danvas.courses import command_courses, command_roster
@@ -52,6 +57,7 @@ SecretProvider = Literal["auto", "1password", "env"]
 AssignmentExportFormat = Literal["auto", "json", "csv", "markdown"]
 DiscussionExportFormat = Literal["json", "csv"]
 AnnouncementExportFormat = Literal["auto", "json", "csv", "markdown"]
+AnnouncementLatestFormat = Literal["auto", "json", "markdown"]
 FileDuplicatePolicy = Literal["overwrite", "rename"]
 
 
@@ -667,6 +673,61 @@ def assignments_create(
             course_id=course_id,
             source=str(source),
             dry_run=dry_run,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@assignments_app.command(
+    "verify",
+    help="Read-only verification of one local assignment Markdown source against Canvas by ID.",
+)
+def assignments_verify(
+    source: Annotated[
+        Path,
+        typer.Argument(
+            help="Markdown source with assignment_id/canvas_id front matter, or pass --assignment-id."
+        ),
+    ],
+    course_id: CourseId = None,
+    assignment_id: Annotated[
+        int | None,
+        typer.Option("--assignment-id", help="Canvas assignment ID to verify against."),
+    ] = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_assignments_verify,
+        args_for(
+            course_id=course_id,
+            source=str(source),
+            assignment_id=assignment_id,
+            project_root=str(project_root),
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
@@ -1418,6 +1479,43 @@ def announcements_export(
             output=str(output),
             format=output_format,
             reply_user_id=reply_user_id,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@announcements_app.command(
+    "latest",
+    help="Export the latest Canvas announcement as Markdown or JSON.",
+)
+def announcements_latest(
+    course_id: CourseId = None,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Optional output file. Omit to print to stdout.",
+        ),
+    ] = None,
+    output_format: Annotated[
+        AnnouncementLatestFormat,
+        typer.Option("--format", help="Output format. 'auto' uses Markdown unless output is .json."),
+    ] = "auto",
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_announcements_latest,
+        args_for(
+            course_id=course_id,
+            output=str(output) if output else None,
+            format=output_format,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

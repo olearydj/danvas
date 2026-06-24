@@ -11,6 +11,7 @@ import pytest
 from danvas.announcements import (
     announcement_records,
     command_announcements_create,
+    command_announcements_latest,
     command_announcements_sync,
     command_announcements_verify,
     load_announcement_markdown,
@@ -24,6 +25,9 @@ class FakeCourse:
     course_code = "EX-101"
 
     def __init__(self) -> None:
+        self.id = 101
+        self.name = "Example Course"
+        self.course_code = "EX-101"
         self.topics = [
             SimpleNamespace(
                 id=2,
@@ -286,6 +290,55 @@ Body.
     assert fake_canvas.course.created_payload["published"] is True
     assert fake_canvas.course.created_payload["is_announcement"] is True
     assert fake_canvas.course.created_payload["message"] == "<p>Body.</p>"
+
+
+def test_command_announcements_latest_prints_markdown_by_default(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(course_id=101, output=None, format="auto")
+
+    command_announcements_latest(args)
+
+    output = capsys.readouterr().out
+    assert "# Latest Canvas Announcement" in output
+    assert "## Second Update" in output
+    assert "First Update" not in output
+    assert "- Announcement ID: 2" in output
+    assert "Second body" in output
+
+
+def test_command_announcements_latest_writes_json_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "latest.json"
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(course_id=101, output=str(output), format="auto")
+
+    command_announcements_latest(args)
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["course"]["name"] == "Example Course"
+    assert payload["announcement"]["id"] == 2
+    assert payload["announcement"]["title"] == "Second Update"
+
+
+def test_command_announcements_latest_rejects_empty_course(monkeypatch: pytest.MonkeyPatch) -> None:
+    class EmptyCourse(FakeCourse):
+        topics: list[Any] = []
+
+        def __init__(self) -> None:
+            self.topics = []
+            self.full_topics = {}
+
+    monkeypatch.setattr(
+        "danvas.announcements.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: EmptyCourse()),
+    )
+    args = SimpleNamespace(course_id=101, output=None, format="auto")
+
+    with pytest.raises(SystemExit, match="No Canvas announcements found"):
+        command_announcements_latest(args)
 
 
 def test_command_announcements_sync_dry_run_writes_report_without_content(

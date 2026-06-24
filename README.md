@@ -348,6 +348,7 @@ danvas assignments export --course-id 1706414 --output assignments.json
 danvas assignments export --course-id 1706414 --output assignments.csv
 danvas assignments export --course-id 1706414 --output assignments-md --format markdown
 danvas assignments create --course-id 1706414 assignments/hw1.md --dry-run
+danvas assignments verify --course-id 1706414 assignments/hw1.md
 danvas assignments audit assignments-full.json --course-yaml course.yaml
 
 # Submissions and feedback
@@ -382,6 +383,7 @@ danvas discussions score https://auburn.instructure.com/courses/1655780/discussi
 # Announcements
 danvas announcements create --course-id 1706414 announcements/welcome.md --dry-run
 danvas announcements export --course-id 1655780 --output announcements.md
+danvas announcements latest --course-id 1655780 --format markdown
 danvas announcements sync --course-id 1655780 --output-dir content/announcements --dry-run
 danvas announcements verify --course-id 1655780 content/announcements/001-update.md
 

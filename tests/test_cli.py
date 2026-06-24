@@ -360,6 +360,7 @@ def test_local_report_commands_define_report_options() -> None:
     assert expected <= option_names("gradebook", "audit")
     assert expected <= option_names("quiz", "analysis")
     assert expected <= option_names("files", "upload")
+    assert expected <= option_names("assignments", "verify")
     assert expected <= option_names("announcements", "sync")
     assert expected <= option_names("announcements", "verify")
     assert expected <= option_names("discussions", "sync-prompts")
@@ -412,6 +413,78 @@ def test_announcements_sync_cli_options_and_args(
     assert captured["no_report"] is False
     assert captured["report_dir"] == str(tmp_path / "report")
     assert "--overwrite" not in option_names("announcements", "sync")
+
+
+def test_announcements_latest_cli_options_and_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "latest.md"
+    captured: dict[str, object] = {}
+
+    def fake_latest(args: SimpleNamespace) -> None:
+        captured.update(vars(args))
+
+    monkeypatch.setattr("danvas.cli.command_announcements_latest", fake_latest)
+
+    result = runner.invoke(
+        app,
+        [
+            "announcements",
+            "latest",
+            "--course-id",
+            "101",
+            "--format",
+            "markdown",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["course_id"] == 101
+    assert captured["format"] == "markdown"
+    assert captured["output"] == str(output)
+    assert {"--output", "--format", "--course-id"} <= option_names("announcements", "latest")
+    assert {"--report-root", "--report-dir", "--no-report"}.isdisjoint(
+        option_names("announcements", "latest")
+    )
+
+
+def test_assignments_verify_cli_options_and_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text("---\ntitle: Case 1\nassignment_id: 1\n---\n\nBody\n", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_verify(args: SimpleNamespace) -> None:
+        captured.update(vars(args))
+
+    monkeypatch.setattr("danvas.cli.command_assignments_verify", fake_verify)
+
+    result = runner.invoke(
+        app,
+        [
+            "assignments",
+            "verify",
+            str(source),
+            "--course-id",
+            "101",
+            "--assignment-id",
+            "10",
+            "--report-dir",
+            str(tmp_path / "report"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["course_id"] == 101
+    assert captured["source"] == str(source)
+    assert captured["assignment_id"] == 10
+    assert captured["project_root"] == "."
+    assert captured["no_report"] is False
+    assert captured["report_dir"] == str(tmp_path / "report")
+    assert "--match-title" not in option_names("assignments", "verify")
 
 
 def test_announcements_verify_cli_options_and_args(
