@@ -601,6 +601,8 @@ def test_assignments_upsert_cli_options_and_args(
             "10",
             "--match-title",
             "--dry-run",
+            "--confirm",
+            "update",
             "--report-dir",
             str(tmp_path / "report"),
         ],
@@ -612,6 +614,7 @@ def test_assignments_upsert_cli_options_and_args(
     assert captured["assignment_id"] == 10
     assert captured["match_title"] is True
     assert captured["dry_run"] is True
+    assert captured["confirm"] == "update"
     assert captured["project_root"] == "."
     assert captured["no_report"] is False
     assert captured["report_dir"] == str(tmp_path / "report")
@@ -619,6 +622,7 @@ def test_assignments_upsert_cli_options_and_args(
         "--assignment-id",
         "--match-title",
         "--dry-run",
+        "--confirm",
         "--project-root",
         "--no-report",
         "--report-root",

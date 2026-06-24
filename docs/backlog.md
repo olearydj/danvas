@@ -56,7 +56,7 @@ sprint sequence as canonical.
 | Sprint 2: basic `files upload` | Done | Delivered Baseline; future work is Markdown asset rewriting and optional explicit folder creation. |
 | Sprint 2: due-date ergonomics | Not started | Smaller Backlog Items. |
 | Sprint 2 stretch: transcript filing helper | Not started | Smaller Backlog Items. |
-| Sprint 3: assignment update/upsert | Not started | Sprint Candidate D. |
+| Sprint 3: assignment update/upsert | Done | Candidate D; assignment create writes source-map provenance, update is live with readback verification, and upsert plans then requires `--confirm create` or `--confirm update` for live mutation. |
 | Sprint 3: announcement/discussion update pattern | Not started | Sprint Candidate D, after assignment update proves out. |
 | Sprint 3: readback verification | Not started | Sprint Candidate C. |
 | Sprint 3: round-trip metadata | Not started | Sprint Candidate C, before broad update/upsert work. |
@@ -433,7 +433,8 @@ Recommended goals:
    back, writes report evidence, and updates the source map after verified
    readback. `danvas assignments upsert SOURCE.md --dry-run` plans whether an
    upsert would update an ID/source-map/title match or create a new assignment;
-   live upsert remains deferred.
+   live upsert requires `--confirm create` or `--confirm update` matching the
+   planned action.
 
    Desired behavior:
 

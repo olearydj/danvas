@@ -61,6 +61,7 @@ DiscussionExportFormat = Literal["json", "csv"]
 AnnouncementExportFormat = Literal["auto", "json", "csv", "markdown"]
 AnnouncementLatestFormat = Literal["auto", "json", "markdown"]
 FileDuplicatePolicy = Literal["overwrite", "rename"]
+AssignmentUpsertConfirm = Literal["", "create", "update"]
 
 
 app = typer.Typer(
@@ -868,9 +869,16 @@ def assignments_upsert(
         bool,
         typer.Option(
             "--dry-run",
-            help="Required. Plan whether upsert would create or update without mutating Canvas.",
+            help="Plan whether upsert would create or update without mutating Canvas.",
         ),
     ] = False,
+    confirm: Annotated[
+        AssignmentUpsertConfirm,
+        typer.Option(
+            "--confirm",
+            help="Required for live upsert. Must match the planned action: create or update.",
+        ),
+    ] = "",
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
@@ -899,6 +907,7 @@ def assignments_upsert(
             assignment_id=assignment_id,
             match_title=match_title,
             dry_run=dry_run,
+            confirm=confirm,
             project_root=str(project_root),
             no_report=no_report,
             report_root=str(report_root) if report_root else None,

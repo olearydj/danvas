@@ -521,6 +521,7 @@ class FakeUpdateCourse:
 
     def __init__(self, assignments: list[FakeAssignment]) -> None:
         self.assignments = {int(assignment.id): assignment for assignment in assignments}
+        self.created_payload: dict[str, object] | None = None
 
     def get_assignment(self, assignment_id: int) -> FakeAssignment:
         return self.assignments[int(assignment_id)]
@@ -530,6 +531,21 @@ class FakeUpdateCourse:
 
     def get_assignment_groups(self) -> list[SimpleNamespace]:
         return []
+
+    def create_assignment(self, assignment: dict[str, object]) -> FakeAssignment:
+        self.created_payload = assignment
+        assignment_id = max(self.assignments.keys(), default=9) + 1
+        created = FakeAssignment(
+            id=assignment_id,
+            name=assignment.get("name", ""),
+            points_possible=assignment.get("points_possible", ""),
+            published=assignment.get("published", ""),
+            description=assignment.get("description", ""),
+            html_url=f"https://canvas.example/courses/101/assignments/{assignment_id}",
+            updated_at="2026-06-24T12:00:00Z",
+        )
+        self.assignments[assignment_id] = created
+        return created
 
 
 def test_command_assignments_update_dry_run_writes_diff_report(
@@ -788,8 +804,101 @@ def test_command_assignments_upsert_refuses_non_dry_run(tmp_path: Path) -> None:
     source = tmp_path / "case.md"
     source.write_text("---\ntitle: Case 1\n---\n\nBody\n", encoding="utf-8")
 
-    with pytest.raises(SystemExit, match="supports --dry-run only"):
+    with pytest.raises(SystemExit, match="requires --confirm"):
         command_assignments_upsert(upsert_args(source, tmp_path / "report", dry_run=False))
+
+
+def test_command_assignments_upsert_live_confirmed_create_writes_source_map(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text(
+        "---\ntitle: Case 1\npoints_possible: 100\n---\n\nSubmit the case memo.\n",
+        encoding="utf-8",
+    )
+    course = FakeUpdateCourse([])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_upsert(
+        upsert_args(
+            source,
+            tmp_path / "report",
+            dry_run=False,
+            confirm="create",
+            project_root=str(tmp_path),
+        )
+    )
+
+    assert course.created_payload is not None
+    assert course.created_payload["name"] == "Case 1"
+    source_map = json.loads((tmp_path / ".danvas" / "source-map.json").read_text("utf-8"))
+    assert source_map["sources"][0]["last_posted"]["command"] == "assignments create"
+
+
+def test_command_assignments_upsert_live_confirmed_update_writes_update_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text(
+        "---\nassignment_id: 10\ntitle: Case 1 revised\n---\n\nSubmit the case memo.\n",
+        encoding="utf-8",
+    )
+    assignment = FakeAssignment(id=10, name="Case 1", description="<p>Old body.</p>")
+    course = FakeUpdateCourse([assignment])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_upsert(
+        upsert_args(
+            source,
+            tmp_path / "report",
+            dry_run=False,
+            confirm="update",
+            project_root=str(tmp_path),
+        )
+    )
+
+    assert assignment.edits
+    report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
+    assert report["status"] == "updated"
+    source_map = json.loads((tmp_path / ".danvas" / "source-map.json").read_text("utf-8"))
+    assert source_map["sources"][0]["last_posted"]["command"] == "assignments update"
+
+
+def test_command_assignments_upsert_live_refuses_confirm_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text("---\ntitle: Case 1\n---\n\nSubmit the case memo.\n", encoding="utf-8")
+    course = FakeUpdateCourse([])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    with pytest.raises(SystemExit, match="refusing --confirm 'update'"):
+        command_assignments_upsert(
+            upsert_args(
+                source,
+                tmp_path / "report",
+                dry_run=False,
+                confirm="update",
+                project_root=str(tmp_path),
+            )
+        )
+
+    assert course.created_payload is None
 
 
 def test_command_assignments_upsert_refuses_ambiguous_title_match(

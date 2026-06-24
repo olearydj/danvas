@@ -382,6 +382,7 @@ danvas assignments create --course-id 1706414 assignments/hw1.md --dry-run
 danvas assignments verify --course-id 1706414 assignments/hw1.md
 danvas assignments update --course-id 1706414 assignments/hw1.md --dry-run
 danvas assignments upsert --course-id 1706414 assignments/hw1.md --dry-run
+danvas assignments upsert --course-id 1706414 assignments/hw1.md --confirm update
 danvas assignments audit assignments-full.json --course-yaml course.yaml
 
 # Submissions and feedback
@@ -476,6 +477,7 @@ Use `--dry-run` before commands that write to Canvas:
 ```bash
 danvas assignments create ... --dry-run
 danvas assignments update ... --dry-run
+danvas assignments upsert ... --dry-run
 danvas submissions feedback ... --dry-run
 danvas grades post ... --dry-run
 danvas discussions score ... --dry-run

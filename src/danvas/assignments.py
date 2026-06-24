@@ -218,6 +218,17 @@ def command_assignments_create(args: Any) -> None:
         print("Dry run - no assignment created.")
         print(json.dumps(assignment, indent=2, ensure_ascii=False))
         return
+    create_assignment_from_loaded_source(args, source, assignment_update_local_source(source), assignment)
+
+
+def create_assignment_from_loaded_source(
+    args: Any,
+    source: Path,
+    local: dict[str, Any],
+    assignment: dict[str, Any] | None = None,
+    course: Any | None = None,
+) -> None:
+    assignment = assignment or local["assignment"]
     print_mutation_banner(
         "create assignment",
         {
@@ -227,8 +238,9 @@ def command_assignments_create(args: Any) -> None:
             "source": source,
         },
     )
-    canvas = canvas_from_args(args)
-    course = canvas.get_course(args.course_id)
+    if course is None:
+        canvas = canvas_from_args(args)
+        course = canvas.get_course(args.course_id)
     created = course.create_assignment(assignment)
     created_id = int(first_value(created, canvas_object_to_dict(created), "id"))
     readback = course.get_assignment(created_id)
@@ -236,19 +248,12 @@ def command_assignments_create(args: Any) -> None:
     print(f"Created assignment: {created.name} (ID {created.id})")
     if getattr(created, "html_url", None):
         print(f"URL: {created.html_url}")
-    local = assignment_update_local_source(source)
-    source_map_path = write_source_map_entry(
-        kind="assignment",
+    source_map_path = write_assignment_source_map_entry(
         source=source,
         course_id=getattr(args, "course_id", None),
-        canvas={
-            "id": created_id,
-            "url": canvas_record.get("canvas_url") or getattr(created, "html_url", "") or "",
-            "updated_at": canvas_record.get("assignment", {}).get("updated_at") or "",
-        },
+        canvas_record=canvas_record,
         command="assignments create",
-        fields=assignment_source_map_fields(local),
-        body_sha256=local["body_sha256"],
+        local=local,
         project_root=Path(args.project_root) if getattr(args, "project_root", None) else source,
     )
     print(f"Wrote {source_map_path}")
@@ -312,19 +317,60 @@ def command_assignments_update(args: Any) -> None:
         print_assignment_update_summary(report)
         return
 
-    print_assignment_update_summary(report)
+    assert canvas_before is not None
+    update_assignment_from_loaded_source(
+        args=args,
+        source=source,
+        course=course,
+        project_root=project_root,
+        local=local,
+        resolved=resolved,
+        lookup=lookup,
+        assignment=assignment,
+        canvas_before=canvas_before,
+    )
+
+
+def update_assignment_from_loaded_source(
+    *,
+    args: Any,
+    source: Path,
+    course: Any,
+    project_root: Path | None,
+    local: dict[str, Any],
+    resolved: dict[str, Any],
+    lookup: dict[str, Any],
+    assignment: Any,
+    canvas_before: dict[str, Any],
+) -> None:
+    update_payload = assignment_update_payload(local["assignment"])
+    update_lookup = {**lookup, "status": "matched"} if lookup["status"] == "would_update" else lookup
+    planned_report = build_assignment_update_report(
+        course=course,
+        source=source,
+        local=local,
+        resolved=resolved,
+        lookup=update_lookup,
+        canvas_before=canvas_before,
+        canvas_after=None,
+        update_payload=update_payload,
+        dry_run=False,
+        readback_status="skipped",
+    )
+    print_assignment_update_summary(planned_report)
     print_mutation_banner(
         "update assignment",
         {
             "course": args.course_id,
-            "assignment_id": report["assignment_id"],
+            "assignment_id": planned_report["assignment_id"],
             "name": update_payload.get("name", canvas_before.get("title") if canvas_before else ""),
             "source": source,
         },
     )
     updated = assignment.edit(assignment=update_payload)
     updated_id = int(
-        first_value(updated, canvas_object_to_dict(updated), "id") or report["assignment_id"]
+        first_value(updated, canvas_object_to_dict(updated), "id")
+        or planned_report["assignment_id"]
     )
     readback = course.get_assignment(updated_id)
     canvas_after = assignment_verify_canvas_record(course, readback)
@@ -333,7 +379,7 @@ def command_assignments_update(args: Any) -> None:
         source=source,
         local=local,
         resolved={**resolved, "id": updated_id},
-        lookup=lookup,
+        lookup=update_lookup,
         canvas_before=canvas_before,
         canvas_after=canvas_after,
         update_payload=update_payload,
@@ -344,29 +390,24 @@ def command_assignments_update(args: Any) -> None:
     print_assignment_update_summary(report)
     if report["status"] != "updated":
         raise SystemExit(1)
-    source_map_path = write_source_map_entry(
-        kind="assignment",
+    source_map_path = write_assignment_source_map_entry(
         source=source,
         course_id=getattr(args, "course_id", None),
-        canvas={
-            "id": updated_id,
-            "url": canvas_after.get("canvas_url") or "",
-            "updated_at": canvas_after.get("assignment", {}).get("updated_at") or "",
-        },
+        canvas_record=canvas_after,
         command="assignments update",
-        fields=assignment_source_map_fields(local),
-        body_sha256=local["body_sha256"],
+        local=local,
         project_root=project_root,
     )
     print(f"Wrote {source_map_path}")
 
 
 def command_assignments_upsert(args: Any) -> None:
-    if not args.dry_run:
-        raise SystemExit("assignments upsert currently supports --dry-run only.")
     source = Path(args.source)
     if not source.is_file():
         raise SystemExit(f"Assignment Markdown source not found: {source}")
+    confirm = str(getattr(args, "confirm", "") or "").strip()
+    if not args.dry_run and confirm not in {"create", "update"}:
+        raise SystemExit("Live assignments upsert requires --confirm create or --confirm update.")
     project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
     local = assignment_update_local_source(source)
     resolved = resolve_source_canvas_id(
@@ -390,10 +431,33 @@ def command_assignments_upsert(args: Any) -> None:
         lookup=lookup,
         canvas_before=canvas_before,
     )
-    write_assignment_upsert_report_run(make_assignment_upsert_report_run(args, report), report)
     print_assignment_upsert_summary(report)
     if report["status"] == "error":
+        write_assignment_upsert_report_run(make_assignment_upsert_report_run(args, report), report)
         raise SystemExit(1)
+    if args.dry_run:
+        write_assignment_upsert_report_run(make_assignment_upsert_report_run(args, report), report)
+        return
+    if confirm != report["planned_action"]:
+        raise SystemExit(
+            f"Upsert planned action is {report['planned_action']!r}; "
+            f"refusing --confirm {confirm!r}."
+        )
+    if report["planned_action"] == "create":
+        create_assignment_from_loaded_source(args, source, local, course=course)
+    elif assignment is not None:
+        assert canvas_before is not None
+        update_assignment_from_loaded_source(
+            args=args,
+            source=source,
+            course=course,
+            project_root=project_root,
+            local=local,
+            resolved=resolved,
+            lookup=lookup,
+            assignment=assignment,
+            canvas_before=canvas_before,
+        )
 
 
 def load_assignment_markdown(source: Path) -> dict[str, Any]:
@@ -835,6 +899,31 @@ def assignment_source_map_fields(local: dict[str, Any]) -> dict[str, Any]:
         for key, value in assignment_update_local_compare_record(local).items()
         if value is not None and value != ""
     }
+
+
+def write_assignment_source_map_entry(
+    *,
+    source: Path,
+    course_id: int | None,
+    canvas_record: dict[str, Any],
+    command: str,
+    local: dict[str, Any],
+    project_root: Path | None,
+) -> Path:
+    return write_source_map_entry(
+        kind="assignment",
+        source=source,
+        course_id=course_id,
+        canvas={
+            "id": canvas_record.get("id"),
+            "url": canvas_record.get("canvas_url") or "",
+            "updated_at": canvas_record.get("assignment", {}).get("updated_at") or "",
+        },
+        command=command,
+        fields=assignment_source_map_fields(local),
+        body_sha256=local["body_sha256"],
+        project_root=project_root,
+    )
 
 
 def first_value_from_record(record: dict[str, Any] | None, key: str) -> Any:
