@@ -25,7 +25,7 @@ from danvas.assignments import (
     command_assignments_export,
     command_assignments_verify,
 )
-from danvas.auth import DEFAULT_API_URL
+from danvas.auth import DEFAULT_API_URL, command_auth_doctor
 from danvas.config import command_init, command_refresh, resolve_api_url, resolve_course_id
 from danvas.courses import command_courses, command_roster
 from danvas.discussions import (
@@ -74,6 +74,10 @@ app = typer.Typer(
 )
 assignments_app = typer.Typer(
     help="Create assignments from Markdown sources or export assignment metadata for review.",
+    no_args_is_help=True,
+)
+auth_app = typer.Typer(
+    help="Inspect Canvas authentication configuration without printing secrets.",
     no_args_is_help=True,
 )
 gradebook_app = typer.Typer(
@@ -135,6 +139,7 @@ def app_callback(
 
 
 app.add_typer(assignments_app, name="assignments")
+app.add_typer(auth_app, name="auth")
 app.add_typer(gradebook_app, name="gradebook")
 app.add_typer(quiz_app, name="quiz")
 app.add_typer(submissions_app, name="submissions")
@@ -400,6 +405,36 @@ def init_project(
             project_root=str(project_root),
             timezone=timezone,
             force=force,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@auth_app.command(
+    "doctor",
+    help="Check secretpath and optional Canvas API authentication without printing secrets.",
+)
+def auth_doctor(
+    check_canvas: Annotated[
+        bool,
+        typer.Option("--check-canvas", help="Resolve the Canvas token and call Canvas current user."),
+    ] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_auth_doctor,
+        args_for(
+            check_canvas=check_canvas,
+            json=json_output,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

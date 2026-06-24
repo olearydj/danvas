@@ -666,15 +666,16 @@ Command shape:
 danvas auth doctor
 ```
 
+Status: done. `danvas auth doctor` reports secretpath provider/config
+diagnostics, checks whether the shared `canvas` secret resolves, and can ping
+Canvas current-user with `--check-canvas`. It never prints the resolved token.
+
 Desired behavior:
 
 - Report which auth providers are available.
 - Report whether a token can be resolved.
 - Ping Canvas with the resolved token.
 - Never print the token or verifier-bearing URLs.
-
-This is worthwhile if auth confusion recurs, but it is not currently a core
-sprint by itself.
 
 ### Transcript Filing Helper
 

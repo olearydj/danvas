@@ -6,6 +6,9 @@ requires-python = ">=3.12"
 exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P3D"
 
+[options.exclude-newer-package]
+secretpath = "2026-06-25T00:00:00Z"
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.4"
@@ -160,7 +163,7 @@ wheels = [
 
 [[package]]
 name = "danvas"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -188,7 +191,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.31" },
-    { name = "secretpath", specifier = ">=0.2.0" },
+    { name = "secretpath", specifier = ">=0.3.0" },
     { name = "typer", specifier = ">=0.19" },
 ]
 
@@ -421,14 +424,14 @@ wheels = [
 
 [[package]]
 name = "secretpath"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1b/a9/b9fe863f4ad62f27de5525fa0176fc5c45bc91d465cc943b9ebb66b90196/secretpath-0.2.0.tar.gz", hash = "sha256:e1f66933ac3849668b303913224831daac9cffe913525a197bb26dde1d61fc3e", size = 11424, upload-time = "2026-06-18T19:08:07.157Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/62/e3/9fd2f53420474e774d9ca03b5c0d77e67b5f0f6cf459313fb0d615510030/secretpath-0.3.0.tar.gz", hash = "sha256:38b83ab5828f05f256387989701e9aa6ceaf2332ac7f5b35682d5ff9ec42136c", size = 11848, upload-time = "2026-06-24T21:57:51.288Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/95/db/62d777a73deb04a4ad52399fe7d2f18e7fbb86372df7033e71bdc9ca03ff/secretpath-0.2.0-py3-none-any.whl", hash = "sha256:f8c3c06777363dd4625d5c2974abba1bed8d2b1b043d32b93271a191f5acd579", size = 13853, upload-time = "2026-06-18T19:08:08.138Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/14/966c5623a48ddb5408a57ab6178081bbfb021da5c30c23e38467063fad53/secretpath-0.3.0-py3-none-any.whl", hash = "sha256:c67540df688081c4938d391f9f694582c5c499fb32c39f3362cce5596773f001", size = 14457, upload-time = "2026-06-24T21:57:50.348Z" },
 ]
 
 [[package]]

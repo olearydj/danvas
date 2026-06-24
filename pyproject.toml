@@ -1,6 +1,6 @@
 [project]
 name = "danvas"
-version = "0.3.0"
+version = "0.4.0"
 description = "Unified operational Canvas CLI"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -11,7 +11,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "pyyaml>=6.0",
     "requests>=2.31",
-    "secretpath>=0.2.0",
+    "secretpath>=0.3.0",
     "typer>=0.19",
 ]
 
@@ -29,6 +29,9 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 ignore = ["E501"]
+
+[tool.uv.exclude-newer-package]
+secretpath = "2026-06-25T00:00:00Z"
 
 [project.scripts]
 danvas = "danvas.cli:main"

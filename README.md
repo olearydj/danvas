@@ -195,6 +195,13 @@ Common options are available on Canvas-backed commands:
 --api-key-env
 ```
 
+Inspect authentication setup without printing tokens:
+
+```bash
+danvas auth doctor
+danvas auth doctor --check-canvas
+```
+
 `recordings panopto-captions` uses the Canvas token to launch the course Panopto
 LTI tool; it does not require separate Panopto API client credentials.
 

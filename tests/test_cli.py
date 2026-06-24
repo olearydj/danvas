@@ -353,6 +353,44 @@ def test_quiz_import_qti_defines_expected_options() -> None:
     assert report_options <= options
 
 
+def test_auth_doctor_cli_options_and_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_doctor(args: SimpleNamespace) -> None:
+        captured.update(vars(args))
+
+    monkeypatch.setattr("danvas.cli.command_auth_doctor", fake_doctor)
+
+    result = runner.invoke(
+        app,
+        [
+            "auth",
+            "doctor",
+            "--check-canvas",
+            "--json",
+            "--api-url",
+            "https://canvas.example/",
+            "--secret-provider",
+            "env",
+            "--api-key-env",
+            "CANVAS_TOKEN",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["check_canvas"] is True
+    assert captured["json"] is True
+    assert captured["api_url"] == "https://canvas.example/"
+    assert captured["secret_provider"] == "env"
+    assert captured["api_key_env"] == "CANVAS_TOKEN"
+    assert {"--check-canvas", "--json", "--api-url", "--secret-provider"} <= option_names(
+        "auth", "doctor"
+    )
+    assert {"--report-root", "--report-dir", "--no-report"}.isdisjoint(
+        option_names("auth", "doctor")
+    )
+
+
 def test_local_report_commands_define_report_options() -> None:
     expected = {"--project-root", "--no-report", "--report-root", "--report-dir", "--report-slug"}
 
