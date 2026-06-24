@@ -35,6 +35,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - Markdown body with YAML (`---`) or TOML (`+++`) front matter
   - supports Canvas assignment metadata fields
   - dry-run mode to inspect payload before creating
+  - verify one local assignment source against Canvas by stable ID
 
 - download submissions
   - assignment attachments
@@ -70,6 +71,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 - export announcements
   - create announcements from Markdown with front matter
   - dry-run mode to inspect the Canvas discussion-topic payload before creating
+  - export the latest Canvas announcement as Markdown or JSON
   - sync missing Canvas announcements into local Markdown sources without overwriting
   - verify one local announcement source against Canvas by stable ID
   - course-level announcement bodies

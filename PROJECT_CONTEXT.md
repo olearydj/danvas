@@ -83,6 +83,12 @@ and the external Codex teaching skill docs:
 - Keep `content/` as authored instructional source. Source-sync commands may
   create missing files there only when explicitly pointed at a content output
   directory; they must not overwrite existing files by default.
+- Use `.danvas/source-map.json` as the preferred future round-trip provenance
+  sidecar for local source files. It may store stable Canvas IDs, stable Canvas
+  URLs or paths, timestamps, command provenance, hashes, and safe comparable
+  metadata, but not Canvas verifier/download URLs, tokens, roster data,
+  submissions, grades, private comments, or full student content. Optional front
+  matter IDs remain supported for course-specific sources.
 - Keep `grading/` for private grading workflow artifacts. Do not silently move
   grading evidence into `.danvas/reports/` unless the command is explicitly a
   private report/audit workflow.

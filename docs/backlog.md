@@ -323,13 +323,78 @@ Recommended goals:
 
 3. Design round-trip metadata before broad update/upsert work.
 
-   Recommended direction:
+   Status: done. Round-trip metadata should use a project-level sidecar source
+   map as the preferred durable provenance store, while continuing to support
+   optional front matter IDs for course-specific sources and existing synced
+   files.
 
-   - Prefer a sidecar manifest for Canvas IDs and URLs so reusable Markdown stays
-     mostly clean.
-   - Allow optional front matter IDs for course-specific sources when useful.
-   - Record assignment IDs, discussion topic IDs, announcement IDs, file IDs, URLs,
-     last-posted timestamps, and a safe subset of last-posted comparable fields.
+   Proposed source map:
+
+   - Path: `.danvas/source-map.json`.
+   - Ownership: generated operational state, not authored course content.
+   - Key: source kind plus project-relative source path.
+   - Schema: versioned JSON with `schema_version`, `course_id`,
+     `generated_at`, and a `sources` list.
+   - Source entry fields:
+     - `kind`: `assignment`, `announcement`, `discussion`, or `file`.
+     - `path`: project-relative local source path.
+     - `canvas`: stable Canvas ID, stable HTML URL or Canvas path, and safe
+       object timestamps where available.
+     - `last_posted`: command name, timestamp, danvas version, comparable field
+       snapshot, and body/file hashes when useful.
+   - Exclusions: no Canvas verifier/download URLs, access tokens, roster data,
+     submissions, grades, private comments, or full student content.
+
+   ID resolution order for future update/upsert commands:
+
+   1. Explicit CLI option, such as `--assignment-id`.
+   2. Front matter ID, such as `assignment_id` or `canvas_id`.
+   3. `.danvas/source-map.json` entry for the source path.
+
+   Safety rules:
+
+   - If front matter and source-map IDs conflict, fail unless an explicit CLI ID
+     resolves the conflict.
+   - Dry-runs and read-only verification commands may read the source map but
+     must not update it.
+   - Live create/update/sync commands should update the source map only after
+     the Canvas write succeeds and readback confirms the object.
+   - Source-sync commands may still write front matter IDs for newly created
+     course-specific Markdown, but reusable authoring templates should prefer
+     the sidecar map.
+   - Do not store full Markdown/HTML bodies in the source map. Store hashes and
+     the small comparable metadata subset needed to detect likely drift.
+
+   Minimal example:
+
+   ```json
+   {
+     "schema_version": 1,
+     "course_id": 1742719,
+     "generated_at": "2026-06-24T12:00:00-05:00",
+     "sources": [
+       {
+         "kind": "assignment",
+         "path": "content/cases/case-1.md",
+         "canvas": {
+           "id": 19862404,
+           "url": "https://auburn.instructure.com/courses/1742719/assignments/19862404"
+         },
+         "last_posted": {
+           "command": "assignments update",
+           "posted_at": "2026-06-24T12:00:00-05:00",
+           "danvas_version": "0.3.0",
+           "fields": {
+             "title": "Case 1",
+             "points_possible": 100,
+             "published": true
+           },
+           "body_sha256": "..."
+         }
+       }
+     ]
+   }
+   ```
 
 Definition of done:
 
@@ -337,6 +402,7 @@ Definition of done:
   applicable.
 - Sync and verify outputs produce report runs.
 - Round-trip metadata format is documented before update/upsert writes are added.
+  Delivered as the `.danvas/source-map.json` design above.
 
 ## Sprint Candidate D: Safe Update And Upsert
 
