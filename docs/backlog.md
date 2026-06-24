@@ -190,14 +190,23 @@ Recommended goals:
    danvas files compare --course-id 1742719 --file-id 284879389 --local content/slides/example.pptx
    ```
 
-   Status: partial. Delivered in B.3a: `danvas files compare` resolves a Canvas
-   file by `--file-id` or exact `--canvas-path`, compares Canvas metadata against
-   one local file, prints a terminal summary, and writes `files-compare.json`,
+   Status: delivered for current scope. The only item not implemented is Office
+   ZIP package-part comparison, which is intentionally deferred as a future
+   optional deep-inspection feature.
+
+   Delivered in B.3a: `danvas files compare` resolves a Canvas file by
+   `--file-id` or exact `--canvas-path`, compares Canvas metadata against one
+   local file, prints a terminal summary, and writes `files-compare.json`,
    `files-compare.md`, and `manifest.json` as a report run when enabled.
+
    Delivered in B.3b: `danvas files download-one` writes exactly one Canvas file
    to an explicit output path, and `--downloaded-canvas PATH` adds SHA-256
    comparison against a supplied downloaded Canvas file without downloading
    anything implicitly.
+
+   Delivered in B.3c: `danvas files inventory` excludes generated/cache/archive
+   paths by default and supports `[files.inventory] ignore` for project-specific
+   local-scan noise.
 
    Desired behavior:
 
@@ -213,8 +222,9 @@ Recommended goals:
    - Compare file contents by SHA-256 only when a downloaded Canvas-side file is
      supplied with `--downloaded-canvas`. Delivered.
    - For Office files, optionally compare internal ZIP entries and report added,
-     missing, and changed package parts. Deferred; implement later as an explicit
-     option such as `--office-parts` only if basic compare workflows need it.
+     missing, and changed package parts. Not implemented; intentionally deferred
+     as an explicit future option such as `--office-parts` only if basic compare
+     workflows need it.
    - Improve `files inventory` ignore rules for generated/cache/archive paths such
      as `.danvas/`, `_archive/`, rendered artifacts, and local scratch outputs.
      Delivered in B.3c with `[files.inventory] ignore` plus built-in generated
@@ -229,6 +239,19 @@ Definition of done:
 ## Sprint Candidate C: Local Source Sync And Readback
 
 Theme: close the gap between status reports and maintainable local sources.
+
+Storage boundary for this sprint:
+
+- `.danvas/` is generated operational state and evidence: snapshots, report runs,
+  manifests, dry-run/readback reports, and explicit generated outputs.
+- `content/` is authored instructional source. Sync commands may create missing
+  Markdown files there only when explicitly pointed at a content output
+  directory.
+- `grading/` is private grading workflow material and should not become a default
+  report-run destination.
+- Do not use `.danvas/` as a staging area for files that later become authored
+  course sources. If Canvas content should become local source, write it directly
+  to the requested `content/...` destination with overwrite guards.
 
 Recommended goals:
 
@@ -246,8 +269,24 @@ Recommended goals:
    - Include stable Canvas IDs, URLs, titles, publish/lock state, and dates where
      available.
    - Generate safe numbered filenames and refuse to overwrite existing files.
+   - Do not provide broad `--overwrite` for source sync in the first
+     implementation. Existing targets should be reported, not modified.
+   - Live sync should write only new files whose target path does not exist.
+   - If a generated source target already exists, mark it as `skipped_exists`;
+     if an existing file appears to match the Canvas ID, mark it as
+     `skipped_known_local`; if a title/path collision appears unrelated, mark it
+     as `conflict` and require a user-chosen path or later update workflow.
    - Skip student replies and ordinary discussion participation by default.
    - Use report runs for dry-run/readback evidence.
+
+   Expected plan statuses:
+
+   - `would_create`
+   - `created`
+   - `skipped_exists`
+   - `skipped_known_local`
+   - `conflict`
+   - `error`
 
 2. Add assignment and announcement verification commands.
 

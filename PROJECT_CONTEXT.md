@@ -77,6 +77,15 @@ and the external Codex teaching skill docs:
   should keep explicit output paths by default instead of becoming report runs.
 - Report runs are operational evidence and should be collision-safe and
   append-only by default.
+- Keep `.danvas/` as generated operational state and evidence, not canonical
+  authored course content. Snapshots, reports, manifests, reportable dry-runs,
+  downloaded comparison caches, and explicit generated outputs may live there.
+- Keep `content/` as authored instructional source. Source-sync commands may
+  create missing files there only when explicitly pointed at a content output
+  directory; they must not overwrite existing files by default.
+- Keep `grading/` for private grading workflow artifacts. Do not silently move
+  grading evidence into `.danvas/reports/` unless the command is explicitly a
+  private report/audit workflow.
 - Use local-file-first gradebook and quiz audit behavior. Add live Canvas
   gradebook export only when a concrete workflow justifies the extra API and
   privacy surface.
