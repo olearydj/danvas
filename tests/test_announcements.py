@@ -13,10 +13,26 @@ from danvas.announcements import (
     command_announcements_create,
     command_announcements_latest,
     command_announcements_sync,
+    command_announcements_update,
     command_announcements_verify,
     load_announcement_markdown,
     write_announcements_csv,
 )
+
+
+class FakeTopic(SimpleNamespace):
+    def __init__(self, **attrs: object) -> None:
+        super().__init__(**attrs)
+        self.edits: list[dict[str, object]] = []
+
+    def update(self, **kwargs: object) -> FakeTopic:
+        self.edits.append(dict(kwargs))
+        for key, value in kwargs.items():
+            if key == "message":
+                self.message = value
+            else:
+                setattr(self, key, value)
+        return self
 
 
 class FakeCourse:
@@ -29,7 +45,7 @@ class FakeCourse:
         self.name = "Example Course"
         self.course_code = "EX-101"
         self.topics = [
-            SimpleNamespace(
+            FakeTopic(
                 id=2,
                 title="Second Update",
                 posted_at="2025-06-02T14:00:00Z",
@@ -37,8 +53,9 @@ class FakeCourse:
                 message="<p>Second body</p>",
                 user_id=42,
                 published=True,
+                is_announcement=True,
             ),
-            SimpleNamespace(
+            FakeTopic(
                 id=1,
                 title="First Update",
                 posted_at="2025-06-01T14:00:00Z",
@@ -46,6 +63,7 @@ class FakeCourse:
                 message="<p>First body</p>",
                 user_id=42,
                 published=True,
+                is_announcement=True,
             ),
         ]
         self.full_topics = {
@@ -88,6 +106,12 @@ class FakeCourse:
         assert kwargs == {"only_announcements": True}
         return self.topics
 
+    def get_discussion_topic(self, topic_id: int) -> Any:
+        for topic in self.topics:
+            if int(topic.id) == int(topic_id):
+                return topic
+        raise KeyError(topic_id)
+
     def get_full_discussion_topic(self, topic_id: int) -> dict[str, Any]:
         return self.full_topics[topic_id]
 
@@ -107,6 +131,15 @@ class FakeCanvas:
     def get_course(self, course_id: int) -> FakeCourse:
         assert course_id == 101
         return self.course
+
+
+def write_config(root: Path) -> None:
+    config_dir = root / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+        encoding="utf-8",
+    )
 
 
 def test_announcement_records_include_announcements_and_only_selected_replies() -> None:
@@ -564,3 +597,143 @@ First body
 
     with pytest.raises(SystemExit, match="requires --announcement-id or canvas_id"):
         command_announcements_verify(args)
+
+
+def update_args(source: Path, report_dir: Path, **overrides: object) -> SimpleNamespace:
+    defaults: dict[str, object] = {
+        "course_id": 101,
+        "project_root": str(source.parent.parent if source.parent.name == "content" else source.parent),
+        "source": str(source),
+        "announcement_id": None,
+        "dry_run": True,
+        "no_report": False,
+        "report_root": None,
+        "report_dir": str(report_dir),
+        "report_slug": None,
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+def test_command_announcements_update_dry_run_writes_diff_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "announcements" / "first.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """---
+canvas_id: 1
+title: First Update revised
+published: true
+---
+
+First body revised.
+""",
+        encoding="utf-8",
+    )
+    fake_canvas = FakeCanvas()
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: fake_canvas)
+
+    command_announcements_update(update_args(source, tmp_path / "report"))
+
+    topic = fake_canvas.course.get_discussion_topic(1)
+    assert topic.edits == []
+    report = json.loads((tmp_path / "report" / "announcements-update.json").read_text("utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text("utf-8"))
+    assert report["status"] == "would_update"
+    assert report["id_resolution"]["source"] == "frontmatter"
+    changed = {check["field"] for check in report["diff"] if not check["matches"]}
+    assert {"title", "body_text"} <= changed
+    assert manifest["command"] == "announcements update"
+    assert manifest["status"] == "success"
+    assert not (tmp_path / ".danvas" / "source-map.json").exists()
+
+
+def test_command_announcements_update_live_edits_and_writes_source_map(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "announcements" / "first.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        """---
+canvas_id: 1
+title: First Update revised
+published: true
+---
+
+First body revised.
+""",
+        encoding="utf-8",
+    )
+    fake_canvas = FakeCanvas()
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: fake_canvas)
+
+    command_announcements_update(
+        update_args(source, tmp_path / "report", dry_run=False, project_root=str(tmp_path))
+    )
+
+    topic = fake_canvas.course.get_discussion_topic(1)
+    assert topic.edits
+    assert topic.edits[0]["title"] == "First Update revised"
+    report = json.loads((tmp_path / "report" / "announcements-update.json").read_text("utf-8"))
+    source_map = json.loads((tmp_path / ".danvas" / "source-map.json").read_text("utf-8"))
+    assert report["status"] == "updated"
+    assert report["readback"]["status"] == "matches"
+    assert source_map["sources"][0]["kind"] == "announcement"
+    assert source_map["sources"][0]["path"] == "content/announcements/first.md"
+    assert source_map["sources"][0]["canvas"]["id"] == 1
+    assert source_map["sources"][0]["last_posted"]["command"] == "announcements update"
+
+
+def test_command_announcements_update_uses_source_map_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "announcements" / "first.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("---\ntitle: First Update\n---\n\nFirst body\n", encoding="utf-8")
+    (tmp_path / ".danvas" / "source-map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "course_id": 101,
+                "generated_at": "2026-06-24T12:00:00-05:00",
+                "sources": [
+                    {
+                        "kind": "announcement",
+                        "path": "content/announcements/first.md",
+                        "canvas": {"id": 1},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+
+    command_announcements_update(update_args(source, tmp_path / "report", project_root=str(tmp_path)))
+
+    report = json.loads((tmp_path / "report" / "announcements-update.json").read_text("utf-8"))
+    assert report["status"] == "no_change"
+    assert report["id_resolution"]["source"] == "source_map"
+    assert report["canvas_id"] == 1
+
+
+def test_command_announcements_update_requires_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "announcements" / "first.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("---\ntitle: First Update\n---\n\nFirst body\n", encoding="utf-8")
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+
+    with pytest.raises(SystemExit) as excinfo:
+        command_announcements_update(update_args(source, tmp_path / "report"))
+
+    assert excinfo.value.code == 1
+    report = json.loads((tmp_path / "report" / "announcements-update.json").read_text("utf-8"))
+    assert report["status"] == "lookup_failed"
+    assert report["lookup"]["status"] == "missing_id"

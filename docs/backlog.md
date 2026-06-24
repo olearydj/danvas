@@ -30,14 +30,16 @@ closed.
 Current command families include:
 
 - `init`, `refresh`, `status`, `courses`, `roster`
-- `assignments export/create/audit`
+- `auth doctor`
+- `assignments export/create/verify/update/upsert/audit`
 - `gradebook check/audit`
 - `quiz analysis/import-qti`
 - `submissions media/feedback`
 - `grades post/verify`
-- `discussions export/score`
-- `announcements create/export`
+- `discussions export/sync-prompts/score`
+- `announcements create/export/latest/sync/verify/update`
 - `files inventory/download/download-one/compare/upload`
+- `reports list/latest`
 - `recordings panopto-captions`
 
 ## Merged Sprint 2 And 3 Status
@@ -57,7 +59,7 @@ sprint sequence as canonical.
 | Sprint 2: due-date ergonomics | Not started | Smaller Backlog Items. |
 | Sprint 2 stretch: transcript filing helper | Not started | Smaller Backlog Items. |
 | Sprint 3: assignment update/upsert | Done | Candidate D; assignment create writes source-map provenance, update is live with readback verification, and upsert plans then requires `--confirm create` or `--confirm update` for live mutation. |
-| Sprint 3: announcement/discussion update pattern | Not started | Sprint Candidate D, after assignment update proves out. |
+| Sprint 3: announcement/discussion update pattern | Partial | Sprint Candidate D; announcement update is delivered, discussion update remains deferred until needed. |
 | Sprint 3: readback verification | Not started | Sprint Candidate C. |
 | Sprint 3: round-trip metadata | Not started | Sprint Candidate C, before broad update/upsert work. |
 | Sprint 3: Markdown asset rewriting | Not started | Sprint Candidate D, building on delivered `files upload`. |
@@ -448,7 +450,14 @@ Recommended goals:
 2. Extend the pattern to announcements and discussions after assignment update is
    stable.
 
-   Status: not started.
+   Status: partial. `danvas announcements update SOURCE.md` is delivered for
+   existing announcements. It resolves by explicit `--announcement-id`,
+   `canvas_id` front matter, or `.danvas/source-map.json`; it does not match by
+   title and does not create missing announcements. Dry-run writes a
+   field-by-field report without Canvas mutation. Live mode updates only the
+   supplied announcement fields and body, reads Canvas back, writes report
+   evidence, and updates the source map after verified readback. Discussion
+   update remains deferred until a concrete course workflow needs it.
 
 3. Add Markdown asset rewriting on top of `files upload`.
 

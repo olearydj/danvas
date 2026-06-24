@@ -18,6 +18,7 @@ from danvas.announcements import (
     command_announcements_export,
     command_announcements_latest,
     command_announcements_sync,
+    command_announcements_update,
     command_announcements_verify,
 )
 from danvas.assignments import (
@@ -1753,6 +1754,69 @@ def announcements_sync(
             project_root=str(project_root),
             output_dir=str(output_dir),
             dry_run=dry_run,
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@announcements_app.command(
+    "update",
+    help="Update one existing Canvas announcement from Markdown after showing a reviewable diff.",
+)
+def announcements_update(
+    source: Annotated[
+        Path,
+        typer.Argument(
+            help="Local announcement Markdown source with canvas_id, source-map entry, or --announcement-id."
+        ),
+    ],
+    course_id: CourseId = None,
+    announcement_id: Annotated[
+        int | None,
+        typer.Option(
+            "--announcement-id",
+            help="Canvas announcement/discussion topic ID. Overrides source canvas_id.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show the planned diff without updating Canvas."),
+    ] = False,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_announcements_update,
+        args_for(
+            course_id=course_id,
+            source=str(source),
+            announcement_id=announcement_id,
+            dry_run=dry_run,
+            project_root=str(project_root),
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,

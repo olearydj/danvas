@@ -74,6 +74,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - export the latest Canvas announcement as Markdown or JSON
   - sync missing Canvas announcements into local Markdown sources without overwriting
   - verify one local announcement source against Canvas by stable ID
+  - update one existing Canvas announcement from Markdown after a dry-run diff
   - course-level announcement bodies
   - optional JSON, CSV, or Markdown output
   - filters replies to the authenticated user by default, so student replies are excluded
@@ -150,6 +151,7 @@ danvas
 │   ├── export
 │   ├── latest
 │   ├── sync
+│   ├── update
 │   └── verify
 ├── files
 │   ├── inventory
@@ -317,13 +319,13 @@ max_snapshot_age_hours = 72
 
 ## Source Map
 
-Live assignment create and update workflows write generated provenance to
-`.danvas/source-map.json` after Canvas readback succeeds. The source map links
-project-relative authored source paths to Canvas object IDs and stores safe
-comparable metadata plus body hashes. It does not store Canvas API tokens,
-verifier/download URLs, roster data, submissions, grades, private comments, or
-full student content. Dry-runs and read-only verification commands may read the
-source map but do not update it.
+Live assignment create/update and announcement update workflows write generated
+provenance to `.danvas/source-map.json` after Canvas readback succeeds. The
+source map links project-relative authored source paths to Canvas object IDs and
+stores safe comparable metadata plus body hashes. It does not store Canvas API
+tokens, verifier/download URLs, roster data, submissions, grades, private
+comments, or full student content. Dry-runs and read-only verification commands
+may read the source map but do not update it.
 
 ## Report Runs
 
@@ -420,6 +422,7 @@ danvas announcements export --course-id 1655780 --output announcements.md
 danvas announcements latest --course-id 1655780 --format markdown
 danvas announcements sync --course-id 1655780 --output-dir content/announcements --dry-run
 danvas announcements verify --course-id 1655780 content/announcements/001-update.md
+danvas announcements update --course-id 1655780 content/announcements/001-update.md --dry-run
 
 # Files
 danvas files inventory --course-id 1742717 --local-root .
@@ -478,6 +481,7 @@ Use `--dry-run` before commands that write to Canvas:
 danvas assignments create ... --dry-run
 danvas assignments update ... --dry-run
 danvas assignments upsert ... --dry-run
+danvas announcements update ... --dry-run
 danvas submissions feedback ... --dry-run
 danvas grades post ... --dry-run
 danvas discussions score ... --dry-run

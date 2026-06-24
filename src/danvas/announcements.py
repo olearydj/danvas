@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
+from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.auth import canvas_from_args
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
+from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
 from danvas.utils import (
     canvas_object_to_dict,
     html_to_text,
@@ -168,6 +171,92 @@ def command_announcements_create(args: Any) -> None:
         print(f"URL: {created.html_url}")
 
 
+def command_announcements_update(args: Any) -> None:
+    source = Path(args.source)
+    if not source.is_file():
+        raise SystemExit(f"Announcement Markdown source not found: {source}")
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    local = announcement_update_local_source(source)
+    resolved = resolve_source_canvas_id(
+        kind="announcement",
+        source=source,
+        explicit_id=getattr(args, "announcement_id", None),
+        frontmatter_id=local["frontmatter_id"],
+        project_root=project_root,
+    )
+    canvas = canvas_from_args(args)
+    course = canvas.get_course(args.course_id)
+    topic, lookup = resolve_announcement_for_update(course, resolved)
+    canvas_before = announcement_update_canvas_record(course, topic) if topic else None
+    update_payload = announcement_update_payload(local["announcement"])
+    report = build_announcement_update_report(
+        course=course,
+        source=source,
+        local=local,
+        resolved=resolved,
+        lookup=lookup,
+        canvas_before=canvas_before,
+        canvas_after=None,
+        update_payload=update_payload,
+        dry_run=bool(args.dry_run),
+        readback_status="skipped",
+    )
+    if topic is None:
+        write_announcement_update_report_run(make_announcement_update_report_run(args, report), report)
+        print_announcement_update_summary(report)
+        raise SystemExit(1)
+    if args.dry_run:
+        write_announcement_update_report_run(make_announcement_update_report_run(args, report), report)
+        print_announcement_update_summary(report)
+        return
+    if report["status"] == "no_change":
+        write_announcement_update_report_run(make_announcement_update_report_run(args, report), report)
+        print_announcement_update_summary(report)
+        return
+
+    print_announcement_update_summary(report)
+    print_mutation_banner(
+        "update announcement",
+        {
+            "course": args.course_id,
+            "announcement_id": report["canvas_id"],
+            "title": update_payload.get("title", canvas_before.get("title") if canvas_before else ""),
+            "source": source,
+        },
+    )
+    updated = topic.update(**update_payload)
+    updated_id = int(first_value(updated, canvas_object_to_dict(updated), "id") or report["canvas_id"])
+    readback = course.get_discussion_topic(updated_id)
+    canvas_after = announcement_update_canvas_record(course, readback)
+    final_report = build_announcement_update_report(
+        course=course,
+        source=source,
+        local=local,
+        resolved={**resolved, "id": updated_id},
+        lookup=lookup,
+        canvas_before=canvas_before,
+        canvas_after=canvas_after,
+        update_payload=update_payload,
+        dry_run=False,
+        readback_status="matches",
+    )
+    write_announcement_update_report_run(
+        make_announcement_update_report_run(args, final_report), final_report
+    )
+    print_announcement_update_summary(final_report)
+    if final_report["status"] != "updated":
+        raise SystemExit(1)
+    source_map_path = write_announcement_source_map_entry(
+        source=source,
+        course_id=getattr(args, "course_id", None),
+        canvas_record=canvas_after,
+        command="announcements update",
+        local=local,
+        project_root=project_root,
+    )
+    print(f"Wrote {source_map_path}")
+
+
 def load_announcement_markdown(source: Path) -> dict[str, Any]:
     text = source.read_text(encoding="utf-8-sig")
     metadata, body = parse_frontmatter(text, source, "Announcement")
@@ -185,6 +274,37 @@ def load_announcement_markdown(source: Path) -> dict[str, Any]:
     announcement["is_announcement"] = True
     announcement["message"] = markdown_to_html(body)
     return announcement
+
+
+def announcement_update_local_source(source: Path) -> dict[str, Any]:
+    text = source.read_text(encoding="utf-8-sig")
+    metadata, body = parse_frontmatter(text, source, "Announcement")
+    frontmatter_id = metadata.get("canvas_id")
+    if not str(metadata.get("title", "")).strip():
+        raise SystemExit("Announcement metadata must include 'title'.")
+    unknown = sorted(set(metadata) - ANNOUNCEMENT_METADATA_FIELDS - ANNOUNCEMENT_PROVENANCE_FIELDS)
+    if unknown:
+        raise SystemExit(f"Unsupported announcement metadata field(s): {', '.join(unknown)}")
+    announcement = {
+        key: normalize_canvas_value(value)
+        for key, value in metadata.items()
+        if key not in ANNOUNCEMENT_PROVENANCE_FIELDS
+    }
+    announcement["message"] = markdown_to_html(body)
+    return {
+        "frontmatter_id": int(frontmatter_id) if frontmatter_id not in {None, ""} else None,
+        "announcement": announcement,
+        "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        "body_text": normalized_text(html_to_text(announcement.get("message") or "")),
+    }
+
+
+def announcement_update_payload(announcement: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in announcement.items()
+        if key in ANNOUNCEMENT_METADATA_FIELDS or key == "message"
+    }
 
 
 def resolve_format(output: Path, requested: str) -> str:
@@ -233,6 +353,39 @@ def announcement_record(course: Any, topic: Any, reply_user_id: int) -> dict[str
         "instructor_replies": filtered_replies(full_topic, reply_user_id),
         "topic": topic_payload,
     }
+
+
+def announcement_update_canvas_record(course: Any, topic: Any) -> dict[str, Any]:
+    return announcement_record(course, topic, reply_user_id=0)
+
+
+def resolve_announcement_for_update(
+    course: Any, resolved: dict[str, Any]
+) -> tuple[Any | None, dict[str, Any]]:
+    canvas_id = resolved.get("id")
+    if canvas_id is None:
+        return None, {
+            "method": "none",
+            "status": "missing_id",
+            "reason": "Announcement update requires --announcement-id, canvas_id front matter, or source-map entry.",
+        }
+    try:
+        topic = course.get_discussion_topic(canvas_id)
+    except (ResourceDoesNotExist, KeyError):
+        return None, {
+            "method": resolved["source"],
+            "status": "not_found",
+            "reason": f"Canvas announcement ID {canvas_id} was not found.",
+        }
+    payload = canvas_object_to_dict(topic)
+    is_announcement = first_value(topic, payload, "is_announcement", "announcement")
+    if is_announcement is False:
+        return None, {
+            "method": resolved["source"],
+            "status": "not_announcement",
+            "reason": f"Canvas discussion topic ID {canvas_id} is not an announcement.",
+        }
+    return topic, {"method": resolved["source"], "status": "matched", "reason": ""}
 
 
 def first_value(obj: Any, payload: dict[str, Any], *names: str) -> Any:
@@ -564,6 +717,140 @@ def build_announcement_verify_report(
     }
 
 
+def build_announcement_update_report(
+    *,
+    course: Any,
+    source: Path,
+    local: dict[str, Any],
+    resolved: dict[str, Any],
+    lookup: dict[str, Any],
+    canvas_before: dict[str, Any] | None,
+    canvas_after: dict[str, Any] | None,
+    update_payload: dict[str, Any],
+    dry_run: bool,
+    readback_status: str,
+) -> dict[str, Any]:
+    local_record = announcement_update_local_compare_record(local)
+    before_checks = (
+        announcement_update_checks(local_record, canvas_before, update_payload) if canvas_before else []
+    )
+    after_checks = (
+        announcement_update_checks(local_record, canvas_after, update_payload) if canvas_after else []
+    )
+    mismatches = [check for check in before_checks if not check["matches"]]
+    if lookup["status"] != "matched":
+        status = "lookup_failed"
+    elif canvas_after is not None:
+        readback_status = "matches" if all(check["matches"] for check in after_checks) else "mismatch"
+        status = "updated" if readback_status == "matches" else "readback_mismatch"
+    elif dry_run:
+        status = "would_update" if mismatches else "no_change"
+    else:
+        status = "no_change" if not mismatches else "planned"
+    return {
+        "course": canvas_object_to_dict(course),
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "source": str(source),
+        "dry_run": dry_run,
+        "status": status,
+        "canvas_id": resolved.get("id") or first_value_from_record(canvas_before, "id"),
+        "id_resolution": {
+            "source": resolved.get("source"),
+            "path": resolved.get("path"),
+            "id": resolved.get("id"),
+        },
+        "lookup": lookup,
+        "local": local_record,
+        "canvas_before": canvas_before or {},
+        "canvas_after": canvas_after or {},
+        "update_payload": update_payload,
+        "diff": before_checks,
+        "readback": {
+            "status": readback_status,
+            "checks": after_checks,
+        },
+    }
+
+
+def announcement_update_local_compare_record(local: dict[str, Any]) -> dict[str, Any]:
+    announcement = local["announcement"]
+    return {
+        "title": announcement.get("title"),
+        "published": announcement.get("published"),
+        "delayed_post_at": announcement.get("delayed_post_at"),
+        "lock_at": announcement.get("lock_at"),
+        "body_text": local["body_text"],
+    }
+
+
+def announcement_update_checks(
+    local_record: dict[str, Any],
+    canvas_record: dict[str, Any],
+    update_payload: dict[str, Any],
+) -> list[dict[str, Any]]:
+    fields = []
+    if "title" in update_payload:
+        fields.append("title")
+    if "published" in update_payload:
+        fields.append("published")
+    if "delayed_post_at" in update_payload:
+        fields.append("delayed_post_at")
+    if "lock_at" in update_payload:
+        fields.append("lock_at")
+    if "message" in update_payload:
+        fields.append("body_text")
+    checks = [
+        verify_check(
+            field,
+            local_record.get(field),
+            normalized_text(str(canvas_record.get("message") or ""))
+            if field == "body_text"
+            else canvas_record.get(field),
+        )
+        for field in fields
+    ]
+    return [check for check in checks if check["local"] != "" or check["canvas"] != ""]
+
+
+def announcement_source_map_fields(local: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in announcement_update_local_compare_record(local).items()
+        if value is not None and value != ""
+    }
+
+
+def first_value_from_record(record: dict[str, Any] | None, key: str) -> Any:
+    if not record:
+        return None
+    return record.get(key)
+
+
+def write_announcement_source_map_entry(
+    *,
+    source: Path,
+    course_id: int | None,
+    canvas_record: dict[str, Any],
+    command: str,
+    local: dict[str, Any],
+    project_root: Path | None,
+) -> Path:
+    return write_source_map_entry(
+        kind="announcement",
+        source=source,
+        course_id=course_id,
+        canvas={
+            "id": canvas_record.get("id"),
+            "url": canvas_record.get("html_url") or "",
+            "updated_at": canvas_record.get("topic", {}).get("updated_at") or "",
+        },
+        command=command,
+        fields=announcement_source_map_fields(local),
+        body_sha256=local["body_sha256"],
+        project_root=project_root,
+    )
+
+
 def announcement_verify_checks(
     local: dict[str, Any], canvas_record: dict[str, Any]
 ) -> list[dict[str, Any]]:
@@ -658,6 +945,55 @@ def write_announcement_verify_report_run(
         raise
 
 
+def make_announcement_update_report_run(args: Any, report: dict[str, Any]) -> ReportRun | None:
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
+    report_slug = getattr(args, "report_slug", None)
+    if not should_write_report_run(
+        no_report=bool(getattr(args, "no_report", False)),
+        legacy_output=False,
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        return None
+    return create_report_run(
+        command="announcements update",
+        slug=report_slug or "announcements-update",
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        course_id=getattr(args, "course_id", None),
+        input_paths=[Path(report["source"])],
+        private_data=False,
+    )
+
+
+def write_announcement_update_report_run(
+    report_run: ReportRun | None, report: dict[str, Any]
+) -> None:
+    if report_run is None:
+        return
+    try:
+        json_path = report_run.write_json("announcements-update.json", report)
+        md_path = report_run.write_text(
+            "announcements-update.md", render_announcement_update_markdown(report)
+        )
+        manifest_status = (
+            "success" if report["status"] in {"would_update", "no_change", "updated"} else "failed"
+        )
+        manifest_path = report_run.finish(manifest_status)
+        print(f"Wrote {json_path}")
+        print(f"Wrote {md_path}")
+        print(f"Wrote {manifest_path}")
+        print(f"Report directory: {report_run.path}")
+    except Exception as exc:
+        report_run.finish("failed", error=str(exc))
+        raise
+
+
 def render_announcement_verify_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Announcements Verify",
@@ -679,11 +1015,72 @@ def render_announcement_verify_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_announcement_update_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Announcements Update",
+        "",
+        f"- Status: `{report['status']}`",
+        f"- Dry run: `{report['dry_run']}`",
+        f"- Source: `{report['source']}`",
+        f"- Canvas ID: `{report.get('canvas_id') or ''}`",
+        f"- ID resolution: `{report['id_resolution']['source']}`",
+        f"- Lookup: `{report['lookup']['status']}` via `{report['lookup']['method']}`",
+    ]
+    if report["lookup"].get("reason"):
+        lines.append(f"- Reason: {report['lookup']['reason']}")
+    lines.extend(
+        [
+            "",
+            "## Planned Diff",
+            "",
+            "| Field | Local | Canvas before | Status |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    if report["diff"]:
+        for check in report["diff"]:
+            status = "matches" if check["matches"] else "would change"
+            lines.append(
+                f"| {check['field']} | `{check['local']}` | `{check['canvas']}` | `{status}` |"
+            )
+    else:
+        lines.append("| | | | |")
+    if report["readback"]["checks"]:
+        lines.extend(
+            [
+                "",
+                "## Readback",
+                "",
+                f"- Status: `{report['readback']['status']}`",
+                "",
+                "| Field | Local | Canvas after | Status |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for check in report["readback"]["checks"]:
+            status = "matches" if check["matches"] else "mismatch"
+            lines.append(
+                f"| {check['field']} | `{check['local']}` | `{check['canvas']}` | `{status}` |"
+            )
+    return "\n".join(lines) + "\n"
+
+
 def print_announcement_verify_summary(report: dict[str, Any]) -> None:
     print(f"Announcement verify: {report['status']}")
     for check in report["checks"]:
         marker = "OK" if check["matches"] else "MISMATCH"
         print(f"  {check['field']}: {marker}")
+
+
+def print_announcement_update_summary(report: dict[str, Any]) -> None:
+    print(f"Announcement update: {report['status']}")
+    if report["lookup"].get("reason"):
+        print(f"  {report['lookup']['reason']}")
+    for check in report["diff"]:
+        marker = "OK" if check["matches"] else "CHANGE"
+        print(f"  {check['field']}: {marker}")
+    if report["readback"]["status"] != "skipped":
+        print(f"  readback: {report['readback']['status']}")
 
 
 def write_announcements_sync_files(plan: dict[str, Any]) -> None:
