@@ -12,6 +12,7 @@ from danvas.announcements import (
     announcement_records,
     command_announcements_create,
     command_announcements_sync,
+    command_announcements_verify,
     load_announcement_markdown,
     write_announcements_csv,
 )
@@ -396,3 +397,117 @@ Different content.
         "Edited locally.\n"
     )
     assert "different canvas_id 999" in report["actions"][1]["reason"]
+
+
+def test_command_announcements_verify_matches_canvas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "announcement.md"
+    source.write_text(
+        """---
+title: First Update
+canvas_id: 1
+canvas_url: https://canvas.example/courses/1/discussion_topics/1
+published: true
+---
+
+First body
+""",
+        encoding="utf-8",
+    )
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        source=str(source),
+        announcement_id=None,
+        no_report=False,
+        report_root=None,
+        report_dir=str(report_dir),
+        report_slug=None,
+    )
+
+    command_announcements_verify(args)
+
+    report = json.loads((report_dir / "announcements-verify.json").read_text(encoding="utf-8"))
+    manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert report["status"] == "matches"
+    assert report["canvas_id"] == 1
+    assert all(check["matches"] for check in report["checks"])
+    assert manifest["command"] == "announcements verify"
+    assert manifest["status"] == "success"
+    assert "Announcement verify: matches" in capsys.readouterr().out
+
+
+def test_command_announcements_verify_mismatch_writes_failed_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "announcement.md"
+    source.write_text(
+        """---
+title: Wrong Title
+canvas_id: 1
+published: false
+---
+
+Different body
+""",
+        encoding="utf-8",
+    )
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        source=str(source),
+        announcement_id=None,
+        no_report=False,
+        report_root=None,
+        report_dir=str(report_dir),
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        command_announcements_verify(args)
+
+    assert exc.value.code == 1
+    report = json.loads((report_dir / "announcements-verify.json").read_text(encoding="utf-8"))
+    manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert report["status"] == "mismatch"
+    assert manifest["status"] == "failed"
+    mismatches = [check["field"] for check in report["checks"] if not check["matches"]]
+    assert {"title", "published", "body_text"} <= set(mismatches)
+
+
+def test_command_announcements_verify_requires_canvas_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "announcement.md"
+    source.write_text(
+        """---
+title: First Update
+---
+
+First body
+""",
+        encoding="utf-8",
+    )
+
+    def fail_canvas(args: object) -> object:
+        raise AssertionError("Canvas should not be contacted")
+
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", fail_canvas)
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        source=str(source),
+        announcement_id=None,
+        no_report=True,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit, match="requires --announcement-id or canvas_id"):
+        command_announcements_verify(args)

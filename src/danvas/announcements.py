@@ -93,6 +93,30 @@ def command_announcements_sync(args: Any) -> None:
     print_announcements_sync_summary(plan)
 
 
+def command_announcements_verify(args: Any) -> None:
+    source = Path(args.source)
+    if not source.is_file():
+        raise SystemExit(f"Announcement Markdown source not found: {source}")
+    local = announcement_verify_local_source(source, getattr(args, "announcement_id", None))
+    canvas = canvas_from_args(args)
+    course = canvas.get_course(args.course_id)
+    records = announcement_records(course, reply_user_id=0)
+    canvas_record = next(
+        (record for record in records if str(record.get("id") or "") == str(local["canvas_id"])),
+        None,
+    )
+    report = build_announcement_verify_report(
+        course=course,
+        source=source,
+        local=local,
+        canvas_record=canvas_record,
+    )
+    write_announcement_verify_report_run(make_announcement_verify_report_run(args, report), report)
+    print_announcement_verify_summary(report)
+    if report["status"] != "matches":
+        raise SystemExit(1)
+
+
 def command_announcements_create(args: Any) -> None:
     source = Path(args.source)
     if not source.is_file():
@@ -441,6 +465,171 @@ def render_announcement_source_markdown(record: dict[str, Any]) -> str:
     frontmatter = yaml.safe_dump(metadata, sort_keys=False, allow_unicode=True).strip()
     body = str(record.get("message") or "").strip()
     return f"---\n{frontmatter}\n---\n\n{body}\n"
+
+
+def announcement_verify_local_source(
+    source: Path, announcement_id: int | None = None
+) -> dict[str, Any]:
+    metadata, body = parse_frontmatter(source.read_text(encoding="utf-8-sig"), source, "Announcement")
+    canvas_id = announcement_id if announcement_id is not None else metadata.get("canvas_id")
+    if canvas_id is None or str(canvas_id).strip() == "":
+        raise SystemExit("Announcement verification requires --announcement-id or canvas_id front matter.")
+    return {
+        "canvas_id": int(canvas_id),
+        "canvas_url": str(metadata.get("canvas_url") or ""),
+        "title": str(metadata.get("title") or ""),
+        "published": metadata.get("published"),
+        "delayed_post_at": str(metadata.get("delayed_post_at") or ""),
+        "lock_at": str(metadata.get("lock_at") or ""),
+        "body_text": normalized_text(html_to_text(markdown_to_html(body))),
+    }
+
+
+def build_announcement_verify_report(
+    *,
+    course: Any,
+    source: Path,
+    local: dict[str, Any],
+    canvas_record: dict[str, Any] | None,
+) -> dict[str, Any]:
+    checks = []
+    if canvas_record is None:
+        status = "not_found"
+    else:
+        checks = announcement_verify_checks(local, canvas_record)
+        status = "matches" if all(check["matches"] for check in checks) else "mismatch"
+    return {
+        "course": canvas_object_to_dict(course),
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "source": str(source),
+        "canvas_id": local["canvas_id"],
+        "status": status,
+        "local": local,
+        "canvas": canvas_record or {},
+        "checks": checks,
+    }
+
+
+def announcement_verify_checks(
+    local: dict[str, Any], canvas_record: dict[str, Any]
+) -> list[dict[str, Any]]:
+    checks = [
+        verify_check("title", local.get("title"), canvas_record.get("title")),
+        verify_check("canvas_url", local.get("canvas_url"), canvas_record.get("html_url")),
+        verify_check("published", local.get("published"), canvas_record.get("published")),
+        verify_check(
+            "delayed_post_at",
+            local.get("delayed_post_at"),
+            canvas_record.get("delayed_post_at"),
+        ),
+        verify_check("lock_at", local.get("lock_at"), canvas_record.get("lock_at")),
+        verify_check(
+            "body_text",
+            local.get("body_text"),
+            normalized_text(str(canvas_record.get("message") or "")),
+        ),
+    ]
+    return [check for check in checks if check["local"] != "" or check["canvas"] != ""]
+
+
+def verify_check(field: str, local_value: Any, canvas_value: Any) -> dict[str, Any]:
+    local = comparable_value(local_value)
+    canvas = comparable_value(canvas_value)
+    return {
+        "field": field,
+        "matches": local == canvas,
+        "local": local,
+        "canvas": canvas,
+    }
+
+
+def comparable_value(value: Any) -> Any:
+    if isinstance(value, bool) or value is None:
+        return value
+    text = str(value)
+    if text.lower() == "true":
+        return True
+    if text.lower() == "false":
+        return False
+    return normalized_text(text)
+
+
+def normalized_text(value: str) -> str:
+    return " ".join(value.split())
+
+
+def make_announcement_verify_report_run(args: Any, report: dict[str, Any]) -> ReportRun | None:
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
+    report_slug = getattr(args, "report_slug", None)
+    if not should_write_report_run(
+        no_report=bool(getattr(args, "no_report", False)),
+        legacy_output=False,
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        return None
+    return create_report_run(
+        command="announcements verify",
+        slug=report_slug or "announcements-verify",
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        course_id=getattr(args, "course_id", None),
+        input_paths=[Path(report["source"])],
+        private_data=False,
+    )
+
+
+def write_announcement_verify_report_run(
+    report_run: ReportRun | None, report: dict[str, Any]
+) -> None:
+    if report_run is None:
+        return
+    try:
+        json_path = report_run.write_json("announcements-verify.json", report)
+        md_path = report_run.write_text(
+            "announcements-verify.md", render_announcement_verify_markdown(report)
+        )
+        manifest_path = report_run.finish("success" if report["status"] == "matches" else "failed")
+        print(f"Wrote {json_path}")
+        print(f"Wrote {md_path}")
+        print(f"Wrote {manifest_path}")
+        print(f"Report directory: {report_run.path}")
+    except Exception as exc:
+        report_run.finish("failed", error=str(exc))
+        raise
+
+
+def render_announcement_verify_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Announcements Verify",
+        "",
+        f"- Status: `{report['status']}`",
+        f"- Source: `{report['source']}`",
+        f"- Canvas ID: `{report['canvas_id']}`",
+        "",
+        "| Field | Local | Canvas | Status |",
+        "| --- | --- | --- | --- |",
+    ]
+    for check in report["checks"]:
+        status = "matches" if check["matches"] else "mismatch"
+        lines.append(
+            f"| {check['field']} | `{check['local']}` | `{check['canvas']}` | `{status}` |"
+        )
+    if report["status"] == "not_found":
+        lines.extend(["", "Canvas announcement was not found by ID."])
+    return "\n".join(lines) + "\n"
+
+
+def print_announcement_verify_summary(report: dict[str, Any]) -> None:
+    print(f"Announcement verify: {report['status']}")
+    for check in report["checks"]:
+        marker = "OK" if check["matches"] else "MISMATCH"
+        print(f"  {check['field']}: {marker}")
 
 
 def write_announcements_sync_files(plan: dict[str, Any]) -> None:
