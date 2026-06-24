@@ -7,6 +7,15 @@ import pytest
 from danvas.assignments import command_assignments_verify, load_assignment_markdown, resolve_format
 
 
+def write_config(root: Path, timezone: str = "America/Chicago") -> None:
+    config_dir = root / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        f'[canvas]\ncourse_id = 101\ntimezone = "{timezone}"\n',
+        encoding="utf-8",
+    )
+
+
 def test_load_assignment_markdown_accepts_yaml_frontmatter(tmp_path: Path) -> None:
     source = tmp_path / "assignment.md"
     source.write_text(
@@ -33,6 +42,71 @@ Submit the report.
     assert payload["submission_types"] == ["online_upload"]
     assert payload["published"] is False
     assert "<h1>YAML Assignment</h1>" in payload["description"]
+
+
+def test_load_assignment_markdown_expands_date_only_fields_with_course_timezone(
+    tmp_path: Path,
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "assignment.md"
+    source.parent.mkdir()
+    source.write_text(
+        """---
+title: Date Assignment
+due_date: 2026-05-29
+unlock_date: 2026-05-20
+lock_date: 2026-05-30
+---
+
+Submit the report.
+""",
+        encoding="utf-8",
+    )
+
+    payload = load_assignment_markdown(source)
+
+    assert payload["due_at"] == "2026-05-29T23:59:00-05:00"
+    assert payload["unlock_at"] == "2026-05-20T00:00:00-05:00"
+    assert payload["lock_at"] == "2026-05-30T23:59:00-05:00"
+    assert "due_date" not in payload
+    assert "unlock_date" not in payload
+    assert "lock_date" not in payload
+
+
+def test_load_assignment_markdown_rejects_date_alias_conflict(tmp_path: Path) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        """---
+title: Date Assignment
+due_date: 2026-05-29
+due_at: 2026-05-29T23:59:00-05:00
+---
+
+Submit the report.
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="Use either due_date or due_at"):
+        load_assignment_markdown(source)
+
+
+def test_load_assignment_markdown_requires_timezone_for_date_only(tmp_path: Path) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        """---
+title: Date Assignment
+due_date: 2026-05-29
+---
+
+Submit the report.
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="requires \\[canvas\\]\\.timezone"):
+        load_assignment_markdown(source)
 
 
 def test_load_assignment_markdown_still_accepts_toml_frontmatter(tmp_path: Path) -> None:
@@ -159,6 +233,62 @@ Submit the case memo.
     assert all(check["matches"] for check in report["checks"])
     assert manifest["command"] == "assignments verify"
     assert manifest["status"] == "success"
+
+
+def test_command_assignments_verify_matches_date_only_due_date(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        """---
+assignment_id: 10
+title: Case 1
+due_date: 2026-05-29
+---
+
+Submit the case memo.
+""",
+        encoding="utf-8",
+    )
+    report_dir = tmp_path / "report"
+
+    class FakeCourse:
+        id = 101
+        name = "Course"
+
+        def get_assignment(self, assignment_id: int) -> SimpleNamespace:
+            return SimpleNamespace(
+                id=assignment_id,
+                name="Case 1",
+                due_at="2026-05-29T23:59:00-05:00",
+                description="<p>Submit the case memo.</p>",
+            )
+
+        def get_assignment_groups(self) -> list[SimpleNamespace]:
+            return []
+
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: FakeCourse()),
+    )
+
+    command_assignments_verify(
+        SimpleNamespace(
+            source=str(source),
+            course_id=101,
+            assignment_id=None,
+            project_root=str(tmp_path),
+            no_report=False,
+            report_root=None,
+            report_dir=str(report_dir),
+            report_slug=None,
+        )
+    )
+
+    report = json.loads((report_dir / "assignments-verify.json").read_text(encoding="utf-8"))
+    assert report["status"] == "matches"
+    assert any(check["field"] == "due_at" and check["matches"] for check in report["checks"])
 
 
 def test_command_assignments_verify_mismatch_writes_failed_report(

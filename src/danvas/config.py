@@ -7,6 +7,7 @@ import json
 import tomllib
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from danvas.auth import canvas_from_args
 from danvas.files import canvas_file_record
@@ -99,6 +100,20 @@ def resolve_assignment_group_id(
     raise SystemExit(
         f"Unknown assignment group name: {name}. Run `danvas refresh` or use assignment_group_id."
     )
+
+
+def resolve_course_timezone(start: Path | None = None) -> ZoneInfo:
+    config = load_project_config(start)
+    timezone = (config.get("canvas") or {}).get("timezone")
+    if not timezone:
+        raise SystemExit(
+            "Date-only assignment metadata requires [canvas].timezone in .danvas/config.toml. "
+            "Run `danvas init` or use explicit *_at datetime fields."
+        )
+    try:
+        return ZoneInfo(str(timezone))
+    except ZoneInfoNotFoundError as exc:
+        raise SystemExit(f"Unknown course timezone in .danvas/config.toml: {timezone}") from exc
 
 
 def command_init(args: Any) -> None:

@@ -711,6 +711,12 @@ Do this after update/upsert behavior is stable.
 
 ### Due-Date Ergonomics
 
+Status: done. Assignment Markdown now accepts date-only `due_date`,
+`unlock_date`, and `lock_date` fields. They expand to Canvas `due_at`,
+`unlock_at`, and `lock_at` datetimes using `[canvas].timezone` from
+`.danvas/config.toml`; `due_date` and `lock_date` use 23:59 and `unlock_date`
+uses 00:00.
+
 Desired behavior:
 
 - Support date-only front matter such as `due_date: 2026-05-29`.

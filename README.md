@@ -241,10 +241,15 @@ use an assignment group name:
 title: Case Study 1
 assignment_group_name: Case Studies
 points_possible: 100
+due_date: 2026-05-29
 ---
 ```
 
 Use `assignment_group_id` when you want to bypass project-local name resolution.
+Date-only assignment fields `due_date`, `unlock_date`, and `lock_date` expand to
+Canvas `*_at` datetimes using the course timezone in `.danvas/config.toml`.
+`due_date` and `lock_date` use 23:59; `unlock_date` uses 00:00. Use explicit
+`due_at`, `unlock_at`, or `lock_at` when a different time is needed.
 
 `danvas status` has default local-source conventions:
 

@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import re
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
 from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.auth import canvas_from_args
-from danvas.config import resolve_assignment_group_id
+from danvas.config import resolve_assignment_group_id, resolve_course_timezone
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.utils import (
@@ -31,6 +32,7 @@ ASSIGNMENT_METADATA_FIELDS = {
     "assignment_group_name",
     "automatic_peer_reviews",
     "due_at",
+    "due_date",
     "external_tool_tag_attributes",
     "final_grader_id",
     "grade_group_students_individually",
@@ -45,6 +47,7 @@ ASSIGNMENT_METADATA_FIELDS = {
     "integration_data",
     "integration_id",
     "lock_at",
+    "lock_date",
     "moderated_grading",
     "name",
     "notify_of_update",
@@ -58,6 +61,7 @@ ASSIGNMENT_METADATA_FIELDS = {
     "turnitin_enabled",
     "turnitin_settings",
     "unlock_at",
+    "unlock_date",
     "vericite_enabled",
 }
 
@@ -236,6 +240,7 @@ def load_assignment_markdown(source: Path) -> dict[str, Any]:
         if "name" in metadata:
             raise SystemExit("Use either 'name' or 'title', not both.")
         metadata["name"] = metadata.pop("title")
+    expand_date_only_metadata(metadata, source)
     if not str(metadata.get("name", "")).strip():
         raise SystemExit("Assignment metadata must include 'name' or 'title'.")
     unknown = sorted(set(metadata) - ASSIGNMENT_METADATA_FIELDS)
@@ -251,6 +256,7 @@ def assignment_verify_local_source(
     source: Path, assignment_id: int | None = None
 ) -> dict[str, Any]:
     metadata, body = parse_frontmatter(source.read_text(encoding="utf-8-sig"), source, "Assignment")
+    expand_date_only_metadata(metadata, source)
     canvas_id = assignment_id
     if canvas_id is None:
         canvas_id = metadata.get("assignment_id", metadata.get("canvas_id", metadata.get("id")))
@@ -334,6 +340,45 @@ def metadata_text(value: Any) -> str:
     if callable(isoformat):
         return str(isoformat()).replace("+00:00", "Z")
     return str(value)
+
+
+DATE_ONLY_ALIASES = {
+    "due_date": ("due_at", time(23, 59)),
+    "unlock_date": ("unlock_at", time(0, 0)),
+    "lock_date": ("lock_at", time(23, 59)),
+}
+DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def expand_date_only_metadata(metadata: dict[str, Any], source: Path) -> None:
+    for alias, (target, default_time) in DATE_ONLY_ALIASES.items():
+        if alias not in metadata:
+            continue
+        if target in metadata and not is_blank_metadata_value(metadata.get(target)):
+            raise SystemExit(f"Use either {alias} or {target}, not both.")
+        value = metadata.pop(alias)
+        if is_blank_metadata_value(value):
+            continue
+        timezone = resolve_course_timezone(source)
+        day = parse_date_only_value(alias, value)
+        metadata[target] = datetime.combine(day, default_time, tzinfo=timezone).isoformat(
+            timespec="seconds"
+        )
+
+
+def parse_date_only_value(field: str, value: Any) -> date:
+    if isinstance(value, datetime):
+        raise SystemExit(f"{field} must be a date-only value in YYYY-MM-DD format.")
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not DATE_ONLY_RE.match(text):
+        raise SystemExit(f"{field} must be a date-only value in YYYY-MM-DD format.")
+    return date.fromisoformat(text)
+
+
+def is_blank_metadata_value(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def build_assignment_verify_report(
