@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import date, datetime, time
@@ -14,6 +15,7 @@ from danvas.auth import canvas_from_args
 from danvas.config import resolve_assignment_group_id, resolve_course_timezone
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
+from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
 from danvas.utils import (
     canvas_object_to_dict,
     html_to_text,
@@ -233,6 +235,113 @@ def command_assignments_create(args: Any) -> None:
         print(f"URL: {created.html_url}")
 
 
+def command_assignments_update(args: Any) -> None:
+    source = Path(args.source)
+    if not source.is_file():
+        raise SystemExit(f"Assignment Markdown source not found: {source}")
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    local = assignment_update_local_source(source)
+    resolved = resolve_source_canvas_id(
+        kind="assignment",
+        source=source,
+        explicit_id=getattr(args, "assignment_id", None),
+        frontmatter_id=local["frontmatter_id"],
+        project_root=project_root,
+    )
+    canvas = canvas_from_args(args)
+    course = canvas.get_course(args.course_id)
+    assignment, lookup = resolve_assignment_for_update(
+        course, local, resolved, bool(args.match_title)
+    )
+    canvas_before = assignment_verify_canvas_record(course, assignment) if assignment else None
+    if assignment is None:
+        report = build_assignment_update_report(
+            course=course,
+            source=source,
+            local=local,
+            resolved=resolved,
+            lookup=lookup,
+            canvas_before=None,
+            canvas_after=None,
+            update_payload={},
+            dry_run=bool(args.dry_run),
+            readback_status="skipped",
+        )
+        write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
+        print_assignment_update_summary(report)
+        raise SystemExit(1)
+
+    update_payload = assignment_update_payload(local["assignment"])
+    report = build_assignment_update_report(
+        course=course,
+        source=source,
+        local=local,
+        resolved=resolved,
+        lookup=lookup,
+        canvas_before=canvas_before,
+        canvas_after=None,
+        update_payload=update_payload,
+        dry_run=bool(args.dry_run),
+        readback_status="skipped",
+    )
+    if args.dry_run:
+        write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
+        print_assignment_update_summary(report)
+        return
+    if report["status"] == "no_change" or not update_payload:
+        write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
+        print_assignment_update_summary(report)
+        return
+
+    print_assignment_update_summary(report)
+    print_mutation_banner(
+        "update assignment",
+        {
+            "course": args.course_id,
+            "assignment_id": report["assignment_id"],
+            "name": update_payload.get("name", canvas_before.get("title") if canvas_before else ""),
+            "source": source,
+        },
+    )
+    updated = assignment.edit(assignment=update_payload)
+    updated_id = int(
+        first_value(updated, canvas_object_to_dict(updated), "id") or report["assignment_id"]
+    )
+    readback = course.get_assignment(updated_id)
+    canvas_after = assignment_verify_canvas_record(course, readback)
+    report = build_assignment_update_report(
+        course=course,
+        source=source,
+        local=local,
+        resolved={**resolved, "id": updated_id},
+        lookup=lookup,
+        canvas_before=canvas_before,
+        canvas_after=canvas_after,
+        update_payload=update_payload,
+        dry_run=False,
+        readback_status="matches",
+    )
+    write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
+    print_assignment_update_summary(report)
+    if report["status"] != "updated":
+        raise SystemExit(1)
+    source_map_path = write_source_map_entry(
+        kind="assignment",
+        source=source,
+        course_id=getattr(args, "course_id", None),
+        canvas={
+            "id": updated_id,
+            "url": canvas_after.get("canvas_url") or "",
+            "updated_at": canvas_after.get("assignment", {}).get("updated_at") or "",
+        },
+        command="assignments update",
+        fields=assignment_source_map_fields(local),
+        body_sha256=local["body_sha256"],
+        project_root=project_root,
+    )
+    print(f"Wrote {source_map_path}")
+
+
 def load_assignment_markdown(source: Path) -> dict[str, Any]:
     text = source.read_text(encoding="utf-8-sig")
     metadata, body = parse_frontmatter(text, source, "Assignment")
@@ -252,6 +361,62 @@ def load_assignment_markdown(source: Path) -> dict[str, Any]:
     return assignment
 
 
+def assignment_update_local_source(source: Path) -> dict[str, Any]:
+    text = source.read_text(encoding="utf-8-sig")
+    metadata, body = parse_frontmatter(text, source, "Assignment")
+    if "title" in metadata:
+        if "name" in metadata:
+            raise SystemExit("Use either 'name' or 'title', not both.")
+        metadata["name"] = metadata.pop("title")
+    frontmatter_id = metadata.get("assignment_id", metadata.get("canvas_id", metadata.get("id")))
+    assignment = assignment_payload_from_metadata(source, metadata, body, default_published=False)
+    if "assignment_group" in assignment:
+        if "assignment_group_name" in assignment:
+            raise SystemExit("Use either assignment_group or assignment_group_name, not both.")
+        assignment["assignment_group_name"] = assignment.pop("assignment_group")
+    if "assignment_group_name" in assignment:
+        assignment["assignment_group_id"] = resolve_assignment_group_id(
+            str(assignment.pop("assignment_group_name")),
+            explicit_id=assignment.get("assignment_group_id"),
+            start=source,
+        )
+    return {
+        "frontmatter_id": int(frontmatter_id) if frontmatter_id not in {None, ""} else None,
+        "assignment": assignment,
+        "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        "body_text": normalized_text(html_to_text(assignment.get("description") or "")),
+    }
+
+
+def assignment_payload_from_metadata(
+    source: Path, metadata: dict[str, Any], body: str, *, default_published: bool
+) -> dict[str, Any]:
+    expand_date_only_metadata(metadata, source)
+    if not str(metadata.get("name", "")).strip():
+        raise SystemExit("Assignment metadata must include 'name' or 'title'.")
+    provenance_fields = {"assignment_id", "canvas_id", "id", "canvas_url", "html_url"}
+    unknown = sorted(set(metadata) - ASSIGNMENT_METADATA_FIELDS - provenance_fields)
+    if unknown:
+        raise SystemExit(f"Unsupported assignment metadata field(s): {', '.join(unknown)}")
+    assignment = {
+        key: normalize_canvas_value(value)
+        for key, value in metadata.items()
+        if key not in provenance_fields
+    }
+    if default_published:
+        assignment.setdefault("published", False)
+    assignment["description"] = markdown_to_html(body)
+    return assignment
+
+
+def assignment_update_payload(assignment: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in assignment.items()
+        if key in ASSIGNMENT_METADATA_FIELDS or key == "description"
+    }
+
+
 def assignment_verify_local_source(
     source: Path, assignment_id: int | None = None
 ) -> dict[str, Any]:
@@ -261,7 +426,9 @@ def assignment_verify_local_source(
     if canvas_id is None:
         canvas_id = metadata.get("assignment_id", metadata.get("canvas_id", metadata.get("id")))
     if canvas_id is None or str(canvas_id).strip() == "":
-        raise SystemExit("Assignment verification requires --assignment-id or assignment_id front matter.")
+        raise SystemExit(
+            "Assignment verification requires --assignment-id or assignment_id front matter."
+        )
     title = metadata.get("title", metadata.get("name", ""))
     return {
         "assignment_id": int(canvas_id),
@@ -301,8 +468,53 @@ def assignment_verify_canvas_record(course: Any, assignment: Any) -> dict[str, A
         "submission_types": first_value(assignment, payload, "submission_types"),
         "grading_type": first_value(assignment, payload, "grading_type"),
         "group_category_id": first_value(assignment, payload, "group_category_id"),
-        "body_text": normalized_text(html_to_text(first_value(assignment, payload, "description") or "")),
+        "body_text": normalized_text(
+            html_to_text(first_value(assignment, payload, "description") or "")
+        ),
         "assignment": payload,
+    }
+
+
+def resolve_assignment_for_update(
+    course: Any, local: dict[str, Any], resolved: dict[str, Any], match_title: bool
+) -> tuple[Any | None, dict[str, Any]]:
+    assignment_id = resolved.get("id")
+    if assignment_id is not None:
+        try:
+            assignment = course.get_assignment(assignment_id)
+        except ResourceDoesNotExist:
+            return None, {
+                "method": resolved["source"],
+                "status": "not_found",
+                "reason": f"Canvas assignment ID {assignment_id} was not found.",
+            }
+        return assignment, {"method": resolved["source"], "status": "matched", "reason": ""}
+    if not match_title:
+        return None, {
+            "method": "none",
+            "status": "missing_id",
+            "reason": "Assignment update requires --assignment-id, assignment_id/canvas_id front matter, source-map entry, or --match-title.",
+        }
+    title = str(local["assignment"].get("name") or "")
+    matches = []
+    for assignment in course.get_assignments():
+        payload = canvas_object_to_dict(assignment)
+        candidate = first_value(assignment, payload, "name", "title")
+        if str(candidate or "").strip() == title:
+            matches.append(assignment)
+    if len(matches) == 1:
+        return matches[0], {"method": "title", "status": "matched", "reason": ""}
+    if not matches:
+        return None, {
+            "method": "title",
+            "status": "not_found",
+            "reason": f"No Canvas assignment title matched {title!r}.",
+        }
+    ids = ", ".join(str(first_value(item, canvas_object_to_dict(item), "id")) for item in matches)
+    return None, {
+        "method": "title",
+        "status": "ambiguous",
+        "reason": f"Multiple Canvas assignments matched {title!r}: {ids}.",
     }
 
 
@@ -408,13 +620,99 @@ def build_assignment_verify_report(
     }
 
 
+def build_assignment_update_report(
+    *,
+    course: Any,
+    source: Path,
+    local: dict[str, Any],
+    resolved: dict[str, Any],
+    lookup: dict[str, Any],
+    canvas_before: dict[str, Any] | None,
+    canvas_after: dict[str, Any] | None,
+    update_payload: dict[str, Any],
+    dry_run: bool,
+    readback_status: str,
+) -> dict[str, Any]:
+    local_record = assignment_update_local_compare_record(local)
+    before_checks = assignment_verify_checks(local_record, canvas_before) if canvas_before else []
+    after_checks = assignment_verify_checks(local_record, canvas_after) if canvas_after else []
+    mismatches = [check for check in before_checks if not check["matches"]]
+    if lookup["status"] != "matched":
+        status = "lookup_failed"
+    elif canvas_after is not None:
+        readback_status = (
+            "matches" if all(check["matches"] for check in after_checks) else "mismatch"
+        )
+        status = "updated" if readback_status == "matches" else "readback_mismatch"
+    elif dry_run:
+        status = "would_update" if mismatches else "no_change"
+    else:
+        status = "no_change" if not mismatches else "planned"
+    return {
+        "course": canvas_object_to_dict(course),
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "source": str(source),
+        "dry_run": dry_run,
+        "status": status,
+        "assignment_id": resolved.get("id") or first_value_from_record(canvas_before, "id"),
+        "id_resolution": {
+            "source": resolved.get("source"),
+            "path": resolved.get("path"),
+            "id": resolved.get("id"),
+        },
+        "lookup": lookup,
+        "local": local_record,
+        "canvas_before": canvas_before or {},
+        "canvas_after": canvas_after or {},
+        "update_payload": update_payload,
+        "diff": before_checks,
+        "readback": {
+            "status": readback_status,
+            "checks": after_checks,
+        },
+    }
+
+
+def assignment_update_local_compare_record(local: dict[str, Any]) -> dict[str, Any]:
+    assignment = local["assignment"]
+    return {
+        "title": assignment.get("name"),
+        "points_possible": assignment.get("points_possible"),
+        "due_at": assignment.get("due_at"),
+        "unlock_at": assignment.get("unlock_at"),
+        "lock_at": assignment.get("lock_at"),
+        "published": assignment.get("published"),
+        "assignment_group_id": assignment.get("assignment_group_id"),
+        "submission_types": assignment.get("submission_types"),
+        "grading_type": assignment.get("grading_type"),
+        "group_category_id": assignment.get("group_category_id"),
+        "body_text": local["body_text"],
+    }
+
+
+def assignment_source_map_fields(local: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in assignment_update_local_compare_record(local).items()
+        if value is not None and value != ""
+    }
+
+
+def first_value_from_record(record: dict[str, Any] | None, key: str) -> Any:
+    if not record:
+        return None
+    return record.get(key)
+
+
 def assignment_verify_checks(
     local: dict[str, Any], canvas_record: dict[str, Any]
 ) -> list[dict[str, Any]]:
     checks = [
         verify_check("title", local.get("title"), canvas_record.get("title")),
         verify_check("canvas_url", local.get("canvas_url"), canvas_record.get("canvas_url")),
-        verify_check("points_possible", local.get("points_possible"), canvas_record.get("points_possible")),
+        verify_check(
+            "points_possible", local.get("points_possible"), canvas_record.get("points_possible")
+        ),
         verify_check("due_at", local.get("due_at"), canvas_record.get("due_at")),
         verify_check("unlock_at", local.get("unlock_at"), canvas_record.get("unlock_at")),
         verify_check("lock_at", local.get("lock_at"), canvas_record.get("lock_at")),
@@ -531,6 +829,55 @@ def write_assignment_verify_report_run(
         raise
 
 
+def make_assignment_update_report_run(args: Any, report: dict[str, Any]) -> ReportRun | None:
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
+    report_slug = getattr(args, "report_slug", None)
+    if not should_write_report_run(
+        no_report=bool(getattr(args, "no_report", False)),
+        legacy_output=False,
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        return None
+    return create_report_run(
+        command="assignments update",
+        slug=report_slug or "assignments-update",
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        course_id=getattr(args, "course_id", None),
+        input_paths=[Path(report["source"])],
+        private_data=False,
+    )
+
+
+def write_assignment_update_report_run(
+    report_run: ReportRun | None, report: dict[str, Any]
+) -> None:
+    if report_run is None:
+        return
+    try:
+        json_path = report_run.write_json("assignments-update.json", report)
+        md_path = report_run.write_text(
+            "assignments-update.md", render_assignment_update_markdown(report)
+        )
+        manifest_status = (
+            "success" if report["status"] in {"would_update", "no_change", "updated"} else "failed"
+        )
+        manifest_path = report_run.finish(manifest_status)
+        print(f"Wrote {json_path}")
+        print(f"Wrote {md_path}")
+        print(f"Wrote {manifest_path}")
+        print(f"Report directory: {report_run.path}")
+    except Exception as exc:
+        report_run.finish("failed", error=str(exc))
+        raise
+
+
 def render_assignment_verify_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Assignments Verify",
@@ -554,8 +901,69 @@ def render_assignment_verify_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_assignment_update_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Assignments Update",
+        "",
+        f"- Status: `{report['status']}`",
+        f"- Dry run: `{report['dry_run']}`",
+        f"- Source: `{report['source']}`",
+        f"- Assignment ID: `{report.get('assignment_id') or ''}`",
+        f"- ID resolution: `{report['id_resolution']['source']}`",
+        f"- Lookup: `{report['lookup']['status']}` via `{report['lookup']['method']}`",
+    ]
+    if report["lookup"].get("reason"):
+        lines.append(f"- Reason: {report['lookup']['reason']}")
+    lines.extend(
+        [
+            "",
+            "## Planned Diff",
+            "",
+            "| Field | Local | Canvas before | Status |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
+    if report["diff"]:
+        for check in report["diff"]:
+            status = "matches" if check["matches"] else "would change"
+            lines.append(
+                f"| {check['field']} | `{check['local']}` | `{check['canvas']}` | `{status}` |"
+            )
+    else:
+        lines.append("| | | | |")
+    if report["readback"]["checks"]:
+        lines.extend(
+            [
+                "",
+                "## Readback",
+                "",
+                f"- Status: `{report['readback']['status']}`",
+                "",
+                "| Field | Local | Canvas after | Status |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for check in report["readback"]["checks"]:
+            status = "matches" if check["matches"] else "mismatch"
+            lines.append(
+                f"| {check['field']} | `{check['local']}` | `{check['canvas']}` | `{status}` |"
+            )
+    return "\n".join(lines) + "\n"
+
+
 def print_assignment_verify_summary(report: dict[str, Any]) -> None:
     print(f"Assignment verify: {report['status']}")
     for check in report["checks"]:
         marker = "OK" if check["matches"] else "MISMATCH"
         print(f"  {check['field']}: {marker}")
+
+
+def print_assignment_update_summary(report: dict[str, Any]) -> None:
+    print(f"Assignment update: {report['status']}")
+    if report["lookup"].get("reason"):
+        print(f"  {report['lookup']['reason']}")
+    for check in report["diff"]:
+        marker = "OK" if check["matches"] else "CHANGE"
+        print(f"  {check['field']}: {marker}")
+    if report["readback"]["status"] != "skipped":
+        print(f"  readback: {report['readback']['status']}")

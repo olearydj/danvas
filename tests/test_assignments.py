@@ -1,10 +1,16 @@
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
-from danvas.assignments import command_assignments_verify, load_assignment_markdown, resolve_format
+from danvas.assignments import (
+    command_assignments_update,
+    command_assignments_verify,
+    load_assignment_markdown,
+    resolve_format,
+)
 
 
 def write_config(root: Path, timezone: str = "America/Chicago") -> None:
@@ -381,3 +387,242 @@ def test_command_assignments_verify_requires_assignment_id(
                 report_slug=None,
             )
         )
+
+
+def update_args(source: Path, report_dir: Path, **overrides: object) -> SimpleNamespace:
+    defaults: dict[str, object] = {
+        "source": str(source),
+        "course_id": 101,
+        "assignment_id": None,
+        "match_title": False,
+        "dry_run": True,
+        "project_root": str(
+            source.parent.parent if source.parent.name == "content" else source.parent
+        ),
+        "no_report": False,
+        "report_root": None,
+        "report_dir": str(report_dir),
+        "report_slug": None,
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+class FakeAssignment:
+    def __init__(self, **attrs: object) -> None:
+        self.id = int(cast(Any, attrs.get("id", 0)) or 0)
+        self.__dict__.update(attrs)
+        self.edits: list[dict[str, object]] = []
+
+    def edit(self, **kwargs: object) -> "FakeAssignment":
+        assignment = cast(dict[str, object], kwargs["assignment"])
+        assert isinstance(assignment, dict)
+        self.edits.append(assignment)
+        if "name" in assignment:
+            self.name = assignment["name"]
+        if "description" in assignment:
+            self.description = assignment["description"]
+        for key, value in assignment.items():
+            if key not in {"name", "description"}:
+                setattr(self, key, value)
+        return self
+
+
+class FakeUpdateCourse:
+    id = 101
+    name = "Course"
+
+    def __init__(self, assignments: list[FakeAssignment]) -> None:
+        self.assignments = {int(assignment.id): assignment for assignment in assignments}
+
+    def get_assignment(self, assignment_id: int) -> FakeAssignment:
+        return self.assignments[int(assignment_id)]
+
+    def get_assignments(self) -> list[FakeAssignment]:
+        return list(self.assignments.values())
+
+    def get_assignment_groups(self) -> list[SimpleNamespace]:
+        return []
+
+
+def test_command_assignments_update_dry_run_writes_diff_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text(
+        """---
+assignment_id: 10
+title: Case 1 revised
+points_possible: 100
+published: true
+---
+
+Submit the revised case memo.
+""",
+        encoding="utf-8",
+    )
+    assignment = FakeAssignment(
+        id=10,
+        name="Case 1",
+        points_possible=90,
+        published=True,
+        description="<p>Submit the case memo.</p>",
+    )
+    course = FakeUpdateCourse([assignment])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_update(update_args(source, tmp_path / "report"))
+
+    assert assignment.edits == []
+    report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text("utf-8"))
+    assert report["status"] == "would_update"
+    assert report["dry_run"] is True
+    assert report["id_resolution"]["source"] == "frontmatter"
+    changed = {check["field"] for check in report["diff"] if not check["matches"]}
+    assert {"title", "points_possible", "body_text"} <= changed
+    assert manifest["command"] == "assignments update"
+    assert manifest["status"] == "success"
+    assert not (tmp_path / ".danvas" / "source-map.json").exists()
+
+
+def test_command_assignments_update_live_edits_and_writes_source_map(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text(
+        """---
+assignment_id: 10
+title: Case 1 revised
+points_possible: 100
+published: true
+---
+
+Submit the revised case memo.
+""",
+        encoding="utf-8",
+    )
+    assignment = FakeAssignment(
+        id=10,
+        name="Case 1",
+        points_possible=90,
+        published=True,
+        description="<p>Submit the case memo.</p>",
+        html_url="https://canvas.example/courses/101/assignments/10",
+        updated_at="2026-06-24T12:00:00Z",
+    )
+    course = FakeUpdateCourse([assignment])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_update(
+        update_args(source, tmp_path / "report", dry_run=False, project_root=str(tmp_path))
+    )
+
+    assert assignment.edits
+    assert assignment.edits[0]["name"] == "Case 1 revised"
+    report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
+    source_map = json.loads((tmp_path / ".danvas" / "source-map.json").read_text("utf-8"))
+    assert report["status"] == "updated"
+    assert report["readback"]["status"] == "matches"
+    assert source_map["sources"][0]["kind"] == "assignment"
+    assert source_map["sources"][0]["path"] == "content/case.md"
+    assert source_map["sources"][0]["canvas"]["id"] == 10
+    assert source_map["sources"][0]["last_posted"]["command"] == "assignments update"
+
+
+def test_command_assignments_update_uses_source_map_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text("---\ntitle: Case 1\n---\n\nSubmit the case memo.\n", encoding="utf-8")
+    (tmp_path / ".danvas" / "source-map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "course_id": 101,
+                "generated_at": "2026-06-24T12:00:00-05:00",
+                "sources": [
+                    {
+                        "kind": "assignment",
+                        "path": "content/case.md",
+                        "canvas": {"id": 10},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assignment = FakeAssignment(id=10, name="Case 1", description="<p>Old body.</p>")
+    course = FakeUpdateCourse([assignment])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_update(update_args(source, tmp_path / "report", project_root=str(tmp_path)))
+
+    report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
+    assert report["id_resolution"]["source"] == "source_map"
+    assert report["assignment_id"] == 10
+
+
+def test_command_assignments_update_requires_id_or_match_title(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text("---\ntitle: Case 1\n---\n\nSubmit the case memo.\n", encoding="utf-8")
+    course = FakeUpdateCourse([])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        command_assignments_update(update_args(source, tmp_path / "report"))
+
+    assert excinfo.value.code == 1
+    report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
+    assert report["status"] == "lookup_failed"
+    assert report["lookup"]["status"] == "missing_id"
+
+
+def test_command_assignments_update_refuses_ambiguous_title_match(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text("---\ntitle: Case 1\n---\n\nSubmit the case memo.\n", encoding="utf-8")
+    course = FakeUpdateCourse(
+        [
+            FakeAssignment(id=10, name="Case 1", description=""),
+            FakeAssignment(id=11, name="Case 1", description=""),
+        ]
+    )
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        command_assignments_update(
+            update_args(source, tmp_path / "report", match_title=True, project_root=str(tmp_path))
+        )
+
+    assert excinfo.value.code == 1
+    report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
+    assert report["lookup"]["status"] == "ambiguous"

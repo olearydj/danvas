@@ -525,6 +525,58 @@ def test_assignments_verify_cli_options_and_args(
     assert "--match-title" not in option_names("assignments", "verify")
 
 
+def test_assignments_update_cli_options_and_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text("---\ntitle: Case 1\nassignment_id: 1\n---\n\nBody\n", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_update(args: SimpleNamespace) -> None:
+        captured.update(vars(args))
+
+    monkeypatch.setattr("danvas.cli.command_assignments_update", fake_update)
+
+    result = runner.invoke(
+        app,
+        [
+            "assignments",
+            "update",
+            str(source),
+            "--course-id",
+            "101",
+            "--assignment-id",
+            "10",
+            "--match-title",
+            "--dry-run",
+            "--report-dir",
+            str(tmp_path / "report"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["course_id"] == 101
+    assert captured["source"] == str(source)
+    assert captured["assignment_id"] == 10
+    assert captured["match_title"] is True
+    assert captured["dry_run"] is True
+    assert captured["project_root"] == "."
+    assert captured["no_report"] is False
+    assert captured["report_dir"] == str(tmp_path / "report")
+    expected = {
+        "--assignment-id",
+        "--match-title",
+        "--dry-run",
+        "--project-root",
+        "--no-report",
+        "--report-root",
+        "--report-dir",
+        "--report-slug",
+        "--course-id",
+    }
+    assert expected <= option_names("assignments", "update")
+
+
 def test_announcements_verify_cli_options_and_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

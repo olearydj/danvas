@@ -411,11 +411,28 @@ duplicating Canvas objects.
 
 Recommended goals:
 
+0. Implement source-map helpers for safe update workflows.
+
+   Status: done. `.danvas/source-map.json` is now backed by reusable helpers for
+   load, write, project-relative source keys, ID resolution, and
+   front-matter/source-map conflict detection. Dry-runs and read-only commands
+   can read the map; live assignment update writes it only after Canvas readback
+   succeeds.
+
 1. Add conservative assignment update.
 
    ```bash
    danvas assignments update SOURCE.md --dry-run
    ```
+
+   Status: done for existing assignments. `danvas assignments update SOURCE.md`
+   resolves by explicit `--assignment-id`, assignment ID front matter, or
+   `.danvas/source-map.json`; `--match-title` enables exact-title lookup only
+   when no ID is available. Dry-run writes a field-by-field report without
+   Canvas mutation. Live mode updates supported assignment fields, reads Canvas
+   back, writes report evidence, and updates the source map after verified
+   readback. It does not create missing assignments; that remains a future
+   explicit upsert workflow.
 
    Desired behavior:
 
@@ -429,7 +446,11 @@ Recommended goals:
 2. Extend the pattern to announcements and discussions after assignment update is
    stable.
 
+   Status: not started.
+
 3. Add Markdown asset rewriting on top of `files upload`.
+
+   Status: not started.
 
    Desired behavior:
 
