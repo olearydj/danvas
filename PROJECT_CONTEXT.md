@@ -31,7 +31,8 @@ removed after their useful content was consolidated into this file and
 - `src/danvas/cli.py`: Typer command surface.
 - `src/danvas/auth.py`: Canvas API auth/client creation.
 - `src/danvas/config.py`: `.danvas` config, course snapshots, and snapshot diffs.
-- `src/danvas/reports.py`: report-run directories and manifests.
+- `src/danvas/reports.py`: report-run directories, manifests, and report
+  discovery helpers.
 - `src/danvas/sources.py`: local course source discovery.
 - `src/danvas/status.py`: read-only Canvas-vs-local status report.
 - `src/danvas/assignments.py`, `announcements.py`, `discussions.py`: course

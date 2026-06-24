@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,10 +23,15 @@ from danvas.files import command_files_download, command_files_inventory, comman
 from danvas.grades import command_grades_post, command_grades_verify
 from danvas.panopto import command_panopto_captions
 from danvas.quiz_import import command_quiz_import_qti
-from danvas.reports import create_report_run, should_write_report_run
+from danvas.reports import (
+    create_report_run,
+    discover_report_runs,
+    latest_report_run,
+    should_write_report_run,
+)
 from danvas.status import command_status
 from danvas.submissions import command_submissions_feedback, command_submissions_media
-from danvas.utils import write_json
+from danvas.utils import slugify, write_json
 
 SecretProvider = Literal["auto", "1password", "env"]
 AssignmentExportFormat = Literal["auto", "json", "csv", "markdown"]
@@ -81,6 +87,10 @@ recordings_app = typer.Typer(
     help="Discover and download course recording transcripts/captions.",
     no_args_is_help=True,
 )
+reports_app = typer.Typer(
+    help="List and inspect generated .danvas report runs.",
+    no_args_is_help=True,
+)
 
 def version_callback(value: bool) -> None:
     if value:
@@ -112,6 +122,7 @@ app.add_typer(discussions_app, name="discussions")
 app.add_typer(announcements_app, name="announcements")
 app.add_typer(files_app, name="files")
 app.add_typer(recordings_app, name="recordings")
+app.add_typer(reports_app, name="reports")
 
 
 ApiUrl = Annotated[
@@ -298,6 +309,49 @@ def render_quiz_analysis_markdown(payload: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def write_payload_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def echo_report_rows(rows: list[dict[str, Any]], *, root: Path | None = None) -> None:
+    if root:
+        typer.echo(f"Reports: {root}")
+    if not rows:
+        typer.echo("No report runs found.")
+        return
+    for row in rows:
+        status = row["status"] or row["manifest_status"]
+        command = row["command"] or "(unknown command)"
+        slug = row["report_slug"] or "(unknown slug)"
+        generated = row["generated_at"] or "(unknown time)"
+        typer.echo(f"{row['name']}  {status}  {slug}  {command}  {generated}")
+        if row["manifest_status"] != "valid":
+            typer.echo(f"  manifest: {row['manifest_status']}")
+            if row.get("error"):
+                typer.echo(f"  error: {row['error']}")
+
+
+def echo_report_detail(row: dict[str, Any]) -> None:
+    typer.echo(f"Report: {row['name']}")
+    typer.echo(f"  Path: {row['path']}")
+    typer.echo(f"  Command: {row['command']}")
+    typer.echo(f"  Slug: {row['report_slug']}")
+    typer.echo(f"  Status: {row['status']}")
+    typer.echo(f"  Generated: {row['generated_at']}")
+    typer.echo(f"  Course ID: {row['course_id']}")
+    typer.echo(f"  Private student data: {row['may_contain_private_student_data']}")
+    if row.get("error"):
+        typer.echo(f"  Error: {row['error']}")
+    files = row.get("files") or []
+    if files:
+        typer.echo("  Files:")
+        for file_name in files:
+            typer.echo(f"    - {file_name}")
+    else:
+        typer.echo("  Files: none recorded")
+
+
 @app.command(
     "init",
     help="Create .danvas/config.toml and .danvas/course.json for a Canvas course project.",
@@ -408,6 +462,57 @@ def status(
             report_slug=report_slug,
         ),
     )
+
+
+@reports_app.command("list", help="List generated report runs under .danvas/reports.")
+def reports_list(
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Reports root to inspect.")
+    ] = None,
+    slug: Annotated[
+        str | None, typer.Option("--slug", help="Only show report runs with this report slug.")
+    ] = None,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Optional JSON output path.")
+    ] = None,
+) -> None:
+    rows = discover_report_runs(project_root=project_root, report_root=report_root)
+    if slug:
+        wanted = slugify(slug, "")
+        rows = [row for row in rows if row["report_slug"] == wanted]
+    if output:
+        write_payload_json(output, rows)
+        typer.echo(f"Wrote {output}")
+    echo_report_rows(rows, root=report_root)
+
+
+@reports_app.command("latest", help="Show the newest valid report run, optionally by slug.")
+def reports_latest(
+    slug: Annotated[
+        str | None,
+        typer.Argument(help="Optional report slug, such as status or files-inventory."),
+    ] = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Reports root to inspect.")
+    ] = None,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Optional JSON output path.")
+    ] = None,
+) -> None:
+    row = latest_report_run(slug=slug, project_root=project_root, report_root=report_root)
+    if row is None:
+        suffix = f" for slug {slug!r}" if slug else ""
+        raise typer.BadParameter(f"No valid report run found{suffix}.")
+    if output:
+        write_payload_json(output, row)
+        typer.echo(f"Wrote {output}")
+    echo_report_detail(row)
 
 
 @app.command(help="Export active courses visible to the authenticated Canvas user.")

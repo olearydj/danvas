@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import re
 import sys
 import tomllib
@@ -19,6 +20,7 @@ CONFIG_FILE_NAME = "config.toml"
 REPORTS_DIR_NAME = "reports"
 URLISH_RE = re.compile(r"https?://\S+|[A-Za-z]+://\S+")
 SENSITIVE_VALUE_RE = re.compile(r"(?i)\b(verifier|token|secret)=([^&\s]+)")
+REPORT_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(\d{3})-(.+)$")
 
 
 @dataclass
@@ -140,6 +142,106 @@ def should_write_report_run(
     if legacy_output:
         return False
     return find_config_dir(project_root) is not None
+
+
+def resolve_reports_root(
+    *, project_root: Path | None = None, report_root: Path | None = None
+) -> Path:
+    if report_root:
+        return report_root
+    config_dir = find_config_dir(project_root)
+    if not config_dir:
+        raise SystemExit(
+            "No .danvas project found for report discovery. Pass --project-root or --report-root."
+        )
+    return config_dir / REPORTS_DIR_NAME
+
+
+def discover_report_runs(
+    *, project_root: Path | None = None, report_root: Path | None = None
+) -> list[dict[str, Any]]:
+    root = resolve_reports_root(project_root=project_root, report_root=report_root)
+    if not root.exists():
+        return []
+    if not root.is_dir():
+        raise SystemExit(f"Reports root is not a directory: {root}")
+    rows = [report_run_summary(path) for path in root.iterdir() if path.is_dir()]
+    rows.sort(key=lambda row: row["name"], reverse=True)
+    return rows
+
+
+def latest_report_run(
+    *,
+    slug: str | None = None,
+    project_root: Path | None = None,
+    report_root: Path | None = None,
+) -> dict[str, Any] | None:
+    wanted = slugify(slug, "") if slug else None
+    for row in discover_report_runs(project_root=project_root, report_root=report_root):
+        if row["manifest_status"] != "valid":
+            continue
+        if wanted and row["report_slug"] != wanted:
+            continue
+        return row
+    return None
+
+
+def report_run_summary(path: Path) -> dict[str, Any]:
+    manifest_path = path / "manifest.json"
+    base = {
+        "name": path.name,
+        "path": str(path),
+        "manifest_path": str(manifest_path),
+        "manifest_status": "missing",
+        "command": "",
+        "generated_at": "",
+        "report_date": "",
+        "report_slug": slug_from_report_dir(path.name),
+        "status": "",
+        "course_id": None,
+        "danvas_version": "",
+        "may_contain_private_student_data": None,
+        "files": [],
+        "error": "",
+    }
+    if not manifest_path.is_file():
+        return base
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        base["manifest_status"] = "invalid"
+        base["error"] = safe_error(str(exc))
+        return base
+    if not isinstance(manifest, dict):
+        base["manifest_status"] = "invalid"
+        base["error"] = "Manifest is not a JSON object."
+        return base
+    files = manifest.get("files") or []
+    if not isinstance(files, list):
+        files = []
+    base.update(
+        {
+            "manifest_status": "valid",
+            "command": str(manifest.get("command") or ""),
+            "generated_at": str(manifest.get("generated_at") or ""),
+            "report_date": str(manifest.get("report_date") or ""),
+            "report_slug": str(manifest.get("report_slug") or base["report_slug"]),
+            "status": str(manifest.get("status") or ""),
+            "course_id": manifest.get("course_id"),
+            "danvas_version": str(manifest.get("danvas_version") or ""),
+            "may_contain_private_student_data": manifest.get(
+                "may_contain_private_student_data"
+            ),
+            "files": [str(item) for item in files],
+            "error": str(manifest.get("error") or ""),
+        }
+    )
+    return base
+
+
+def slug_from_report_dir(name: str) -> str:
+    match = REPORT_DIR_RE.match(name)
+    return match.group(2) if match else ""
 
 
 def create_sequenced_run_dir(root: Path, report_date: str, slug: str) -> Path:

@@ -138,6 +138,9 @@ danvas
 │   ├── inventory
 │   ├── download
 │   └── upload
+├── reports
+│   ├── list
+│   └── latest
 └── recordings
     └── panopto-captions
 ```
@@ -287,6 +290,20 @@ path. Use `--report-root` to choose a different root while keeping the dated run
 directory, `--report-dir` to create one exact report directory, and `--no-report`
 to suppress default report output where the command supports it.
 
+Inspect saved report runs locally:
+
+```bash
+danvas reports list
+danvas reports latest
+danvas reports latest status
+danvas reports latest files-inventory
+```
+
+`reports list` includes report directories with missing or invalid manifests and
+labels them. `reports latest` returns the newest valid manifest, optionally
+filtered by report slug. Both commands support `--report-root` for a nonstandard
+reports directory and `--output` for JSON output.
+
 ## Examples
 
 ```bash
@@ -346,6 +363,11 @@ danvas files upload --course-id 1742717 --folder "course files/slides" \
 danvas files upload --course-id 1742717 --folder-id 15968602 \
   --on-duplicate overwrite --output .danvas/uploaded-files.json content/slides/example.pptx
 danvas files download --course-id 1742717 --output-dir .danvas/canvas-files
+
+# Reports
+danvas reports list
+danvas reports latest status
+danvas reports latest files-inventory --output .danvas/latest-files-report.json
 
 # Recordings
 danvas recordings panopto-captions --course-id 1742717 \

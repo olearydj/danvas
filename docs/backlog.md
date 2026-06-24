@@ -134,6 +134,8 @@ Recommended goals:
    danvas reports latest files-inventory
    ```
 
+   Status: delivered.
+
    Desired behavior:
 
    - List report directories under `.danvas/reports/`.

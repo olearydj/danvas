@@ -31,6 +31,109 @@ def option_names(*path: str) -> set[str]:
     return names
 
 
+def write_report_manifest(
+    path: Path,
+    *,
+    command_name: str,
+    slug: str,
+    status: str = "success",
+    files: list[str] | None = None,
+) -> None:
+    path.mkdir(parents=True)
+    (path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "command": command_name,
+                "generated_at": "2026-06-23T12:00:00-05:00",
+                "report_slug": slug,
+                "status": status,
+                "course_id": 101,
+                "danvas_version": "0.3.0",
+                "may_contain_private_student_data": False,
+                "files": files or [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_reports_commands_are_registered() -> None:
+    root = command()
+    assert isinstance(root, click.Group)
+    assert "reports" in root.commands
+    reports = command("reports")
+    assert isinstance(reports, click.Group)
+    assert "list" in reports.commands
+    assert "latest" in reports.commands
+
+
+def test_reports_list_cli(tmp_path: Path) -> None:
+    reports_root = tmp_path / ".danvas" / "reports"
+    write_report_manifest(
+        reports_root / "2026-06-23-001-status",
+        command_name="status",
+        slug="status",
+        files=["status.json", "status.md"],
+    )
+    (reports_root / "2026-06-23-002-files-inventory").mkdir()
+    output = tmp_path / "reports.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "reports",
+            "list",
+            "--report-root",
+            str(reports_root),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "2026-06-23-001-status" in result.output
+    assert "manifest: missing" in result.output
+    rows = json.loads(output.read_text(encoding="utf-8"))
+    assert len(rows) == 2
+    assert rows[1]["command"] == "status"
+
+
+def test_reports_latest_cli_filters_by_slug(tmp_path: Path) -> None:
+    reports_root = tmp_path / ".danvas" / "reports"
+    write_report_manifest(
+        reports_root / "2026-06-23-001-status",
+        command_name="status",
+        slug="status",
+        files=["status.json"],
+    )
+    write_report_manifest(
+        reports_root / "2026-06-23-002-files-inventory",
+        command_name="files inventory",
+        slug="files-inventory",
+        files=["files-inventory.json"],
+    )
+    output = tmp_path / "latest.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "reports",
+            "latest",
+            "status",
+            "--report-root",
+            str(reports_root),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Report: 2026-06-23-001-status" in result.output
+    assert "status.json" in result.output
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["report_slug"] == "status"
+
+
 def test_gradebook_check_cli(tmp_path: Path) -> None:
     gradebook = tmp_path / "gradebook.csv"
     write_gradebook_fixture(gradebook)
