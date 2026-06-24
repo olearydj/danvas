@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -10,12 +11,17 @@ import pytest
 from danvas.announcements import (
     announcement_records,
     command_announcements_create,
+    command_announcements_sync,
     load_announcement_markdown,
     write_announcements_csv,
 )
 
 
 class FakeCourse:
+    id = 101
+    name = "Example Course"
+    course_code = "EX-101"
+
     def __init__(self) -> None:
         self.topics = [
             SimpleNamespace(
@@ -25,6 +31,7 @@ class FakeCourse:
                 html_url="https://canvas.example/courses/1/discussion_topics/2",
                 message="<p>Second body</p>",
                 user_id=42,
+                published=True,
             ),
             SimpleNamespace(
                 id=1,
@@ -33,6 +40,7 @@ class FakeCourse:
                 html_url="https://canvas.example/courses/1/discussion_topics/1",
                 message="<p>First body</p>",
                 user_id=42,
+                published=True,
             ),
         ]
         self.full_topics = {
@@ -195,6 +203,31 @@ Body.
     assert payload["published"] is False
 
 
+def test_load_announcement_markdown_ignores_sync_provenance(tmp_path: Path) -> None:
+    source = tmp_path / "announcement.md"
+    source.write_text(
+        """---
+title: Synced Update
+canvas_id: 10
+canvas_url: https://canvas.example/announcements/10
+posted_at: 2025-06-01T14:00:00Z
+published: true
+---
+
+Body.
+""",
+        encoding="utf-8",
+    )
+
+    payload = load_announcement_markdown(source)
+
+    assert payload["title"] == "Synced Update"
+    assert payload["published"] is True
+    assert "canvas_id" not in payload
+    assert "canvas_url" not in payload
+    assert "posted_at" not in payload
+
+
 def test_load_announcement_markdown_rejects_missing_title(tmp_path: Path) -> None:
     source = tmp_path / "announcement.md"
     source.write_text(
@@ -252,3 +285,114 @@ Body.
     assert fake_canvas.course.created_payload["published"] is True
     assert fake_canvas.course.created_payload["is_announcement"] is True
     assert fake_canvas.course.created_payload["message"] == "<p>Body.</p>"
+
+
+def test_command_announcements_sync_dry_run_writes_report_without_content(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output_dir = tmp_path / "content" / "announcements"
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        output_dir=str(output_dir),
+        dry_run=True,
+        no_report=False,
+        report_root=None,
+        report_dir=str(report_dir),
+        report_slug=None,
+    )
+
+    command_announcements_sync(args)
+
+    assert not output_dir.exists()
+    report = json.loads((report_dir / "announcements-sync.json").read_text(encoding="utf-8"))
+    manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert report["dry_run"] is True
+    assert [action["status"] for action in report["actions"]] == ["would_create", "would_create"]
+    assert "markdown" not in report["actions"][0]
+    assert report["actions"][0]["target_relative_path"] == "001-first-update.md"
+    assert manifest["command"] == "announcements sync"
+    assert manifest["report_slug"] == "announcements-sync"
+    assert "would_create" in capsys.readouterr().out
+
+
+def test_command_announcements_sync_live_creates_missing_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_dir = tmp_path / "content" / "announcements"
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        output_dir=str(output_dir),
+        dry_run=False,
+        no_report=True,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    command_announcements_sync(args)
+
+    first = output_dir / "001-first-update.md"
+    second = output_dir / "002-second-update.md"
+    assert first.is_file()
+    assert second.is_file()
+    text = first.read_text(encoding="utf-8")
+    assert "canvas_id: 1" in text
+    assert "canvas_url: https://canvas.example/courses/1/discussion_topics/1" in text
+    assert "First body" in text
+    assert "Student response" not in text
+
+
+def test_command_announcements_sync_skips_known_local_and_conflicts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_dir = tmp_path / "content" / "announcements"
+    output_dir.mkdir(parents=True)
+    (output_dir / "existing-first.md").write_text(
+        """---
+title: First Update
+canvas_id: 1
+---
+
+Edited locally.
+""",
+        encoding="utf-8",
+    )
+    (output_dir / "002-second-update.md").write_text(
+        """---
+title: Different Update
+canvas_id: 999
+---
+
+Different content.
+""",
+        encoding="utf-8",
+    )
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        output_dir=str(output_dir),
+        dry_run=False,
+        no_report=False,
+        report_root=None,
+        report_dir=str(report_dir),
+        report_slug=None,
+    )
+
+    command_announcements_sync(args)
+
+    report = json.loads((report_dir / "announcements-sync.json").read_text(encoding="utf-8"))
+    assert [action["status"] for action in report["actions"]] == [
+        "skipped_known_local",
+        "conflict",
+    ]
+    assert (output_dir / "existing-first.md").read_text(encoding="utf-8").endswith(
+        "Edited locally.\n"
+    )
+    assert "different canvas_id 999" in report["actions"][1]["reason"]

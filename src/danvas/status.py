@@ -354,7 +354,10 @@ def add_next_actions(sections: dict[str, list[dict[str, Any]]]) -> None:
 def next_action_for(section: str, item: dict[str, Any]) -> str:
     classification = item.get("classification")
     if section == "announcements" and classification == "Canvas-only":
-        return "Export or sync the missing Canvas announcement into content/announcements/."
+        return (
+            "Run `danvas announcements sync --output-dir content/announcements --dry-run` "
+            "to plan a local source file."
+        )
     if section == "assignments" and classification == "local-only":
         return "Run `danvas assignments create SOURCE --dry-run` before posting this local assignment."
     if section == "quizzes" and classification == "Canvas-only":

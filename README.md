@@ -69,6 +69,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 - export announcements
   - create announcements from Markdown with front matter
   - dry-run mode to inspect the Canvas discussion-topic payload before creating
+  - sync missing Canvas announcements into local Markdown sources without overwriting
   - course-level announcement bodies
   - optional JSON, CSV, or Markdown output
   - filters replies to the authenticated user by default, so student replies are excluded
@@ -136,7 +137,8 @@ danvas
 │   └── score
 ├── announcements
 │   ├── create
-│   └── export
+│   ├── export
+│   └── sync
 ├── files
 │   ├── inventory
 │   ├── download
@@ -376,6 +378,7 @@ danvas discussions score https://auburn.instructure.com/courses/1655780/discussi
 # Announcements
 danvas announcements create --course-id 1706414 announcements/welcome.md --dry-run
 danvas announcements export --course-id 1655780 --output announcements.md
+danvas announcements sync --course-id 1655780 --output-dir content/announcements --dry-run
 
 # Files
 danvas files inventory --course-id 1742717 --local-root .

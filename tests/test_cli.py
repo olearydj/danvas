@@ -360,6 +360,7 @@ def test_local_report_commands_define_report_options() -> None:
     assert expected <= option_names("gradebook", "audit")
     assert expected <= option_names("quiz", "analysis")
     assert expected <= option_names("files", "upload")
+    assert expected <= option_names("announcements", "sync")
     assert expected.isdisjoint(option_names("discussions", "score"))
 
 
@@ -373,6 +374,42 @@ def test_status_is_read_only() -> None:
 def test_recordings_panopto_captions_options() -> None:
     assert "Panopto" in (command("recordings", "panopto-captions").help or "")
     assert {"--folder-id", "--session-id"} <= option_names("recordings", "panopto-captions")
+
+
+def test_announcements_sync_cli_options_and_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output_dir = tmp_path / "content" / "announcements"
+    captured: dict[str, object] = {}
+
+    def fake_sync(args: SimpleNamespace) -> None:
+        captured.update(vars(args))
+
+    monkeypatch.setattr("danvas.cli.command_announcements_sync", fake_sync)
+
+    result = runner.invoke(
+        app,
+        [
+            "announcements",
+            "sync",
+            "--course-id",
+            "101",
+            "--output-dir",
+            str(output_dir),
+            "--dry-run",
+            "--report-dir",
+            str(tmp_path / "report"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["course_id"] == 101
+    assert captured["output_dir"] == str(output_dir)
+    assert captured["dry_run"] is True
+    assert captured["project_root"] == "."
+    assert captured["no_report"] is False
+    assert captured["report_dir"] == str(tmp_path / "report")
+    assert "--overwrite" not in option_names("announcements", "sync")
 
 
 def test_files_upload_cli_options_and_args(
