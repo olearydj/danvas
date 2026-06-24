@@ -21,7 +21,8 @@ closed.
 | Quiz shell awareness | `danvas status` | Do not compare quiz question bodies unless snapshots later include item data. |
 | QTI import, publish, verify | `danvas quiz import-qti` | Resolve assignment groups by configured name, if useful. |
 | Canvas Files upload v1 | `danvas files upload` | Markdown asset rewriting and optional folder creation remain separate future work. |
-| Targeted file download/compare | `danvas files download-one`, `danvas files compare` | One-file explicit download, metadata compare, and SHA-256 compare against a supplied downloaded Canvas file are delivered; inventory ignore rules remain Candidate B follow-up, and Office package-part comparison is deferred. |
+| Targeted file download/compare | `danvas files download-one`, `danvas files compare` | One-file explicit download, metadata compare, and SHA-256 compare against a supplied downloaded Canvas file are delivered; Office package-part comparison is deferred. |
+| File inventory ignore rules | `danvas files inventory`; `[files.inventory] ignore` | Configurable local-scan ignores are delivered; keep future inventory filtering scoped to local generated/cache noise. |
 | Generated report runs | `danvas.reports`; adopted by report-producing commands | Add report discovery commands and make new verify/reconcile commands report-first. |
 | Report polish | status next actions, file diagnostics, assignment-audit notes | Continue improving command-specific reports as field use reveals friction. |
 | Mutation banners | shared guardrail pattern | Apply consistently to future mutating commands. |
@@ -61,7 +62,7 @@ sprint sequence as canonical.
 | Sprint 3: round-trip metadata | Not started | Sprint Candidate C, before broad update/upsert work. |
 | Sprint 3: Markdown asset rewriting | Not started | Sprint Candidate D, building on delivered `files upload`. |
 | Sprint 3: single-file download and compare | Done | Candidate B; `files download-one`, `files compare` metadata, and optional checksum against a supplied downloaded Canvas file are delivered. |
-| Sprint 3: file inventory report improvements | Partial | Candidate B; report-run foundation, filename diagnostics, targeted metadata compare, and downloaded-file checksum compare are delivered, while ignore rules remain open. |
+| Sprint 3: file inventory report improvements | Done | Candidate B; report-run foundation, filename diagnostics, targeted metadata compare, downloaded-file checksum compare, and configurable local ignore rules are delivered. |
 | Sprint 3 stretch: human-readable operation reports | Partial | Delivered for several report-run commands; Candidate B keeps report consistency work alive for new commands. |
 | Sprint 3 beyond: rubric support | Deferred | Smaller Backlog Items; wait until update/upsert behavior is stable. |
 | Sprint 3 beyond: activity logging | Not recommended as a sprint | Not Recommended Or No Longer Relevant. |
@@ -78,11 +79,11 @@ sprint sequence as canonical.
 
 ### Partially Delivered From Sprint 2/3
 
-- File inventory/report improvements are partial: report-run output, targeted
-  metadata compare, optional checksum against a supplied downloaded Canvas file,
-  and some diagnostics are delivered; richer ignore rules remain open in
-  Candidate B. Office package-part comparison is deferred out of the current
-  Candidate B scope.
+- File inventory/report improvements are delivered for the current Candidate B
+  scope: report-run output, targeted metadata compare, optional checksum against
+  a supplied downloaded Canvas file, configurable local ignore rules, and file
+  diagnostics are in place. Office package-part comparison is deferred out of the
+  current Candidate B scope.
 - Human-readable operation reports are partial: several report-producing commands
   now emit Markdown/JSON report runs; future verify, reconcile, compare, and
   readback commands should start with report-run output.
@@ -216,7 +217,8 @@ Recommended goals:
      option such as `--office-parts` only if basic compare workflows need it.
    - Improve `files inventory` ignore rules for generated/cache/archive paths such
      as `.danvas/`, `_archive/`, rendered artifacts, and local scratch outputs.
-     Remaining as B.3c.
+     Delivered in B.3c with `[files.inventory] ignore` plus built-in generated
+     path defaults.
 
 Definition of done:
 

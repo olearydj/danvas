@@ -6,15 +6,17 @@ import hashlib
 import json
 import mimetypes
 import re
+import tomllib
 import unicodedata
 from collections import Counter, defaultdict
 from datetime import datetime
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
 from danvas.auth import canvas_from_args
-from danvas.reports import ReportRun, create_report_run, should_write_report_run
+from danvas.reports import ReportRun, create_report_run, find_config_dir, should_write_report_run
 from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_json, write_rows
 
 GENERATED_INVENTORY_NAMES = {
@@ -26,11 +28,26 @@ GENERATED_INVENTORY_NAMES = {
 EXCLUDED_LOCAL_PARTS = {
     ".git",
     ".obsidian",
+    ".danvas",
+    "_archive",
     "_inventory",
     "grading",
     "node_modules",
     "__pycache__",
 }
+
+DEFAULT_INVENTORY_IGNORE_PATTERNS = [
+    ".danvas/**",
+    "_archive/**",
+    "_inventory/**",
+    "node_modules/**",
+    "__pycache__/**",
+    ".DS_Store",
+    "**/.DS_Store",
+    "files-inventory.csv",
+    "files-inventory.json",
+    "files-missing-report.md",
+]
 
 INVENTORY_CSV_FIELDS = [
     "status",
@@ -70,17 +87,23 @@ VERIFIER_RE = re.compile(r"(?i)(verifier|token|secret)=([^&\s]+)")
 
 
 def command_files_inventory(args: Any) -> None:
+    local_root = Path(args.local_root).resolve() if args.local_root else None
+    project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    local_ignore_patterns = files_inventory_ignore_patterns(project_root)
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
-    local_root = Path(args.local_root).resolve() if args.local_root else None
 
-    inventory = build_file_inventory(course, local_root=local_root)
+    inventory = build_file_inventory(
+        course,
+        local_root=local_root,
+        local_ignore_patterns=local_ignore_patterns,
+    )
     explicit_output_dir = bool(getattr(args, "output_dir", None))
     report_root = getattr(args, "report_root", None)
     report_dir = getattr(args, "report_dir", None)
     report_slug = getattr(args, "report_slug", None)
     no_report = bool(getattr(args, "no_report", False))
-    project_root = getattr(args, "project_root", None)
+    project_root_arg = getattr(args, "project_root", None)
     report_option = bool(report_root or report_dir or report_slug)
     if no_report and report_option:
         raise SystemExit("Use either --no-report or report output options, not both.")
@@ -96,7 +119,7 @@ def command_files_inventory(args: Any) -> None:
         report_run = create_report_run(
             command="files inventory",
             slug=report_slug or "files-inventory",
-            project_root=Path(project_root) if project_root else None,
+            project_root=Path(project_root_arg) if project_root_arg else None,
             report_root=Path(report_root) if report_root else None,
             report_dir=Path(report_dir) if report_dir else None,
             course_id=getattr(course, "id", args.course_id),
@@ -408,13 +431,23 @@ def write_files_compare_report_run(
         raise
 
 
-def build_file_inventory(course: Any, local_root: Path | None = None) -> dict[str, Any]:
+def build_file_inventory(
+    course: Any,
+    local_root: Path | None = None,
+    *,
+    local_ignore_patterns: list[str] | None = None,
+) -> dict[str, Any]:
     folders = list(course.get_folders())
     folders_by_id = {int(folder.id): folder for folder in folders if getattr(folder, "id", None)}
     canvas_rows = [
         canvas_file_record(file_obj, folders_by_id) for file_obj in course.get_files()
     ]
-    local_rows = local_files(local_root) if local_root else []
+    effective_ignore_patterns = local_ignore_patterns or default_inventory_ignore_patterns()
+    local_rows = (
+        local_files(local_root, ignore_patterns=effective_ignore_patterns)
+        if local_root
+        else []
+    )
     local_by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in local_rows:
         local_by_name[row["normalized_name"]].append(row)
@@ -438,6 +471,7 @@ def build_file_inventory(course: Any, local_root: Path | None = None) -> dict[st
         "course": canvas_object_to_dict(course),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "local_root": str(local_root) if local_root else "",
+        "local_ignore_patterns": effective_ignore_patterns if local_root else [],
         "local_files_compared": len(local_rows),
         "canvas_files": canvas_rows,
         "comparison": comparison_rows,
@@ -908,10 +942,11 @@ def canvas_file_record(file_obj: Any, folders_by_id: dict[int, Any]) -> dict[str
     }
 
 
-def local_files(root: Path) -> list[dict[str, Any]]:
+def local_files(root: Path, *, ignore_patterns: list[str] | None = None) -> list[dict[str, Any]]:
+    ignore_patterns = ignore_patterns or default_inventory_ignore_patterns()
     rows = []
     for path in root.rglob("*"):
-        if not path.is_file() or should_skip_local(path, root):
+        if not path.is_file() or should_skip_local(path, root, ignore_patterns=ignore_patterns):
             continue
         rel = path.relative_to(root).as_posix()
         stat = path.stat()
@@ -956,8 +991,61 @@ def csv_inventory_value(row: dict[str, Any], key: str) -> Any:
     return row.get(key)
 
 
-def should_skip_local(path: Path, root: Path) -> bool:
+def default_inventory_ignore_patterns() -> list[str]:
+    return list(DEFAULT_INVENTORY_IGNORE_PATTERNS)
+
+
+def files_inventory_ignore_patterns(project_root: Path | None = None) -> list[str]:
+    patterns = default_inventory_ignore_patterns()
+    config_dir = find_config_dir(project_root)
+    if not config_dir:
+        return patterns
+    config_path = config_dir / "config.toml"
+    try:
+        config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise SystemExit(f"Could not read danvas config: {config_path}: {exc}") from exc
+    files_config = config.get("files") or {}
+    if not isinstance(files_config, dict):
+        raise SystemExit("[files] must be a TOML table.")
+    inventory_config = files_config.get("inventory") or {}
+    if not isinstance(inventory_config, dict):
+        raise SystemExit("[files.inventory] must be a TOML table.")
+    custom = inventory_ignore_patterns_from_config(
+        inventory_config.get("ignore"),
+        label="files.inventory.ignore",
+    )
+    return patterns + [pattern for pattern in custom if pattern not in patterns]
+
+
+def inventory_ignore_patterns_from_config(value: Any, *, label: str) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        patterns = [value]
+    elif isinstance(value, list) and all(isinstance(item, str) for item in value):
+        patterns = [str(item) for item in value]
+    else:
+        raise SystemExit(f"{label} must be a string or list of strings.")
+    normalized = []
+    for pattern in patterns:
+        pattern_path = Path(pattern)
+        if pattern_path.is_absolute() or ".." in pattern_path.parts:
+            raise SystemExit(f"{label} patterns must be relative paths inside the course root.")
+        normalized.append(pattern.rstrip("/") + "/**" if pattern.endswith("/") else pattern)
+    return normalized
+
+
+def should_skip_local(
+    path: Path,
+    root: Path,
+    *,
+    ignore_patterns: list[str] | None = None,
+) -> bool:
     rel = path.relative_to(root)
+    relative = rel.as_posix()
+    if matches_inventory_ignore(relative, ignore_patterns or default_inventory_ignore_patterns()):
+        return True
     if path.name in GENERATED_INVENTORY_NAMES:
         return True
     if path.name == ".DS_Store":
@@ -968,6 +1056,11 @@ def should_skip_local(path: Path, root: Path) -> bool:
         return True
     parts = rel.parts
     return len(parts) >= 3 and parts[0] == "_archive" and parts[2] == "grading"
+
+
+def matches_inventory_ignore(relative_path: str, patterns: list[str]) -> bool:
+    name = Path(relative_path).name
+    return any(fnmatch(relative_path, pattern) or fnmatch(name, pattern) for pattern in patterns)
 
 
 def status_for(

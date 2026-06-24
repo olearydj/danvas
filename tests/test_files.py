@@ -155,6 +155,12 @@ def test_local_files_excludes_generated_and_grading_files(tmp_path: Path) -> Non
     grading_file = tmp_path / "_archive" / "24-25.Su" / "grading" / "grades.csv"
     grading_file.parent.mkdir(parents=True)
     grading_file.write_text("private", encoding="utf-8")
+    archived_file = tmp_path / "_archive" / "old" / "case.pdf"
+    archived_file.parent.mkdir(parents=True)
+    archived_file.write_text("archived", encoding="utf-8")
+    report_file = tmp_path / ".danvas" / "reports" / "run" / "case.pdf"
+    report_file.parent.mkdir(parents=True)
+    report_file.write_text("generated", encoding="utf-8")
     content_file = tmp_path / "content" / "note.md"
     content_file.parent.mkdir()
     content_file.write_text("public", encoding="utf-8")
@@ -162,6 +168,67 @@ def test_local_files_excludes_generated_and_grading_files(tmp_path: Path) -> Non
     rows = local_files(tmp_path)
 
     assert [row["relative_path"] for row in rows] == ["content/note.md"]
+
+
+def test_command_files_inventory_uses_configured_local_ignore(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+    (tmp_path / ".danvas" / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\n\n[files.inventory]\nignore = ["scratch/**"]\n',
+        encoding="utf-8",
+    )
+    local_case = tmp_path / "content" / "cases" / "case.pdf"
+    local_case.parent.mkdir(parents=True)
+    local_case.write_text("content", encoding="utf-8")
+    scratch_missing = tmp_path / "scratch" / "missing.pdf"
+    scratch_missing.parent.mkdir()
+    scratch_missing.write_text("x" * 10, encoding="utf-8")
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: FakeCanvas())
+    output_dir = tmp_path / "inventory"
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=str(tmp_path),
+        output_dir=str(output_dir),
+        local_root=str(tmp_path),
+        no_report=False,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    command_files_inventory(args)
+
+    inventory = json.loads((output_dir / "files-inventory.json").read_text(encoding="utf-8"))
+    statuses = {row["display_name"]: row["status"] for row in inventory["comparison"]}
+    assert statuses["case.pdf"] == "present_by_name_and_size"
+    assert statuses["missing.pdf"] == "missing"
+    assert "scratch/**" in inventory["local_ignore_patterns"]
+    assert inventory["local_files_compared"] == 1
+
+
+def test_command_files_inventory_rejects_unsafe_ignore_pattern(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+    (tmp_path / ".danvas" / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\n\n[files.inventory]\nignore = ["../outside/**"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=str(tmp_path),
+        output_dir=str(tmp_path / "inventory"),
+        local_root=str(tmp_path),
+        no_report=False,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit, match="files.inventory.ignore patterns"):
+        command_files_inventory(args)
 
 
 def test_write_missing_report_summarizes_missing_files(tmp_path: Path) -> None:

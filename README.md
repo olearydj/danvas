@@ -266,6 +266,21 @@ turning support notes into noisy local-only or unsupported status rows. Set
 glob where every matched file should be reported, even when front matter is
 missing.
 
+`danvas files inventory --local-root .` excludes generated/cache paths such as
+`.danvas/`, `_archive/`, `_inventory/`, hidden files, and common generated report
+filenames by default. Add project-specific local-scan ignores in
+`.danvas/config.toml` when a course repo has additional scratch or rendered
+outputs:
+
+```toml
+[files.inventory]
+ignore = [
+  "scratch/**",
+  "rendered/**",
+  "content/slides/*.html",
+]
+```
+
 `danvas status` warns when the snapshot is older than 24 hours. Override the
 threshold per project with a `[status]` table in `config.toml`:
 
