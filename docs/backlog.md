@@ -151,6 +151,8 @@ Recommended goals:
    danvas refresh --diff --report-root .danvas/reports
    ```
 
+   Status: delivered.
+
    Desired behavior:
 
    - Preserve current plain `danvas refresh --diff` terminal behavior.

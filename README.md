@@ -217,6 +217,7 @@ changed since the previous snapshot:
 ```bash
 danvas refresh
 danvas refresh --diff
+danvas refresh --diff --report-root .danvas/reports
 ```
 
 After initialization, Canvas-backed commands can omit `--course-id`; an explicit
@@ -309,6 +310,7 @@ reports directory and `--output` for JSON output.
 ```bash
 # Course status (read-only, from the .danvas snapshot)
 danvas status
+danvas refresh --diff --report-root .danvas/reports
 danvas status --report-root .danvas/reports
 danvas status --output status.json --report-md status.md
 

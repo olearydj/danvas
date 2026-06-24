@@ -400,6 +400,17 @@ def refresh_project(
         bool,
         typer.Option("--diff", help="Summarize changes since the previous snapshot."),
     ] = False,
+    report_root: Annotated[
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated refresh diff report run."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None,
+        typer.Option("--report-dir", help="Exact refresh diff report run directory to create."),
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -411,6 +422,9 @@ def refresh_project(
             course_id=course_id,
             project_root=str(project_root),
             diff=diff,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

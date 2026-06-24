@@ -10,6 +10,7 @@ from typing import Any
 
 from danvas.auth import canvas_from_args
 from danvas.files import canvas_file_record
+from danvas.reports import create_report_run
 from danvas.utils import canvas_object_to_dict, html_to_text
 
 CONFIG_DIR_NAME = ".danvas"
@@ -125,19 +126,55 @@ def command_init(args: Any) -> None:
 def command_refresh(args: Any) -> None:
     root = Path(args.project_root).resolve()
     args.course_id = resolve_course_id(args.course_id, start=root)
+    report_root = getattr(args, "report_root", None)
+    report_dir = getattr(args, "report_dir", None)
+    report_slug = getattr(args, "report_slug", None)
+    report_requested = bool(report_root or report_dir or report_slug)
+    if report_root and report_dir:
+        raise SystemExit("Use either --report-root or --report-dir, not both.")
+    if report_requested and not getattr(args, "diff", False):
+        raise SystemExit("Refresh report output requires --diff.")
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     payload = build_course_snapshot(course)
     snapshot = course_snapshot_path(root)
+    diff_report = None
     if getattr(args, "diff", False):
         if snapshot.is_file():
             previous = json.loads(snapshot.read_text(encoding="utf-8"))
-            for line in render_snapshot_diff(diff_snapshots(previous, payload)):
+            diff_report = build_refresh_diff_report(previous, payload, snapshot)
+            for line in render_snapshot_diff_payload(diff_report):
                 print(line)
         else:
+            diff_report = build_refresh_diff_report(None, payload, snapshot)
             print("No previous snapshot; nothing to diff.")
     write_course_snapshot(snapshot, payload)
     print(f"Wrote {snapshot}")
+    if report_requested and diff_report is not None:
+        report_run = create_report_run(
+            command="refresh --diff",
+            slug=report_slug or "refresh-diff",
+            project_root=root,
+            report_root=Path(report_root) if report_root else None,
+            report_dir=Path(report_dir) if report_dir else None,
+            course_id=args.course_id,
+            input_paths=[snapshot],
+            snapshot_timestamp=payload.get("generated_at"),
+            private_data=False,
+        )
+        try:
+            json_path = report_run.write_json("refresh-diff.json", diff_report)
+            md_path = report_run.write_text(
+                "refresh-diff.md", render_refresh_diff_markdown(diff_report)
+            )
+            manifest_path = report_run.finish()
+            print(f"Wrote {json_path}")
+            print(f"Wrote {md_path}")
+            print(f"Wrote {manifest_path}")
+            print(f"Report directory: {report_run.path}")
+        except Exception as exc:
+            report_run.finish("failed", error=str(exc))
+            raise
 
 
 def build_course_snapshot(course: Any) -> dict[str, Any]:
@@ -350,6 +387,96 @@ def diff_snapshots(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any] |
         "new_generated_at": new.get("generated_at"),
         "sections": sections,
     }
+
+
+def build_refresh_diff_report(
+    old: dict[str, Any] | None, new: dict[str, Any], snapshot_path: Path
+) -> dict[str, Any]:
+    if old is None:
+        return {
+            "status": "no_previous_snapshot",
+            "message": "No previous snapshot; nothing to diff.",
+            "snapshot_path": str(snapshot_path),
+            "old_generated_at": None,
+            "new_generated_at": new.get("generated_at"),
+            "old_schema_version": None,
+            "new_schema_version": new.get("schema_version"),
+            "schema_compatible": True,
+            "sections": {},
+        }
+    old_version = int(old.get("schema_version") or 1)
+    new_version = int(new.get("schema_version") or 1)
+    diff = diff_snapshots(old, new)
+    if diff is None:
+        return {
+            "status": "schema_changed",
+            "message": "Snapshot format changed; diff unavailable. The new snapshot replaces the old one.",
+            "snapshot_path": str(snapshot_path),
+            "old_generated_at": old.get("generated_at"),
+            "new_generated_at": new.get("generated_at"),
+            "old_schema_version": old_version,
+            "new_schema_version": new_version,
+            "schema_compatible": False,
+            "sections": {},
+        }
+    return {
+        "status": "success",
+        "message": "",
+        "snapshot_path": str(snapshot_path),
+        "old_schema_version": old_version,
+        "new_schema_version": new_version,
+        "schema_compatible": True,
+        **diff,
+    }
+
+
+def render_snapshot_diff_payload(report: dict[str, Any]) -> list[str]:
+    if report["status"] == "schema_changed":
+        return [report["message"]]
+    if report["status"] == "no_previous_snapshot":
+        return [report["message"]]
+    return render_snapshot_diff(
+        {
+            "old_generated_at": report["old_generated_at"],
+            "new_generated_at": report["new_generated_at"],
+            "sections": report["sections"],
+        }
+    )
+
+
+def render_refresh_diff_markdown(report: dict[str, Any]) -> str:
+    lines = [
+        "# Refresh Diff Report",
+        "",
+        "## Summary",
+        "",
+        f"- Status: `{report['status']}`",
+        f"- Snapshot: `{report['snapshot_path']}`",
+        f"- Previous generated at: `{report['old_generated_at']}`",
+        f"- New generated at: `{report['new_generated_at']}`",
+        f"- Previous schema version: `{report['old_schema_version']}`",
+        f"- New schema version: `{report['new_schema_version']}`",
+        f"- Schema compatible: `{report['schema_compatible']}`",
+        "",
+    ]
+    if report.get("message"):
+        lines.extend(["## Message", "", report["message"], ""])
+    if not report["sections"]:
+        lines.extend(["## Changes", "", "- No tracked changes."])
+        return "\n".join(lines).rstrip() + "\n"
+    lines.extend(["## Changes", ""])
+    for section, data in report["sections"].items():
+        lines.extend([f"### {section}", ""])
+        for label in data["added"]:
+            lines.append(f"- Added: {label}")
+        for label in data["removed"]:
+            lines.append(f"- Removed: {label}")
+        for change in data["changed"]:
+            lines.append(f"- Changed: {change['label']}")
+            for item in change["changes"]:
+                lines.append(f"  - {item}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def rows_by_id(rows: list[dict[str, Any]]) -> dict[Any, dict[str, Any]]:

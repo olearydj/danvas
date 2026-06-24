@@ -67,6 +67,10 @@ def test_reports_commands_are_registered() -> None:
     assert "latest" in reports.commands
 
 
+def test_refresh_cli_accepts_report_options() -> None:
+    assert {"--report-root", "--report-dir", "--report-slug"} <= option_names("refresh")
+
+
 def test_reports_list_cli(tmp_path: Path) -> None:
     reports_root = tmp_path / ".danvas" / "reports"
     write_report_manifest(

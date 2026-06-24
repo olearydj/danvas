@@ -207,6 +207,30 @@ def test_diff_snapshots_refuses_schema_mismatch() -> None:
     assert "diff unavailable" in config.render_snapshot_diff(None)[0]
 
 
+def test_build_refresh_diff_report_handles_schema_mismatch(tmp_path: Path) -> None:
+    old = {"schema_version": 1, "generated_at": "2026-06-01T00:00:00Z"}
+    new = config.build_course_snapshot(FakeCourse())
+
+    report = config.build_refresh_diff_report(old, new, tmp_path / ".danvas" / "course.json")
+
+    assert report["status"] == "schema_changed"
+    assert report["schema_compatible"] is False
+    assert report["old_schema_version"] == 1
+    assert report["new_schema_version"] == config.SNAPSHOT_SCHEMA_VERSION
+    assert "diff unavailable" in report["message"]
+
+
+def test_build_refresh_diff_report_handles_missing_previous_snapshot(tmp_path: Path) -> None:
+    new = config.build_course_snapshot(FakeCourse())
+
+    report = config.build_refresh_diff_report(None, new, tmp_path / ".danvas" / "course.json")
+
+    assert report["status"] == "no_previous_snapshot"
+    assert report["old_generated_at"] is None
+    assert report["new_generated_at"] == new["generated_at"]
+    assert report["sections"] == {}
+
+
 def test_command_refresh_with_diff_prints_summary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -228,6 +252,60 @@ def test_command_refresh_with_diff_prints_summary(
     assert "Snapshot diff:" in out
     assert "changed: Case Study 1 (points_possible: 50 -> 100)" in out
     assert "Wrote" in out
+
+
+def test_command_refresh_with_diff_writes_report_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+    old = config.build_course_snapshot(FakeCourse())
+    old["assignments"][0]["points_possible"] = 50
+    config.write_course_snapshot(tmp_path / ".danvas" / "course.json", old)
+
+    class FakeCanvas:
+        def get_course(self, course_id: int) -> FakeCourse:
+            return FakeCourse()
+
+    monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
+    report_dir = tmp_path / "refresh-report"
+    args = SimpleNamespace(
+        project_root=str(tmp_path),
+        course_id=1742717,
+        diff=True,
+        report_root=None,
+        report_dir=str(report_dir),
+        report_slug=None,
+    )
+
+    config.command_refresh(args)
+
+    out = capsys.readouterr().out
+    assert "Report directory:" in out
+    payload = json.loads((report_dir / "refresh-diff.json").read_text(encoding="utf-8"))
+    assert payload["status"] == "success"
+    assert payload["schema_compatible"] is True
+    assert payload["sections"]["assignments"]["changed"][0]["label"] == "Case Study 1"
+    markdown = (report_dir / "refresh-diff.md").read_text(encoding="utf-8")
+    assert "# Refresh Diff Report" in markdown
+    manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["command"] == "refresh --diff"
+    assert manifest["course_id"] == 1742717
+    assert manifest["snapshot_timestamp"] == payload["new_generated_at"]
+    assert manifest["files"] == ["refresh-diff.json", "refresh-diff.md"]
+
+
+def test_command_refresh_report_requires_diff(tmp_path: Path) -> None:
+    args = SimpleNamespace(
+        project_root=str(tmp_path),
+        course_id=1742717,
+        diff=False,
+        report_root=None,
+        report_dir=str(tmp_path / "report"),
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit, match="requires --diff"):
+        config.command_refresh(args)
 
 
 def test_toml_key_quotes_names_that_are_not_bare_keys() -> None:
