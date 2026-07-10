@@ -28,6 +28,24 @@ The implementation is published on `origin/main` and tagged `v0.6.0` at
 `05201fa`. GitHub Actions passed for that exact commit, and the global CLI was
 reinstalled non-editably from the tag and smoke-tested locally.
 
+## 0.7.0 Pages Follow-On Implementation Record
+
+The current branch implements the two Pages follow-on sprints planned after the
+0.6.0 release:
+
+| Slice | Specification | Commit |
+|---|---|---|
+| Canvas Pages discovery, schema-v4 snapshot, and status | `docs/sprints/06-canvas-pages-status.md` | `a45d3d1` |
+| Canvas-to-local Page sync and conversion | `docs/sprints/07-canvas-pages-sync.md` | `7517c0c` |
+| Account-decorator readback normalization found during field testing | Sprints 6 and 7 | `f4252d7` |
+
+Ruff, ty, and all 280 tests passed. A non-normative sandbox field case in course
+1576638 passed draft API readback and browser inspection, schema-v4 refresh and
+status, Markdown export, targeted and broad sync path agreement, no-clobber local
+creation, repeat-sync idempotence, and interrupted-provenance recovery. The test
+Page was unpublished and removed after acceptance. This implementation has not
+yet been published or tagged as a 0.7.0 release.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as

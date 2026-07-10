@@ -1,7 +1,9 @@
 # Sprint 7: Canvas Pages Source Sync And Conversion
 
-Status: implemented and locally verified; built on Sprint 6. The non-normative
-live-course sync field case remains pending explicit course-workspace approval.
+Status: implemented and verified; built on Sprint 6. The non-normative field
+case passed in Auburn sandbox course 1576638 on 2026-07-10, including API
+readback, browser inspection, snapshot/status, targeted export, targeted and
+broad sync planning, idempotent live local sync, and provenance recovery.
 
 ## Objective
 

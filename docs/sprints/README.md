@@ -42,8 +42,9 @@ The selected follow-on work continues the bounded Pages workflow:
 - Sprint 6: [Canvas Pages Discovery, Snapshot, And Status](06-canvas-pages-status.md)
 - Sprint 7: [Canvas Pages Source Sync And Conversion](07-canvas-pages-sync.md)
 
-Sprints 6 and 7 are implemented and locally verified. Sprint 6 adds the read-only
-schema and comparison foundation; Sprint 7 uses it for project-wide identity
-matching and is the only one of the two that writes local course sources. Sprint
-7's non-normative live-course field case remains separately gated. Neither
+Sprints 6 and 7 are implemented and verified. Sprint 6 adds the read-only schema
+and comparison foundation; Sprint 7 uses it for project-wide identity matching
+and is the only one of the two that writes local course sources. The
+non-normative Sprint 7 field case passed in sandbox course 1576638 on 2026-07-10,
+including browser inspection and cleanup of its temporary draft Page. Neither
 sprint broadens Canvas mutation behavior.
