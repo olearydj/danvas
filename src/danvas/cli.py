@@ -67,6 +67,7 @@ from danvas.reports import (
     latest_report_run,
     should_write_report_run,
 )
+from danvas.source_lint import command_sources_lint
 from danvas.status import command_status
 from danvas.submissions import (
     command_submissions_export,
@@ -84,6 +85,9 @@ AnnouncementLatestFormat = Literal["auto", "json", "markdown"]
 FileDuplicatePolicy = Literal["overwrite", "rename"]
 AssignmentUpsertConfirm = Literal["", "create", "update"]
 SubmissionLayout = Literal["flat", "assignment-subdir"]
+SourceKind = Literal["assignment", "announcement", "discussion", "page"]
+LintFormat = Literal["text", "json"]
+LintFailOn = Literal["error", "warning"]
 
 
 app = typer.Typer(
@@ -145,6 +149,10 @@ reports_app = typer.Typer(
     help="List and inspect generated .danvas report runs.",
     no_args_is_help=True,
 )
+sources_app = typer.Typer(
+    help="Validate local Canvas-facing authored sources without Canvas access.",
+    no_args_is_help=True,
+)
 
 def version_callback(value: bool) -> None:
     if value:
@@ -179,6 +187,7 @@ app.add_typer(pages_app, name="pages")
 app.add_typer(files_app, name="files")
 app.add_typer(recordings_app, name="recordings")
 app.add_typer(reports_app, name="reports")
+app.add_typer(sources_app, name="sources")
 
 
 ApiUrl = Annotated[
@@ -1859,6 +1868,20 @@ def discussions_sync_prompts(
             api_key_env=api_key_env,
         ),
     )
+
+
+@sources_app.command("lint", help="Lint Canvas-facing local sources without making Canvas calls.")
+def sources_lint(
+    paths: Annotated[list[Path] | None, typer.Argument(help="Source paths, directories, or glob patterns.")] = None,
+    kind: Annotated[SourceKind | None, typer.Option("--kind", help="Force one source kind; otherwise infer per file.")] = None,
+    project_root: Annotated[Path, typer.Option("--project-root", help="Course root used for discovery and provenance.")] = Path("."),
+    output_format: Annotated[LintFormat, typer.Option("--format", help="Human-readable text or JSON.")] = "text",
+    output: Annotated[Path | None, typer.Option("--output", "-o", help="Explicit JSON output path.")] = None,
+    fail_on: Annotated[LintFailOn, typer.Option("--fail-on", help="Lowest severity that produces exit 1.")] = "error",
+) -> None:
+    if output and output_format != "json":
+        raise typer.BadParameter("--output requires --format json")
+    run_command(command_sources_lint, args_for(paths=[str(path) for path in paths or []], kind=kind, project_root=str(project_root), format=output_format, output=str(output) if output else None, fail_on=fail_on))
 
 
 @pages_app.command("list", help="List Canvas Pages without writing local files.")
