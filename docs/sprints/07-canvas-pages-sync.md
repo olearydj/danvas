@@ -42,14 +42,39 @@ Canvas Page:
 - `skipped_exists`
 - `conflict`
 - `conversion_blocked`
+- `recovered_provenance`
+- `source_created_provenance_failed`
 - `error`
 
-Derive filenames from the stable Canvas Page slug, sanitize path separators and
-reserved names, and use `.md` or `.html` according to the selected format. A
-matching front-matter/source-map identity anywhere in the project is
-`skipped_known_local`. An occupied target without that identity is never
-overwritten: report `skipped_exists` when it is unbound and `conflict` when it
-belongs to a different Page.
+Derive filenames from the stable Canvas Page slug and use `.md` or `.html`
+according to the selected format. Apply one strict cross-platform filename
+profile on every operating system:
+
+- normalize Unicode to NFC and compare target keys with Unicode case-folding
+- replace path separators, NUL/control characters, and filesystem-forbidden
+  punctuation
+- remove trailing periods and spaces from each filename component
+- reject Windows device basenames such as `CON`, `PRN`, `AUX`, `NUL`, `COM1`
+  through `COM9`, and `LPT1` through `LPT9`, case-insensitively and even when an
+  extension is present
+- calculate every proposed target before writing and detect collisions by the
+  normalized case-folded key
+
+When a slug is reserved/empty or multiple Page slugs produce the same target
+key, use the deterministic form `{sanitized-slug}--page-{page_id}.{ext}` for all
+affected Pages, substituting `page` when sanitization leaves an empty basename.
+If those fallback keys still collide, report `conflict`; never choose a winner
+based on API or filesystem iteration order. Dry-run output shows the original
+slug, chosen target, and collision reason.
+
+A matching front-matter/source-map identity anywhere in the project is
+`skipped_known_local`. A unique title-only candidate from Sprint 6 also blocks
+duplicate creation and is reported as `skipped_known_local` with identity
+`title_candidate`, the candidate ID/slug, and an instruction to bind it
+deliberately; sync never writes provenance from a title-only match. An occupied
+target without either relationship is never overwritten: report
+`skipped_exists` when it is unbound and `conflict` when it belongs to a different
+Page.
 
 Do not add `--overwrite` or update existing Page sources in this sprint. Recheck
 the target immediately before every write so a file created after planning is
@@ -80,6 +105,29 @@ the stable Page ID, slug, title, sync command, normalized body hash, and safe
 metadata. Dry-runs, skipped actions, conflicts, and blocked conversions do not
 write provenance.
 
+## Transaction And Recovery Contract
+
+Build and validate the complete source in memory, write it to an exclusive
+temporary file in the target directory, flush it, and atomically rename it into
+place only after the final collision check. Source-map updates likewise use
+temporary-file replacement and must not expose partially written JSON.
+
+The generated source's `page_id` and normalized body hash are the recovery
+record if interruption occurs between source creation and provenance update. If
+the source-map write fails, keep the valid new source, report
+`source_created_provenance_failed`, and exit nonzero. On the next sync:
+
+- re-read the Canvas Page and the local source
+- require matching `page_id`, title/slug relationship, normalized body hash, and
+  anchors
+- plan provenance-only repair in dry-run
+- write only the missing source-map entry in live mode and report
+  `recovered_provenance`
+
+If any recovery check differs, report `conflict` and make no changes. This same
+path handles process interruption when no prior failure report exists. Never
+delete or overwrite an occupied source merely because provenance is absent.
+
 ## HTML And Markdown Conversion
 
 Native HTML output must be an HTML fragment with Page front matter, never a full
@@ -87,6 +135,14 @@ document. Remove only documented nonsemantic Canvas/Rich Content Editor metadata
 then validate the result with the existing Canvas Page compatibility profile.
 Unsafe or unsupported elements, attributes, styles, or URLs block conversion
 rather than being silently dropped.
+
+Apply Sprint 6's shared Page URL canonicalizer before conversion. Stable Canvas
+course/file links are written in their canonical root-relative form. Verifier
+parameters, signed query values, embedded credentials, and expiring URLs are
+never written to Markdown, HTML, reports, or provenance. If a volatile URL cannot
+be resolved to stable Canvas identity, report `conversion_blocked` with sanitized
+diagnostics and write no source. Round-trip comparison uses canonicalized bodies
+on both sides so token rotation cannot create false drift.
 
 The Markdown converter must be deterministic and cover the conservative Page
 baseline:
@@ -101,6 +157,11 @@ baseline:
 - tables supported by the existing Markdown renderer
 - safe raw-HTML islands only when required to preserve profile-V1 structure or
   inline presentation
+
+Emit explicit Markdown heading IDs with Python-Markdown attribute syntax, for
+example `## Installation {#installation}`. The existing `extra` renderer profile
+includes `attr_list` and must be regression-tested to produce
+`<h2 id="installation">`. The converter must not invent a second ID convention.
 
 Do not claim Markdown conversion is lossless. Record warnings for normalized
 nonsemantic markup. If meaningful structure cannot be represented within the
@@ -141,10 +202,18 @@ is supplied. Export does not update source-map provenance.
 - Safe inline styles and structures either survive through Markdown/raw-HTML
   islands or produce a clear HTML-fallback recommendation.
 - Unsupported or lossy conversions are blocked before a file is written.
+- Volatile URLs are canonicalized to stable Canvas-relative forms or block the
+  action; authored sources and reports never contain verifier/signed values.
 - Generated HTML is a validated fragment source, not a preview or standalone
   document.
 - Live source creation writes stable provenance only after successful local
   readback and hash comparison.
+- Interrupted or failed provenance writes are recovered on a later run only
+  after exact Page-ID, body-hash, and anchor verification.
+- Case, Unicode, reserved-name, trailing-character, and sanitized-slug filename
+  collisions are classified deterministically before any write.
+- Markdown emits `{#stable-id}` heading attributes that round-trip through the
+  current renderer.
 - Reports contain no full bodies, signed URLs, tokens, or student data.
 - Existing JSON export behavior remains compatible; targeted HTML/Markdown
   exports are covered separately.

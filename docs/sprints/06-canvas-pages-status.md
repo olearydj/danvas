@@ -42,7 +42,10 @@ array. Each row contains only stable, non-student Page state:
 - `published` and `front_page`
 - `publish_at`, `editing_roles`, and editor type when available
 - `updated_at`
-- `body_sha256`, calculated from the normalized Canvas HTML fragment
+- `body_sha256`, calculated from the canonical normalized Canvas HTML fragment,
+  or `null` when volatile URLs cannot be resolved safely
+- `body_hash_status`: `available` or `blocked_volatile_url`
+- `volatile_url_count`, with no URL values
 - `body_normalizer`, identifying the comparison profile used for the hash
 
 Fetch Page detail when list results do not contain a body. Store the normalized
@@ -50,10 +53,40 @@ hash, never the body itself. Sort rows deterministically by normalized title and
 stable identity. Snapshot and diff output must not contain signed URLs, access
 tokens, module data, or student information.
 
-Schema-3 snapshots remain readable by generic tooling, but `danvas status` must
-request a refresh before attempting Page comparison against a pre-v4 snapshot.
-`refresh --diff` reports the schema transition through its existing
-schema-changed behavior.
+For a schema-3 snapshot, `danvas status` renders all existing non-Page sections,
+prints a prominent warning and refresh next action, and reports the Pages section
+as unavailable. This compatibility path exits normally and records
+`pages_available: false` in saved status output; it must not silently claim that
+there are no Pages. Snapshots older than schema 3 retain the existing hard
+nonzero failure. `refresh --diff` reports the schema transition through its
+existing schema-changed behavior.
+
+## Shared Page URL Canonicalization
+
+Sprint 6 introduces one inbound Page-URL canonicalizer used by snapshot hashing,
+status, Sprint 7 conversion, and future Page readback. URL handling occurs before
+body hashing or serialization into authored sources.
+
+- Preserve same-page fragments such as `#installation`.
+- Convert absolute links on the configured Canvas origin to stable root-relative
+  Canvas paths when their course/object identity is known.
+- Canonicalize Canvas file links to stable course/file-ID paths while preserving
+  only documented non-secret behavior such as preview versus download.
+- Sort ordinary, non-secret query parameters deterministically.
+- Treat user-info credentials and secret/expiry parameters as volatile. At
+  minimum this includes `verifier`, `access_token`, credential-like `token`
+  fields, `signature`, `expires`, `X-Amz-*`, `X-Goog-*`, `Policy`, and
+  `Key-Pair-Id`, matched case-insensitively.
+- Never include a volatile value in a hash input, snapshot, report, diagnostic,
+  generated source, or source-map entry.
+
+If a volatile Canvas or external URL can be reduced to a stable Canvas-relative
+identity, hash the rewritten form. Otherwise do not hash the body: set
+`body_sha256: null`, `body_hash_status: blocked_volatile_url`, and retain only a
+count plus a sanitized reason. Status may still compare safe metadata, but body
+comparison is `unsupported comparison` until the URL is resolved. Do not strip
+unknown external query parameters merely to force a match; they may be
+semantically meaningful.
 
 ## Local Source Discovery
 
@@ -76,11 +109,13 @@ Resolve a local Page to a snapshot row in this order:
 
 1. `page_id` or `canvas_id` in front matter.
 2. Stable Page ID or slug from `.danvas/source-map.json` for that source path.
-3. A unique normalized title match for an otherwise unbound source.
+3. A unique normalized title candidate for reporting only.
 
 Conflicting front-matter and source-map identities are an unsupported comparison,
-not a title fallback. Duplicate Canvas titles are also unsupported unless a
-stable identity resolves the source.
+not a title fallback. A title-only candidate is `probable match, unbound`, never
+`exact`, and never becomes provenance implicitly. Duplicate Canvas titles are
+unsupported unless a stable identity resolves the source. Status displays the
+candidate Page ID and slug so the user can bind it deliberately.
 
 Report these classifications:
 
@@ -90,6 +125,7 @@ Report these classifications:
 - `metadata and body mismatch`
 - `local-only`
 - `Canvas-only`
+- `probable match, unbound`
 - `unsupported comparison`
 
 Compare rendered body hashes, title, `published`, and `front_page`. Compare
@@ -100,7 +136,9 @@ authoritative authored fields.
 Useful next actions should point to:
 
 - `pages create SOURCE --dry-run` for local-only sources
-- `pages verify SOURCE` or `pages update SOURCE --dry-run` for drift
+- `pages verify SOURCE --page-id CANDIDATE` for an unbound title candidate,
+  followed by deliberately adding `page_id` or other stable provenance
+- `pages verify SOURCE` or `pages update SOURCE --dry-run` for stably bound drift
 - `pages sync --output-dir content/pages --dry-run` for Canvas-only Pages after
   Sprint 7 is available
 
@@ -110,15 +148,21 @@ bodies, write source-map entries, or modify local sources.
 ## Acceptance Criteria
 
 - Refresh produces a deterministic schema-v4 `pages` array with no full bodies.
-- Snapshot hashes use the same normalized-fragment comparison semantics as Page
-  verification.
+- Snapshot hashes use the same normalized-fragment and URL-canonicalization
+  semantics as Page verification and Sprint 7 conversion.
+- Signed/verifier URLs either become stable Canvas-relative links or block body
+  hashing without leaking their values.
 - Default and configured Page source discovery handle Markdown and HTML while
   excluding CSS and preview artifacts.
-- Stable ID/source-map matching survives title changes and duplicate titles.
+- Stable ID/source-map matching survives title changes and duplicate titles;
+  unique title candidates remain visibly unbound.
 - Status distinguishes exact, metadata drift, body drift, local-only,
-  Canvas-only, and unsupported comparisons with actionable details.
+  Canvas-only, probable-unbound, and unsupported comparisons with actionable
+  details.
 - Page errors affect that Page's classification without hiding unrelated status
   sections.
+- Schema-3 status renders non-Page sections, marks Pages unavailable, recommends
+  refresh, and does not fail the whole report.
 - Status and report-run outputs contain hashes and concise differences, not full
   Page bodies.
 - Generic fixtures cover every classification and schema migration; no behavior

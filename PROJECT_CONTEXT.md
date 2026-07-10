@@ -115,8 +115,12 @@ and the external Codex teaching skill docs:
   Markdown quiz analysis remains separate tooling unless explicitly consolidated.
 - Keep the initial Canvas Pages workflow deliberately bounded: Markdown or native
   HTML rendering, restricted inline CSS, draft creation, body/publication update,
-  and readback verification. Sync, asset upload/rewriting, rename, deletion,
-  general upsert, and status integration require separate future designs.
+  and readback verification. Snapshot/status integration and one-way local source
+  creation are separately specified in Sprints 6 and 7; asset upload/rewriting,
+  rename, deletion, and general upsert remain future designs.
+- Planned Page snapshot/sync work must canonicalize stable Canvas links and block
+  unresolved volatile or signed URLs before hashing or writing authored sources.
+  Title-only Page matches are provisional collision evidence, never provenance.
 
 ## Report Output Contract
 
