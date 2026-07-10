@@ -81,6 +81,11 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def mark_private(path: Path) -> None:
+    """Remove group/other permissions from an explicit private artifact."""
+    path.chmod(path.stat().st_mode & ~0o077)
+
+
 def print_mutation_banner(action: str, fields: dict[str, Any]) -> None:
     """Consistent preamble before any live Canvas write."""
     print(f"== Canvas write: {action} ==")

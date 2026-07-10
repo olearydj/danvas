@@ -43,7 +43,12 @@ from danvas.files import (
     command_files_inventory,
     command_files_upload,
 )
-from danvas.grades import command_grades_post, command_grades_verify
+from danvas.grades import (
+    command_grades_clear,
+    command_grades_comments,
+    command_grades_post,
+    command_grades_verify,
+)
 from danvas.panopto import command_panopto_captions
 from danvas.quiz_import import command_quiz_import_qti
 from danvas.reports import (
@@ -1448,9 +1453,27 @@ def grades_post(
     dry_run: Annotated[
         bool,
         typer.Option(
-            "--dry-run", help="Print rows without posting. Recommended before live grade writes."
+            "--dry-run", help="Read Canvas and preflight rows without posting."
         ),
     ] = False,
+    offline_preview: Annotated[
+        bool,
+        typer.Option("--offline-preview", help="Print CSV rows without contacting Canvas."),
+    ] = False,
+    expected_assignment_title: Annotated[
+        str | None,
+        typer.Option(
+            "--expected-assignment-title",
+            help="Block if the Canvas assignment title is not this exact value.",
+        ),
+    ] = None,
+    rollback_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--rollback-dir",
+            help="Directory for private rollback CSV/JSON. Defaults beside the input CSV.",
+        ),
+    ] = None,
     sleep_seconds: Annotated[
         float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
     ] = 0.25,
@@ -1466,7 +1489,100 @@ def grades_post(
             assignment_id=assignment_id,
             grades_csv=str(grades_csv),
             dry_run=dry_run,
+            offline_preview=offline_preview,
+            expected_assignment_title=expected_assignment_title,
+            rollback_dir=str(rollback_dir) if rollback_dir else None,
             sleep_seconds=sleep_seconds,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@grades_app.command(
+    "clear",
+    help="Clear targeted grades and optionally exact instructor-owned comments from CSV.",
+)
+def grades_clear(
+    assignment_id: AssignmentId,
+    grades_csv: Annotated[
+        Path,
+        typer.Option(
+            "--grades-csv",
+            "-g",
+            help="CSV with CanvasID and optional ExpectedCurrentGrade, ClearGrade, CommentID, Comment.",
+        ),
+    ],
+    course_id: CourseId = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Preflight current grade/comment state without writes.")
+    ] = False,
+    expected_assignment_title: Annotated[
+        str | None,
+        typer.Option(
+            "--expected-assignment-title",
+            help="Block if the Canvas assignment title is not this exact value.",
+        ),
+    ] = None,
+    rollback_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--rollback-dir",
+            help="Directory for private rollback CSV/JSON. Defaults beside the input CSV.",
+        ),
+    ] = None,
+    sleep_seconds: Annotated[
+        float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
+    ] = 0.25,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_grades_clear,
+        args_for(
+            course_id=course_id,
+            assignment_id=assignment_id,
+            grades_csv=str(grades_csv),
+            dry_run=dry_run,
+            expected_assignment_title=expected_assignment_title,
+            rollback_dir=str(rollback_dir) if rollback_dir else None,
+            sleep_seconds=sleep_seconds,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@grades_app.command("comments", help="List one submission's comments and current-user ownership.")
+def grades_comments(
+    assignment_id: AssignmentId,
+    canvas_id: Annotated[int, typer.Option("--canvas-id", help="Canvas user ID.")],
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="Private JSON output path.")
+    ] = Path("submission-comments.json"),
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace an existing output file.")
+    ] = False,
+    course_id: CourseId = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_grades_comments,
+        args_for(
+            course_id=course_id,
+            assignment_id=assignment_id,
+            canvas_id=canvas_id,
+            output=str(output),
+            overwrite=overwrite,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
