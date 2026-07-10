@@ -1,6 +1,6 @@
 # danvas
 
-`danvas` is a command-line tool for day-to-day Canvas course operations: rosters, assignments, submissions, grading, announcements, and discussions.
+`danvas` is a command-line tool for day-to-day Canvas course operations: rosters, assignments, submissions, grading, announcements, discussions, and Pages.
 
 Status: early/internal tool. It is useful for real Canvas workflows, but command behavior may still change as course planning and audit workflows mature.
 
@@ -24,6 +24,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - JSON, CSV, Markdown directory formats
   - full or concise payloads
   - includes assignment groups, points, dates, publication state, submission types, URLs, and descriptions
+  - exports private assignment-override membership separately while snapshots retain only redacted override summaries
 
 - audit Canvas assignment setup
   - compare Canvas assignment group weights to `course.yaml`
@@ -42,6 +43,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - attached media
   - media comments
   - per-file metadata sidecars
+  - sanitized metadata/grade exports, stable manifests, SHA-256 hashes, and Office/ZIP integrity checks
 
 - upload feedback
   - upload per-student feedback files as Canvas submission comments
@@ -51,8 +53,18 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 - grade submissions
   - post grades from CSV
   - optional text comments from CSV
-  - idempotent checks for existing grades/comments
+  - online baseline preflight, expected-current-grade checks, comment/delta checks, and automatic rollback artifacts
+  - append or replace exact instructor-owned comments and safely clear targeted grades/comments
   - verify Canvas grades/comments against CSV
+
+- manage Canvas Pages
+  - deterministic Markdown or native-HTML fragment rendering with stable heading anchors
+  - restricted `.canvas.css` validation and deterministic style inlining under a versioned compatibility profile
+  - list/export, draft creation, body/publication-only update, source-map provenance, and readback verification
+
+- lint Canvas-facing local sources
+  - assignment, announcement, discussion, and Page validation without Canvas access
+  - stable rule IDs, narrow documented suppressions, JSON output, and warning-strict CI mode
 
 - check and audit gradebook exports
   - parse Canvas gradebook CSVs with `Points Possible` rows
@@ -125,6 +137,7 @@ danvas
 │   └── doctor
 ├── assignments
 │   ├── export
+│   ├── overrides
 │   ├── create
 │   ├── verify
 │   ├── update
@@ -137,10 +150,14 @@ danvas
 │   ├── analysis
 │   └── import-qti
 ├── submissions
+│   ├── export
+│   ├── grades
 │   ├── media
 │   └── feedback
 ├── grades
 │   ├── post
+│   ├── clear
+│   ├── comments
 │   └── verify
 ├── discussions
 │   ├── export
@@ -153,6 +170,16 @@ danvas
 │   ├── sync
 │   ├── update
 │   └── verify
+├── pages
+│   ├── list
+│   ├── export
+│   ├── render
+│   ├── css-check
+│   ├── create
+│   ├── update
+│   └── verify
+├── sources
+│   └── lint
 ├── files
 │   ├── inventory
 │   ├── download
@@ -387,14 +414,22 @@ danvas assignments update --course-id 1706414 assignments/hw1.md --dry-run
 danvas assignments upsert --course-id 1706414 assignments/hw1.md --dry-run
 danvas assignments upsert --course-id 1706414 assignments/hw1.md --confirm update
 danvas assignments audit assignments-full.json --course-yaml course.yaml
+danvas assignments overrides --course-id 1706414 --assignment-id 19413569 \
+  --output .danvas/private/assignment-overrides.yaml
 
 # Submissions and feedback
+danvas submissions export --course-id 1706414 --assignment-id 19413569 \
+  --output .danvas/private/submissions.json
+danvas submissions grades --course-id 1706414 --assignment-id 19413569 \
+  --output .danvas/private/grades.csv
 danvas submissions media --course-id 1706414 --assignment-id 19413569 --output-dir downloads
 danvas submissions feedback --course-id 1706414 --assignment-id 19413569 \
   --roster roster.csv --feedback-dir feedback --pattern "*-feedback.pdf" --dry-run
 
 # Grades
 danvas grades post --course-id 1706414 --assignment-id 19413569 --grades-csv grades.csv --dry-run
+danvas grades comments --course-id 1706414 --assignment-id 19413569 --canvas-id 4024825
+danvas grades clear --course-id 1706414 --assignment-id 19413569 --grades-csv rollback.csv --dry-run
 danvas grades verify --course-id 1706414 --assignment-id 19413569 --grades-csv grades.csv
 danvas gradebook check final-canvas-gradebook.csv --course-yaml course.yaml
 danvas gradebook audit final-canvas-gradebook.csv --course-yaml course.yaml \
@@ -424,6 +459,17 @@ danvas announcements latest --course-id 1655780 --format markdown
 danvas announcements sync --course-id 1655780 --output-dir content/announcements --dry-run
 danvas announcements verify --course-id 1655780 content/announcements/001-update.md
 danvas announcements update --course-id 1655780 content/announcements/001-update.md --dry-run
+
+# Pages
+danvas pages render content/pages/resources.md --output -
+danvas pages css-check content/pages/resources.canvas.css --source content/pages/resources.md
+danvas pages create --course-id 1706414 content/pages/resources.md --dry-run
+danvas pages update --course-id 1706414 content/pages/resources.md --page-id resources --dry-run
+danvas pages verify --course-id 1706414 content/pages/resources.md --page-id resources
+
+# Local source lint (no Canvas authentication)
+danvas sources lint --project-root .
+danvas sources lint content/pages/*.md --format json --output .danvas/source-lint.json
 
 # Files
 danvas files inventory --course-id 1742717 --local-root .
@@ -483,6 +529,8 @@ danvas assignments create ... --dry-run
 danvas assignments update ... --dry-run
 danvas assignments upsert ... --dry-run
 danvas announcements update ... --dry-run
+danvas pages create ... --dry-run
+danvas pages update ... --dry-run
 danvas submissions feedback ... --dry-run
 danvas grades post ... --dry-run
 danvas discussions score ... --dry-run
@@ -491,7 +539,7 @@ danvas files upload ... --dry-run
 danvas recordings panopto-captions ... --dry-run
 ```
 
-`grades post` and comment posting check for already-present grades/comments before writing when possible.
+`grades post --dry-run` reads the current Canvas state and validates the full patch without writing. Use `--offline-preview` only when authentication is intentionally unavailable. Live posting writes private rollback JSON/CSV before the first mutation.
 
 Live Canvas writes print a `== Canvas write: ... ==` banner showing the course, target, and write counts before any change is made.
 
