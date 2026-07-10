@@ -911,3 +911,95 @@ def test_files_download_one_cli_options_and_args(
     assert {"--report-root", "--report-dir", "--no-report"}.isdisjoint(
         option_names("files", "download-one")
     )
+
+
+def test_pages_export_cli_supports_targeted_markdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_export(args: SimpleNamespace) -> None:
+        captured.update(vars(args))
+
+    monkeypatch.setattr("danvas.cli.command_pages_export", fake_export)
+    output = tmp_path / "page.md"
+
+    result = runner.invoke(
+        app,
+        [
+            "pages",
+            "export",
+            "--course-id",
+            "101",
+            "--page-id",
+            "22",
+            "--format",
+            "markdown",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["course_id"] == 101
+    assert captured["page_id"] == "22"
+    assert captured["url"] is None
+    assert captured["format"] == "markdown"
+    assert captured["output"] == str(output)
+    assert {"--page-id", "--url", "--format", "--output", "--overwrite"} <= option_names(
+        "pages", "export"
+    )
+
+
+def test_pages_sync_cli_options_and_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_sync(args: SimpleNamespace) -> None:
+        captured.update(vars(args))
+
+    monkeypatch.setattr("danvas.cli.command_pages_sync", fake_sync)
+    output_dir = tmp_path / "content/pages"
+
+    result = runner.invoke(
+        app,
+        [
+            "pages",
+            "sync",
+            "--course-id",
+            "101",
+            "--output-dir",
+            str(output_dir),
+            "--format",
+            "html",
+            "--url",
+            "resources",
+            "--dry-run",
+            "--report-dir",
+            str(tmp_path / "report"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["course_id"] == 101
+    assert captured["output_dir"] == str(output_dir)
+    assert captured["format"] == "html"
+    assert captured["page_id"] is None
+    assert captured["url"] == "resources"
+    assert captured["dry_run"] is True
+    assert captured["project_root"] == "."
+    assert captured["report_dir"] == str(tmp_path / "report")
+    assert "--overwrite" not in option_names("pages", "sync")
+    assert {
+        "--output-dir",
+        "--format",
+        "--page-id",
+        "--url",
+        "--dry-run",
+        "--project-root",
+        "--no-report",
+        "--report-root",
+        "--report-dir",
+        "--report-slug",
+    } <= option_names("pages", "sync")

@@ -36,11 +36,11 @@ closed.
 
 | Area | Delivered by | Remaining follow-up, if any |
 |---|---|---|
-| Expanded course snapshot | `danvas refresh`, schema version 3 | Add sections/enrollments if roster workflows need them. |
+| Expanded course snapshot | `danvas refresh`, schema version 4 | Add sections/enrollments if roster workflows need them. |
 | Override-aware assignment status | schema-v3 snapshot, `danvas assignments overrides` | Snapshots remain redacted; membership exports are explicit private artifacts. |
 | Submission evidence exports | `danvas submissions export/grades/media` | Local replacement provenance remains optional future work. |
 | Transaction-safe grade patches | `danvas grades post/clear/comments/verify` | Continue field-testing exact comment replacement and rollback use. |
-| Canvas Pages bounded workflow | `danvas pages list/export/render/css-check/create/update/verify` | Sync, assets, rename/delete, broad upsert, and status integration remain deferred. |
+| Canvas Pages bounded workflow | `danvas pages list/export/sync/render/css-check/create/update/verify`, schema-v4 status | Assets, rename/delete, broad upsert, and broader compatibility profiles remain deferred. |
 | Canvas-facing source lint | `danvas sources lint` | External HTTP checking and automatic rewriting remain deferred. |
 | Read-only Canvas/local status | `danvas status` | Continue refining next-action hints as new source workflows land. |
 | Refresh diff | `danvas refresh --diff` | Plain diff remains terminal-first; report output is available through explicit report options. |
@@ -65,7 +65,7 @@ Current command families include:
 - `grades post/clear/comments/verify`
 - `discussions export/sync-prompts/score`
 - `announcements create/export/latest/sync/verify/update`
-- `pages list/export/render/css-check/create/update/verify`
+- `pages list/export/sync/render/css-check/create/update/verify`
 - `sources lint`
 - `files inventory/download/download-one/compare/upload`
 - `reports list/latest`
@@ -865,16 +865,16 @@ Definition of done:
 
 ## Sprint Candidate H: Canvas Pages Follow-Ons
 
-Implementation status (2026-07-10): the bounded Sprint 4/4.5 subset is delivered:
-list/export/render, restricted CSS check/inlining, draft create/readback,
-body/publication-only update, verification, and local source linting. Sync,
-asset upload/rewriting, deletion, rename, general upsert, and status integration
-remain deferred. The active backlog starts at those boundaries rather than
-reopening the delivered V1/V2 contract.
+Implementation status (2026-07-10): Sprints 4 through 7 deliver list/export,
+rendering, restricted CSS, draft create/readback, body/publication-only update,
+verification, local source linting, schema-v4 discovery/status, targeted
+HTML/Markdown export, and non-overwriting Canvas-to-local source sync. Asset
+upload/rewriting, deletion, rename, general upsert, and broader compatibility
+profiles remain deferred.
 
-Implementation status: source discovery/snapshot/status is delivered by Sprint 6, and
-safe Canvas-to-local source sync plus optional HTML/Markdown conversion is
-specified in Sprint 7. Asset handling and broader Page lifecycle/profile work
+Implementation status: source discovery/snapshot/status is delivered by Sprint 6;
+safe Canvas-to-local source sync and targeted HTML/Markdown conversion are
+delivered by Sprint 7. Asset handling and broader Page lifecycle/profile work
 remain unscheduled.
 
 Theme: manage student-facing Canvas Pages from durable local sources with the
@@ -909,7 +909,7 @@ danvas pages verify content/pages/example-page.md
 danvas pages update content/pages/example-page.md --dry-run
 ```
 
-Possible future commands, not current behavior:
+Current sync and future lifecycle command:
 
 ```bash
 danvas pages sync --output-dir content/pages --format markdown --dry-run
@@ -920,8 +920,8 @@ Recommended goals:
 
 1. Add read-only listing and export.
 
-   Status: broad all-Pages JSON export is delivered. Targeted single-Page
-   HTML/Markdown export is specified for Sprint 7.
+   Status: broad all-Pages JSON plus targeted single-Page HTML/Markdown export
+   are delivered.
 
    Desired behavior:
 
@@ -938,7 +938,8 @@ Recommended goals:
 
 2. Add Canvas-to-local source sync.
 
-   Status: specified in Sprint 7, dependent on Sprint 6 identity/status work.
+   Status: delivered in Sprint 7 with inventory-wide target planning,
+   no-clobber writes, round-trip validation, and provenance recovery.
 
    ```bash
    danvas pages sync --output-dir content/pages --format markdown --dry-run

@@ -64,6 +64,8 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - list/export, draft creation, body/publication-only update, source-map provenance, and readback verification
   - schema-v4 snapshot summaries and local-source status comparison without storing full Page bodies
   - canonicalizes stable Canvas links and blocks unresolved signed/verifier URLs before hashing
+  - safely syncs missing Canvas Pages to Markdown or native HTML without overwriting authored sources
+  - targeted HTML/Markdown export with normalized-body and anchor round-trip checks
 
 - lint Canvas-facing local sources
   - assignment, announcement, discussion, and Page validation without Canvas access
@@ -176,6 +178,7 @@ danvas
 ├── pages
 │   ├── list
 │   ├── export
+│   ├── sync
 │   ├── render
 │   ├── css-check
 │   ├── create
@@ -470,6 +473,8 @@ danvas announcements verify --course-id 1655780 content/announcements/001-update
 danvas announcements update --course-id 1655780 content/announcements/001-update.md --dry-run
 
 # Pages
+danvas pages sync --course-id 1706414 --output-dir content/pages --dry-run
+danvas pages export --course-id 1706414 --page-id 123 --format markdown --output /tmp/page.md
 danvas pages render content/pages/resources.md --output -
 danvas pages css-check content/pages/resources.canvas.css --source content/pages/resources.md
 danvas pages create --course-id 1706414 content/pages/resources.md --dry-run
@@ -549,6 +554,10 @@ danvas recordings panopto-captions ... --dry-run
 ```
 
 `grades post --dry-run` reads the current Canvas state and validates the full patch without writing. Use `--offline-preview` only when authentication is intentionally unavailable. Live posting writes private rollback JSON/CSV before the first mutation.
+
+`pages sync --dry-run` reads Canvas and plans local source creation. Live sync
+writes only missing local files with no-clobber installation and recoverable
+source-map provenance; it does not mutate Canvas and has no overwrite mode.
 
 Live Canvas writes print a `== Canvas write: ... ==` banner showing the course, target, and write counts before any change is made.
 

@@ -4,22 +4,33 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import tempfile
+import unicodedata
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
 
 import markdown as markdown_lib
 import tinycss2
+import yaml
 from bs4 import BeautifulSoup, Comment, Tag
 from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.auth import canvas_from_args
 from danvas.frontmatter import normalize_canvas_value, parse_frontmatter
 from danvas.reports import create_report_run, should_write_report_run
-from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
+from danvas.source_map import (
+    find_source_entry,
+    load_source_map,
+    resolve_source_canvas_id,
+    source_path_key,
+    write_source_map_entry,
+)
 from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_json
 
 RENDERER_VERSION = "pages-markdown-v1"
@@ -57,6 +68,10 @@ URL_ATTRS = {"href", "src"}
 UNSAFE_SCHEMES = {"javascript", "vbscript", "data"}
 VOLATILE_QUERY_NAMES = {
     "access_token", "expires", "key-pair-id", "policy", "signature", "token", "verifier"
+}
+NONSEMANTIC_CANVAS_ATTRS = {
+    "data-api-endpoint", "data-api-returntype", "data-canvas-previewable", "data-id",
+    "data-mce-href", "data-mce-src", "data-mce-style",
 }
 LOCAL_ASSET_SUFFIXES = {
     ".avif", ".csv", ".doc", ".docx", ".gif", ".jpeg", ".jpg", ".mp3", ".mp4", ".pdf",
@@ -123,6 +138,9 @@ def canonicalize_page_html(html: str, *, course_id: int | None = None) -> dict[s
     volatile_count = 0
     for tag in soup.find_all(True):
         for name, raw_value in list(tag.attrs.items()):
+            if name in NONSEMANTIC_CANVAS_ATTRS or name.startswith("data-mce-"):
+                del tag.attrs[name]
+                continue
             if not isinstance(raw_value, str):
                 continue
             if name not in {"href", "src", "data-api-endpoint", "data-download-url"}:
@@ -320,7 +338,8 @@ def normalize_html_fragment(html: str) -> str:
             attrs["class"] = " ".join(sorted(str(value) for value in (tag.get("class") or [])))
             tag.attrs = attrs
         tag.attrs = dict(sorted(tag.attrs.items()))
-    return soup.decode(formatter="html").strip()
+    decoded = soup.decode(formatter="html").strip()
+    return re.sub(r">[ \t]*[\r\n]+[ \t\r\n]*<", "><", decoded)
 
 
 def parse_style_map(style: str) -> dict[str, str]:
@@ -590,6 +609,231 @@ def write_page_report(args: Any, command: str, payload: dict[str, Any], *, statu
     print(f"Report: {run.path}")
 
 
+def canvas_page_inventory(course: Any) -> list[dict[str, Any]]:
+    course_id = int(getattr(course, "id", 0) or 0)
+    records = []
+    for summary in course.get_pages():
+        record = page_record(summary)
+        if record["url"]:
+            record = page_record(course.get_page(record["url"]))
+        record["html_url"], unsafe_html_url = canonicalize_page_url(
+            str(record.get("html_url") or ""), course_id=course_id
+        )
+        if unsafe_html_url:
+            record["html_url"] = ""
+        canonical = canonicalize_page_html(record.get("body") or "", course_id=course_id)
+        record.update(canonical)
+        record["body"] = canonical["html"]
+        records.append(record)
+    records.sort(
+        key=lambda item: (
+            normalize_text(str(item.get("title") or "")),
+            str(item.get("page_id") or item.get("url") or ""),
+        )
+    )
+    return records
+
+
+def select_canvas_pages(
+    records: list[dict[str, Any]], *, page_id: str | None = None, url: str | None = None
+) -> list[dict[str, Any]]:
+    if page_id and url:
+        raise SystemExit("Use either --page-id or --url, not both.")
+    if page_id:
+        matches = [row for row in records if str(row.get("page_id")) == str(page_id)]
+    elif url:
+        matches = [row for row in records if str(row.get("url")) == str(url)]
+    else:
+        return records
+    if not matches:
+        raise SystemExit("Canvas Page not found for the requested selector.")
+    if len(matches) != 1:
+        raise SystemExit("Canvas Page selector is ambiguous.")
+    return matches
+
+
+def page_frontmatter(record: dict[str, Any]) -> dict[str, Any]:
+    values = {
+        "title": record.get("title") or "",
+        "page_id": record.get("page_id"),
+        "published": bool(record.get("published")),
+        "front_page": bool(record.get("front_page")),
+        "editing_roles": record.get("editing_roles"),
+        "publish_at": record.get("publish_at"),
+    }
+    return {key: value for key, value in values.items() if value not in (None, "")}
+
+
+def render_synced_page_source(record: dict[str, Any], fmt: str) -> dict[str, Any]:
+    if record.get("body_hash_status") != "available":
+        return {
+            "status": "conversion_blocked",
+            "reason": "Page contains an unresolved volatile or signed URL.",
+            "source": "",
+            "body_sha256": None,
+            "anchors": [],
+        }
+    body = str(record.get("body") or "")
+    converted = body if fmt == "html" else html_fragment_to_markdown(body)
+    frontmatter = yaml.safe_dump(page_frontmatter(record), sort_keys=False, allow_unicode=True).strip()
+    source_text = f"---\n{frontmatter}\n---\n\n{converted.strip()}\n"
+    suffix = ".html" if fmt == "html" else ".md"
+    with tempfile.TemporaryDirectory() as directory:
+        candidate = Path(directory) / f"page{suffix}"
+        candidate.write_text(source_text, encoding="utf-8")
+        try:
+            local = load_page_source(candidate)
+        except SystemExit as exc:
+            return {
+                "status": "conversion_blocked",
+                "reason": str(exc),
+                "source": "",
+                "body_sha256": None,
+                "anchors": [],
+            }
+    if local.unresolved_assets:
+        return {
+            "status": "conversion_blocked",
+            "reason": "Converted source contains unresolved local asset references.",
+            "source": "",
+            "body_sha256": None,
+            "anchors": local.anchors,
+        }
+    canonical = canonicalize_page_html(local.html)
+    remote_anchors, remote_links = fragment_anchors(body)
+    if canonical["body_sha256"] != record.get("body_sha256"):
+        return {
+            "status": "conversion_blocked",
+            "reason": "Converted source does not round-trip to the normalized Canvas body.",
+            "source": "",
+            "body_sha256": canonical["body_sha256"],
+            "anchors": local.anchors,
+        }
+    if local.anchors != remote_anchors or local.local_links != remote_links:
+        return {
+            "status": "conversion_blocked",
+            "reason": "Converted source does not preserve same-page anchors and links.",
+            "source": "",
+            "body_sha256": canonical["body_sha256"],
+            "anchors": local.anchors,
+        }
+    return {
+        "status": "ready",
+        "reason": "",
+        "source": source_text,
+        "body_sha256": canonical["body_sha256"],
+        "anchors": local.anchors,
+    }
+
+
+def html_fragment_to_markdown(html: str) -> str:
+    soup = BeautifulSoup(f"<div data-danvas-root>{html}</div>", "html.parser")
+    root = soup.find("div", attrs={"data-danvas-root": True})
+    if root is None:
+        return ""
+    blocks = [markdown_block(node, 0) for node in root.children if str(node).strip()]
+    return "\n\n".join(block.strip() for block in blocks if block.strip()).strip()
+
+
+def markdown_block(node: Any, depth: int) -> str:
+    if not isinstance(node, Tag):
+        return markdown_text(str(node)).strip()
+    heading = node.name in {"h1", "h2", "h3", "h4", "h5", "h6"}
+    if node.attrs and not (heading and set(node.attrs) == {"id"}):
+        return str(node)
+    if node.name == "p":
+        return markdown_inline_children(node)
+    if heading:
+        marker = "#" * int(node.name[1])
+        identifier = f" {{#{node.get('id')}}}" if node.get("id") else ""
+        return f"{marker} {markdown_inline_children(node)}{identifier}"
+    if node.name in {"ul", "ol"}:
+        lines = []
+        for index, item in enumerate(node.find_all("li", recursive=False), start=1):
+            marker = f"{index}." if node.name == "ol" else "-"
+            lines.append(f"{'  ' * depth}{marker} {markdown_inline_children(item).strip()}")
+        return "\n".join(lines)
+    if node.name == "blockquote":
+        return "\n".join(f"> {line}" for line in markdown_inline_children(node).splitlines())
+    if node.name == "pre":
+        return f"```\n{node.get_text().rstrip()}\n```"
+    if node.name == "hr":
+        return "---"
+    return str(node)
+
+
+def markdown_inline_children(node: Tag) -> str:
+    return "".join(markdown_inline(child) for child in node.children).strip()
+
+
+def markdown_inline(node: Any) -> str:
+    if not isinstance(node, Tag):
+        return markdown_text(str(node))
+    if node.name == "br":
+        return "  \n"
+    if node.name in {"strong", "b"}:
+        return f"**{markdown_inline_children(node)}**"
+    if node.name in {"em", "i"}:
+        return f"*{markdown_inline_children(node)}*"
+    if node.name == "code":
+        return f"`{node.get_text()}`"
+    if node.name == "a" and set(node.attrs) <= {"href"}:
+        return f"[{markdown_inline_children(node)}]({node.get('href') or ''})"
+    if node.name in {"ul", "ol"}:
+        return "\n" + markdown_block(node, 1)
+    return str(node)
+
+
+def markdown_text(value: str) -> str:
+    return re.sub(r"([\\*_[\]<>])", r"\\\1", value)
+
+
+WINDOWS_RESERVED_NAMES = {
+    "con", "prn", "aux", "nul", *(f"com{index}" for index in range(1, 10)),
+    *(f"lpt{index}" for index in range(1, 10)),
+}
+
+
+def sanitized_page_slug(value: str) -> tuple[str, bool]:
+    normalized = unicodedata.normalize("NFC", value)
+    cleaned = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "-", normalized)
+    cleaned = re.sub(r"-+", "-", cleaned).strip().rstrip(". ")
+    reserved = cleaned.casefold().split(".", 1)[0] in WINDOWS_RESERVED_NAMES
+    return (cleaned or "page"), reserved or not bool(cleaned)
+
+
+def page_target_plan(
+    records: list[dict[str, Any]], output_dir: Path, fmt: str
+) -> dict[str, Path]:
+    extension = ".html" if fmt == "html" else ".md"
+    bases: dict[str, tuple[str, bool]] = {}
+    groups: dict[str, list[str]] = {}
+    for record in records:
+        identity = str(record.get("page_id") or record.get("url") or "")
+        base, forced = sanitized_page_slug(str(record.get("url") or ""))
+        bases[identity] = (base, forced)
+        key = unicodedata.normalize("NFC", f"{base}{extension}").casefold()
+        groups.setdefault(key, []).append(identity)
+    result = {}
+    for identity, (base, forced) in bases.items():
+        key = unicodedata.normalize("NFC", f"{base}{extension}").casefold()
+        filename = (
+            f"{base}--page-{identity}{extension}"
+            if forced or len(groups[key]) > 1
+            else f"{base}{extension}"
+        )
+        result[identity] = output_dir / filename
+    final_keys: dict[str, str] = {}
+    for identity, path in result.items():
+        key = unicodedata.normalize("NFC", path.name).casefold().rstrip(". ")
+        if key in final_keys:
+            raise SystemExit(
+                f"Canonical Page targets still collide for {final_keys[key]} and {identity}."
+            )
+        final_keys[key] = identity
+    return result
+
+
 def command_pages_list(args: Any) -> None:
     course = canvas_from_args(args).get_course(args.course_id)
     records = [page_record(page) for page in course.get_pages()]
@@ -600,17 +844,437 @@ def command_pages_list(args: Any) -> None:
 
 def command_pages_export(args: Any) -> None:
     course = canvas_from_args(args).get_course(args.course_id)
-    records = []
-    for summary in course.get_pages():
-        record = page_record(summary)
-        with suppress(ResourceDoesNotExist):
-            record = page_record(course.get_page(record["url"]))
-        records.append(record)
+    records = canvas_page_inventory(course)
+    selected = select_canvas_pages(
+        records, page_id=getattr(args, "page_id", None), url=getattr(args, "url", None)
+    )
+    fmt = getattr(args, "format", "json")
+    if fmt != "json" and len(selected) != 1:
+        raise SystemExit("HTML/Markdown Page export requires --page-id or --url.")
     output = Path(args.output)
     if output.exists() and not bool(getattr(args, "overwrite", False)):
         raise SystemExit(f"Output already exists (pass --overwrite): {output}")
-    write_json(output, {"course_id": args.course_id, "pages": records})
-    print(f"Wrote {len(records)} Pages to {output}")
+    if fmt == "json":
+        safe_records = [page_public_record(record, include_body=True) for record in selected]
+        write_json(output, {"course_id": args.course_id, "pages": safe_records})
+    else:
+        rendered = render_synced_page_source(selected[0], fmt)
+        if rendered["status"] != "ready":
+            raise SystemExit(rendered["reason"])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered["source"], encoding="utf-8")
+    print(f"Wrote {len(selected)} Page{'s' if len(selected) != 1 else ''} to {output}")
+
+
+def page_public_record(record: dict[str, Any], *, include_body: bool = False) -> dict[str, Any]:
+    excluded = {"html", "_source"}
+    if not include_body:
+        excluded.add("body")
+    return {key: value for key, value in record.items() if key not in excluded}
+
+
+def command_pages_sync(args: Any) -> None:
+    root = Path(args.project_root).resolve()
+    course = canvas_from_args(args).get_course(args.course_id)
+    inventory = canvas_page_inventory(course)
+    selected = select_canvas_pages(
+        inventory, page_id=getattr(args, "page_id", None), url=getattr(args, "url", None)
+    )
+    plan = build_pages_sync_plan(
+        inventory=inventory,
+        selected=selected,
+        output_dir=Path(args.output_dir).resolve(),
+        fmt=args.format,
+        project_root=root,
+        dry_run=bool(args.dry_run),
+    )
+    if not args.dry_run:
+        execute_pages_sync(plan, project_root=root, course_id=args.course_id)
+    write_pages_sync_report(args, plan)
+    print_pages_sync_summary(plan)
+    failures = {"conflict", "conversion_blocked", "source_created_provenance_failed", "error"}
+    if any(action["status"] in failures for action in plan["actions"]):
+        raise SystemExit(1)
+
+
+def build_pages_sync_plan(
+    *,
+    inventory: list[dict[str, Any]],
+    selected: list[dict[str, Any]],
+    output_dir: Path,
+    fmt: str,
+    project_root: Path,
+    dry_run: bool,
+) -> dict[str, Any]:
+    from danvas.config import load_project_config
+    from danvas.sources import scan_sources
+
+    config = load_project_config(project_root)
+    local_pages = [
+        row for row in scan_sources(project_root, source_config=config.get("sources") or {})
+        if row["kind"] == "page"
+    ]
+    source_map = load_source_map(project_root)
+    by_identity: dict[str, list[dict[str, Any]]] = {}
+    unbound_by_title: dict[str, list[dict[str, Any]]] = {}
+    for local in local_pages:
+        entry = find_source_entry(source_map, kind="page", path=local["path"])
+        canvas = entry.get("canvas") if isinstance(entry, dict) else {}
+        if not isinstance(canvas, dict):
+            canvas = {}
+        metadata = local.get("source_metadata") or {}
+        frontmatter_identity = metadata.get("page_id", metadata.get("canvas_id"))
+        map_values = {
+            str(value)
+            for value in (canvas.get("id"), canvas.get("url"))
+            if value not in (None, "")
+        }
+        if (
+            frontmatter_identity not in (None, "")
+            and map_values
+            and str(frontmatter_identity) not in map_values
+        ):
+            local["error"] = "Front matter Page identity conflicts with source-map provenance."
+        identities = {
+            str(value)
+            for value in (
+                frontmatter_identity,
+                canvas.get("id"),
+                canvas.get("url"),
+            )
+            if value not in (None, "")
+        }
+        local["_source_map_entry"] = entry
+        if identities:
+            for identity in identities:
+                by_identity.setdefault(identity, []).append(local)
+        else:
+            unbound_by_title.setdefault(normalize_text(str(local.get("title") or "")), []).append(local)
+    targets = page_target_plan(inventory, output_dir, fmt)
+    actions = []
+    for record in selected:
+        identity = str(record.get("page_id") or record.get("url") or "")
+        target = targets[identity]
+        stable_matches = []
+        for value in (record.get("page_id"), record.get("url")):
+            stable_matches.extend(by_identity.get(str(value), []))
+        stable_matches = list({row["path"]: row for row in stable_matches}.values())
+        if len(stable_matches) > 1:
+            actions.append(sync_action(record, target, "conflict", "Multiple local sources use this Page identity."))
+            continue
+        if stable_matches:
+            local = stable_matches[0]
+            if local.get("error"):
+                actions.append(sync_action(record, Path(project_root / local["path"]), "conflict", local["error"]))
+                continue
+            if local.get("_source_map_entry"):
+                actions.append(sync_action(record, Path(project_root / local["path"]), "skipped_known_local", "Stable Page provenance already exists."))
+                continue
+            status, reason = recovery_status(record, local)
+            planned = "would_recover_provenance" if dry_run and status == "ready" else (
+                "recovered_provenance" if status == "ready" else "conflict"
+            )
+            action = sync_action(record, Path(project_root / local["path"]), planned, reason)
+            action["_recovery_source"] = str(project_root / local["path"])
+            actions.append(action)
+            continue
+        title_matches = unbound_by_title.get(normalize_text(str(record.get("title") or "")), [])
+        if len(title_matches) == 1:
+            action = sync_action(
+                record,
+                Path(project_root / title_matches[0]["path"]),
+                "skipped_known_local",
+                "Unique title-only candidate remains unbound; verify and bind deliberately.",
+            )
+            action["identity"] = "title_candidate"
+            actions.append(action)
+            continue
+        if len(title_matches) > 1:
+            actions.append(
+                sync_action(
+                    record,
+                    target,
+                    "conflict",
+                    "Multiple unbound local Page sources share this title.",
+                )
+            )
+            continue
+        if target.exists():
+            target_action = existing_target_action(
+                target,
+                record,
+                source_map=source_map,
+                project_root=project_root,
+                dry_run=dry_run,
+            )
+            actions.append(target_action)
+            continue
+        converted = render_synced_page_source(record, fmt)
+        status = "would_create" if dry_run and converted["status"] == "ready" else converted["status"]
+        if not dry_run and converted["status"] == "ready":
+            status = "ready"
+        action = sync_action(record, target, status, converted["reason"])
+        action["body_sha256"] = converted["body_sha256"]
+        action["anchors"] = converted["anchors"]
+        action["_source"] = converted["source"]
+        actions.append(action)
+    return {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "dry_run": dry_run,
+        "format": fmt,
+        "output_dir": str(output_dir),
+        "inventory_count": len(inventory),
+        "actions": actions,
+    }
+
+
+def sync_action(
+    record: dict[str, Any], target: Path, status: str, reason: str
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "reason": reason,
+        "page_id": record.get("page_id"),
+        "url": record.get("url") or "",
+        "title": record.get("title") or "",
+        "published": bool(record.get("published")),
+        "front_page": bool(record.get("front_page")),
+        "target_path": str(target),
+        "body_sha256": record.get("body_sha256"),
+        "anchors": fragment_anchors(str(record.get("body") or ""))[0],
+    }
+
+
+def recovery_status(record: dict[str, Any], local: dict[str, Any]) -> tuple[str, str]:
+    metadata = local.get("source_metadata") or {}
+    local_identity = metadata.get("page_id", metadata.get("canvas_id"))
+    if str(local_identity) != str(record.get("page_id")):
+        return "conflict", "Local Page ID does not match Canvas."
+    if str(local.get("title") or "") != str(record.get("title") or ""):
+        return "conflict", "Local Page title does not match Canvas."
+    artifacts = local.get("artifacts") or {}
+    if artifacts.get("body_sha256") != record.get("body_sha256"):
+        return "conflict", "Local Page body hash does not match Canvas."
+    if artifacts.get("anchors") != fragment_anchors(str(record.get("body") or ""))[0]:
+        return "conflict", "Local Page anchors do not match Canvas."
+    return "ready", "Stable Page source matches Canvas but provenance is missing."
+
+
+def existing_target_status(target: Path, record: dict[str, Any]) -> tuple[str, str]:
+    try:
+        local = load_page_source(target)
+    except SystemExit:
+        return "skipped_exists", "Target exists and is not a matching Page source."
+    identity = local.metadata.get("page_id", local.metadata.get("canvas_id"))
+    if identity not in (None, "") and str(identity) != str(record.get("page_id")):
+        return "conflict", "Target exists for a different Page identity."
+    return "skipped_exists", "Target exists without tracked provenance."
+
+
+def existing_target_action(
+    target: Path,
+    record: dict[str, Any],
+    *,
+    source_map: dict[str, Any],
+    project_root: Path,
+    dry_run: bool,
+) -> dict[str, Any]:
+    try:
+        local_source = load_page_source(target)
+    except SystemExit:
+        return sync_action(
+            record, target, "skipped_exists", "Target exists and is not a matching Page source."
+        )
+    entry = find_source_entry(
+        source_map,
+        kind="page",
+        path=source_path_key(target, project_root),
+    )
+    if entry:
+        return sync_action(
+            record, target, "skipped_known_local", "Stable Page provenance already exists."
+        )
+    local = {
+        "title": local_source.metadata["title"],
+        "source_metadata": local_source.metadata,
+        "artifacts": {
+            "body_sha256": local_source.body_sha256,
+            "anchors": local_source.anchors,
+        },
+    }
+    status, reason = recovery_status(record, local)
+    action = sync_action(
+        record,
+        target,
+        "would_recover_provenance" if dry_run and status == "ready" else (
+            "recovered_provenance" if status == "ready" else "conflict"
+        ),
+        reason,
+    )
+    if status == "ready":
+        action["_recovery_source"] = str(target)
+    return action
+
+
+def install_source_no_clobber(target: Path, source_text: str) -> bool:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(source_text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(temporary, target)
+        except FileExistsError:
+            return False
+        except OSError as exc:
+            raise OSError(
+                f"No safe no-clobber installation primitive for {target}: {exc}"
+            ) from exc
+        return True
+    finally:
+        with suppress(FileNotFoundError):
+            temporary.unlink()
+
+
+def execute_pages_sync(
+    plan: dict[str, Any], *, project_root: Path, course_id: int
+) -> None:
+    for action in plan["actions"]:
+        if action["status"] == "recovered_provenance":
+            source = Path(action["_recovery_source"])
+            try:
+                write_page_sync_provenance(action, source, course_id, project_root)
+            except Exception as exc:
+                action["status"] = "error"
+                action["reason"] = f"Provenance recovery failed: {type(exc).__name__}"
+            continue
+        if action["status"] != "ready":
+            continue
+        target = Path(action["target_path"])
+        try:
+            installed = install_source_no_clobber(target, action["_source"])
+        except OSError as exc:
+            action["status"] = "error"
+            action["reason"] = str(exc)
+            continue
+        if not installed:
+            status, reason = existing_target_status(target, action)
+            action["status"] = status
+            action["reason"] = reason
+            continue
+        action["status"] = "created"
+        try:
+            local = load_page_source(target)
+            if local.body_sha256 != action["body_sha256"]:
+                raise ValueError("installed source hash changed during local readback")
+            write_page_sync_provenance(action, target, course_id, project_root)
+        except Exception as exc:
+            action["status"] = "source_created_provenance_failed"
+            action["reason"] = f"Source created but provenance failed: {type(exc).__name__}"
+
+
+def write_page_sync_provenance(
+    action: dict[str, Any], source: Path, course_id: int, project_root: Path
+) -> Path:
+    return write_source_map_entry(
+        kind="page",
+        source=source,
+        course_id=course_id,
+        canvas={"id": action["page_id"], "url": action["url"], "title": action["title"]},
+        command="pages sync",
+        fields={
+            "title": action["title"],
+            "url": action["url"],
+            "published": action["published"],
+            "front_page": action["front_page"],
+        },
+        body_sha256=action.get("body_sha256"),
+        project_root=project_root,
+    )
+
+
+def pages_sync_report_payload(plan: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **{key: value for key, value in plan.items() if key != "actions"},
+        "actions": [
+            {key: value for key, value in action.items() if not key.startswith("_")}
+            for action in plan["actions"]
+        ],
+    }
+
+
+def write_pages_sync_report(args: Any, plan: dict[str, Any]) -> None:
+    project_root = Path(args.project_root)
+    report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
+    if not should_write_report_run(
+        no_report=bool(getattr(args, "no_report", False)),
+        legacy_output=False,
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=getattr(args, "report_slug", None),
+        project_root=project_root,
+    ):
+        return
+    run = create_report_run(
+        command="pages sync",
+        slug=getattr(args, "report_slug", None) or "pages-sync",
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        course_id=args.course_id,
+        input_paths=[Path(plan["output_dir"])],
+    )
+    payload = pages_sync_report_payload(plan)
+    run.write_json("pages-sync.json", payload)
+    run.write_text("pages-sync.md", render_pages_sync_markdown(payload))
+    failures = {"conflict", "conversion_blocked", "source_created_provenance_failed", "error"}
+    status = "failed" if any(action["status"] in failures for action in plan["actions"]) else "success"
+    run.finish(status)
+    print(f"Report: {run.path}")
+
+
+def render_pages_sync_markdown(plan: dict[str, Any]) -> str:
+    counts: dict[str, int] = {}
+    for action in plan["actions"]:
+        counts[action["status"]] = counts.get(action["status"], 0) + 1
+    lines = [
+        "# Pages Sync",
+        "",
+        f"- Dry run: `{plan['dry_run']}`",
+        f"- Format: `{plan['format']}`",
+        f"- Inventory count: `{plan['inventory_count']}`",
+        "",
+        "## Summary",
+        "",
+    ]
+    lines.extend(f"- `{status}`: `{count}`" for status, count in sorted(counts.items()))
+    lines.extend(
+        [
+            "",
+            "## Actions",
+            "",
+            "| Status | Page ID | Title | Target | Reason |",
+            "| --- | ---: | --- | --- | --- |",
+        ]
+    )
+    for action in plan["actions"]:
+        title = str(action["title"]).replace("|", "\\|")
+        reason = str(action["reason"]).replace("|", "\\|")
+        lines.append(
+            f"| {action['status']} | {action['page_id']} | {title} | "
+            f"`{action['target_path']}` | {reason} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def print_pages_sync_summary(plan: dict[str, Any]) -> None:
+    print(f"Pages sync ({'dry run' if plan['dry_run'] else 'local write'}):")
+    for action in plan["actions"]:
+        print(f"  {action['status']}: {action['title']} -> {action['target_path']}")
 
 
 def command_pages_render(args: Any) -> None:

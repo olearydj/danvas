@@ -44,8 +44,8 @@ their full text.
   object operations.
 - `src/danvas/overrides.py`: redacted assignment override summaries and explicit
   private membership exports.
-- `src/danvas/pages.py`: bounded Page listing/export, rendering, restricted CSS,
-  create/update, readback, and verification workflows.
+- `src/danvas/pages.py`: Page listing/export/sync, rendering, restricted CSS,
+  create/update, readback, status normalization, and verification workflows.
 - `src/danvas/files.py`: Canvas Files inventory, targeted metadata compare,
   download, and upload.
 - `src/danvas/quiz_import.py`, `quiz.py`: QTI import and quiz analysis.
@@ -60,9 +60,9 @@ their full text.
 `danvas.__version__` read installed package metadata. Bump the minor version for
 feature sprints or new commands, and the patch version for fixes.
 
-Current release: 0.6.0. The annotated `v0.6.0` tag points to `05201fa`; that
-revision is on `origin/main`, passed GitHub Actions, and was smoke-tested through
-a non-editable global installation resolved from the tag.
+Current published release: 0.6.0. The annotated `v0.6.0` tag points to `05201fa`.
+Local 0.7.0 feature work adds Page snapshot/status and one-way source sync and
+must pass CI before a later release tag.
 
 Recommended local checks:
 
@@ -116,9 +116,9 @@ and the external Codex teaching skill docs:
 - Keep the initial Canvas Pages workflow deliberately bounded: Markdown or native
   HTML rendering, restricted inline CSS, draft creation, body/publication update,
   and readback verification. Snapshot/status integration and one-way local source
-  creation are separately specified in Sprints 6 and 7; asset upload/rewriting,
-  rename, deletion, and general upsert remain future designs.
-- Planned Page snapshot/sync work must canonicalize stable Canvas links and block
+  creation are delivered by Sprints 6 and 7; asset upload/rewriting, rename,
+  deletion, and general upsert remain future designs.
+- Page snapshot/sync work canonicalizes stable Canvas links and blocks
   unresolved volatile or signed URLs before hashing or writing authored sources.
   Title-only Page matches are provisional collision evidence, never provenance.
 

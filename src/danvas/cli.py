@@ -56,6 +56,7 @@ from danvas.pages import (
     command_pages_export,
     command_pages_list,
     command_pages_render,
+    command_pages_sync,
     command_pages_update,
     command_pages_verify,
 )
@@ -88,6 +89,8 @@ SubmissionLayout = Literal["flat", "assignment-subdir"]
 SourceKind = Literal["assignment", "announcement", "discussion", "page"]
 LintFormat = Literal["text", "json"]
 LintFailOn = Literal["error", "warning"]
+PageExportFormat = Literal["json", "html", "markdown"]
+PageSyncFormat = Literal["html", "markdown"]
 
 
 app = typer.Typer(
@@ -134,7 +137,7 @@ announcements_app = typer.Typer(
     no_args_is_help=True,
 )
 pages_app = typer.Typer(
-    help="Render, inspect, create, update, and verify Canvas Pages.",
+    help="Render, inspect, sync, create, update, and verify Canvas Pages.",
     no_args_is_help=True,
 )
 files_app = typer.Typer(
@@ -1895,17 +1898,84 @@ def pages_list(
     run_command(command_pages_list, args_for(course_id=course_id, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
 
 
-@pages_app.command("export", help="Export Canvas Page metadata and bodies to explicit JSON output.")
+@pages_app.command("export", help="Export all Pages as JSON or one Page as HTML/Markdown source.")
 def pages_export(
-    output: Annotated[Path, typer.Option("--output", "-o", help="Private JSON output path.")],
+    output: Annotated[Path, typer.Option("--output", "-o", help="Explicit output path.")],
     course_id: CourseId = None,
+    output_format: Annotated[
+        PageExportFormat, typer.Option("--format", help="JSON, native HTML, or Markdown source.")
+    ] = "json",
+    page_id: Annotated[
+        str | None, typer.Option("--page-id", help="Select one Canvas Page by numeric ID.")
+    ] = None,
+    url: Annotated[
+        str | None, typer.Option("--url", help="Select one Canvas Page by exact URL slug.")
+    ] = None,
     overwrite: Annotated[bool, typer.Option("--overwrite", help="Replace an existing output file.")] = False,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
-    run_command(command_pages_export, args_for(course_id=course_id, output=str(output), overwrite=overwrite, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+    run_command(command_pages_export, args_for(course_id=course_id, output=str(output), format=output_format, page_id=page_id, url=url, overwrite=overwrite, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+
+
+@pages_app.command("sync", help="Create missing local Page sources without overwriting authored files.")
+def pages_sync(
+    output_dir: Annotated[Path, typer.Option("--output-dir", help="Directory for new Page sources.")],
+    course_id: CourseId = None,
+    output_format: Annotated[
+        PageSyncFormat, typer.Option("--format", help="Local Markdown or native HTML source format.")
+    ] = "markdown",
+    page_id: Annotated[
+        str | None, typer.Option("--page-id", help="Limit actions to one numeric Page ID.")
+    ] = None,
+    url: Annotated[
+        str | None, typer.Option("--url", help="Limit actions to one exact Page URL slug.")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Plan local source creation without writing files.")
+    ] = False,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_pages_sync,
+        args_for(
+            course_id=course_id,
+            output_dir=str(output_dir),
+            format=output_format,
+            page_id=page_id,
+            url=url,
+            dry_run=dry_run,
+            project_root=str(project_root),
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
 
 
 @pages_app.command("render", help="Render a local Page source to a Canvas-compatible HTML fragment.")

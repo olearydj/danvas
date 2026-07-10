@@ -1,6 +1,7 @@
 # Sprint 7: Canvas Pages Source Sync And Conversion
 
-Status: planned; depends on Sprint 6.
+Status: implemented and locally verified; built on Sprint 6. The non-normative
+live-course sync field case remains pending explicit course-workspace approval.
 
 ## Objective
 
@@ -43,6 +44,7 @@ planning, assign one of these statuses to each Page selected for action:
 - `conflict`
 - `conversion_blocked`
 - `recovered_provenance`
+- `would_recover_provenance`
 - `source_created_provenance_failed`
 - `error`
 

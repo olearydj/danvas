@@ -5,7 +5,9 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import json
+import os
 import re
+import tempfile
 import unicodedata
 from html.parser import HTMLParser
 from pathlib import Path
@@ -79,6 +81,22 @@ def write_rows(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) ->
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    """Atomically replace a danvas-owned JSON file after a fully flushed write."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def mark_private(path: Path) -> None:

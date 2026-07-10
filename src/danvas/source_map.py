@@ -7,7 +7,7 @@ from typing import Any
 
 from danvas import __version__
 from danvas.reports import course_id_for_config, find_config_dir, now_for_config
-from danvas.utils import normalize_json, write_json
+from danvas.utils import normalize_json, write_json_atomic
 
 SOURCE_MAP_SCHEMA_VERSION = 1
 SOURCE_MAP_FILENAME = "source-map.json"
@@ -184,5 +184,5 @@ def write_source_map_entry(
     sources.append(entry)
     sources.sort(key=lambda item: (str(item.get("kind") or ""), str(item.get("path") or "")))
     payload["sources"] = sources
-    write_json(path, payload)
+    write_json_atomic(path, payload)
     return path
