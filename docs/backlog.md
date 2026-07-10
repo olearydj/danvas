@@ -1,10 +1,32 @@
 # danvas Backlog
 
-Last consolidated: 2026-06-24.
+Last consolidated: 2026-07-10.
 
-This document is the planning backlog for `danvas`. It reflects the state after
-the report-run work landed. The old sprint notes were merged into this file and
-removed; use git history for the full old text.
+This document is the planning backlog for `danvas`. It distinguishes the shipped
+0.6.0 surface from genuine follow-on work. The lightweight implementation specs
+in `docs/sprints/` are the durable record for the July 2026 feature sequence;
+older pre-0.6 planning notes remain available in git history.
+
+## 0.6.0 Implementation Record
+
+The following feature slices were implemented and locally verified in order on
+2026-07-10:
+
+| Slice | Specification | Commit |
+|---|---|---|
+| Transaction-safe grade patching and cleanup | `docs/sprints/01-transaction-safe-grades.md` | `3db0c71` |
+| Override-aware assignment snapshots and status | `docs/sprints/02-override-aware-assignments.md` | `6906957` |
+| Submission evidence and metadata exports | `docs/sprints/03-submission-evidence.md` | `c9a6f11` |
+| Canvas Pages V1 and V2 | `docs/sprints/04-canvas-pages-v1.md`, `docs/sprints/04-5-canvas-pages-v2.md` | `d49af90` |
+| Canvas-facing source linting | `docs/sprints/05-source-lint.md` | `ea00d20` |
+| Sprint documentation | `docs/sprints/` | `c5fe6fa` |
+
+Ruff, ty, and the full pytest suite passed for the combined implementation. The
+INSY 7970 Page fixture was validated locally, including rendering and restricted
+CSS inlining. Its live draft-to-published transition remains intentionally
+unperformed until that course workspace gives explicit mutation confirmation.
+The commits are local on `main`; pushing, CI confirmation, and an optional 0.6.0
+tag remain release-closeout work.
 
 ## Delivered Baseline
 
@@ -14,7 +36,12 @@ closed.
 
 | Area | Delivered by | Remaining follow-up, if any |
 |---|---|---|
-| Expanded course snapshot | `danvas refresh`, schema version 2 | Add sections/enrollments if roster workflows need them. |
+| Expanded course snapshot | `danvas refresh`, schema version 3 | Add sections/enrollments if roster workflows need them. |
+| Override-aware assignment status | schema-v3 snapshot, `danvas assignments overrides` | Snapshots remain redacted; membership exports are explicit private artifacts. |
+| Submission evidence exports | `danvas submissions export/grades/media` | Local replacement provenance remains optional future work. |
+| Transaction-safe grade patches | `danvas grades post/clear/comments/verify` | Continue field-testing exact comment replacement and rollback use. |
+| Canvas Pages bounded workflow | `danvas pages list/export/render/css-check/create/update/verify` | Sync, assets, rename/delete, broad upsert, and status integration remain deferred. |
+| Canvas-facing source lint | `danvas sources lint` | External HTTP checking and automatic rewriting remain deferred. |
 | Read-only Canvas/local status | `danvas status` | Continue refining next-action hints as new source workflows land. |
 | Refresh diff | `danvas refresh --diff` | Plain diff remains terminal-first; report output is available through explicit report options. |
 | Local source discovery | `danvas.sources` plus `[sources.<kind>]` config | Continue reusing in future source-aware commands. |
@@ -31,13 +58,15 @@ Current command families include:
 
 - `init`, `refresh`, `status`, `courses`, `roster`
 - `auth doctor`
-- `assignments export/create/verify/update/upsert/audit`
+- `assignments export/overrides/create/verify/update/upsert/audit`
 - `gradebook check/audit`
 - `quiz analysis/import-qti`
-- `submissions media/feedback`
-- `grades post/verify`
+- `submissions export/grades/media/feedback`
+- `grades post/clear/comments/verify`
 - `discussions export/sync-prompts/score`
 - `announcements create/export/latest/sync/verify/update`
+- `pages list/export/render/css-check/create/update/verify`
+- `sources lint`
 - `files inventory/download/download-one/compare/upload`
 - `reports list/latest`
 - `recordings panopto-captions`
@@ -54,13 +83,13 @@ sprint sequence as canonical.
 | Sprint 3 overall: safe updates and round-trip verification | Partial | Core update/readback work is split across Sprint Candidates C and D; report foundations are delivered; file compare/report follow-ons are Candidate B. |
 | Sprint 2: groups categories/import/verify | Not started | Sprint Candidate E. |
 | Sprint 2: group planning from roster | Not started | Sprint Candidate E. |
-| Sprint 2: seeded discussion creation | Not started | Sprint Candidate E, only if still needed for grouped-case workflow. |
+| Sprint 2: seeded discussion creation | Not started | Sprint Candidate E plus Recent Field-Observed Workflow Gaps; now useful beyond the grouped-case workflow. |
 | Sprint 2: basic `files upload` | Done | Delivered Baseline; future work is Markdown asset rewriting and optional explicit folder creation. |
 | Sprint 2: due-date ergonomics | Done | Smaller Backlog Items; date-only assignment fields are delivered. |
 | Sprint 2 stretch: transcript filing helper | Not started | Smaller Backlog Items. |
 | Sprint 3: assignment update/upsert | Done | Candidate D; assignment create writes source-map provenance, update is live with readback verification, and upsert plans then requires `--confirm create` or `--confirm update` for live mutation. |
 | Sprint 3: announcement/discussion update pattern | Partial | Sprint Candidate D; announcement update is delivered, discussion update remains deferred until needed. |
-| Sprint 3: readback verification | Partial | Sprint Candidates C and D; delivered for assignment create/update/upsert and announcement update, not yet broad across every write workflow. |
+| Sprint 3: readback verification | Partial | Delivered for assignment create/update/upsert, announcement update, grade mutation verification, and bounded Page create/update; not yet broad across every write workflow. |
 | Sprint 3: round-trip metadata | Done | Sprint Candidate C; `.danvas/source-map.json` design and helpers are delivered for current update workflows. |
 | Sprint 3: Markdown asset rewriting | Not started | Sprint Candidate D, building on delivered `files upload`. |
 | Sprint 3: single-file download and compare | Done | Candidate B; `files download-one`, `files compare` metadata, and optional checksum against a supplied downloaded Canvas file are delivered. |
@@ -106,14 +135,18 @@ Why this should come first:
 - External skill docs need explicit checking after command-surface or behavior
   changes because they live outside this repo.
 
+Current status (2026-07-10): repo documentation and the external teaching-danvas
+command reference have been reconciled with 0.6.0. The remaining work is to push
+the local sprint-aligned commits, observe CI, and decide whether to tag 0.6.0.
+
 Scope:
 
 - Push local commits when ready and confirm GitHub Actions.
 - Decide whether the current version should be tagged after CI passes.
-- Keep `PROJECT_CONTEXT.md` and `docs/backlog.md` current if release status
-  changes during sprint close-out.
-- Confirm the external Codex teaching skill docs still match the current command
-  surface:
+- Keep `PROJECT_CONTEXT.md` and `docs/backlog.md` current when release status
+  changes during close-out.
+- Recheck the already-updated external Codex teaching skill docs after any
+  further command-surface change:
   - `/Users/djo/.codex/skills/teaching-danvas/SKILL.md`
   - `/Users/djo/.codex/skills/teaching-danvas/references/danvas-commands.md`
 
@@ -527,20 +560,27 @@ Recommended goals:
      exceptions.
    - Stay local-only; never create Canvas groups from the planner alone.
 
-3. Add graded and seeded discussion creation from Markdown if it remains part of
-   the grouped-case workflow.
+3. Add graded and seeded discussion creation from Markdown as a general
+   discussion workflow.
 
    ```bash
    danvas discussions create --course-id 1742719 discussion.md --seed-replies --dry-run
+   danvas discussions create-seeded --course-id 1742719 topic.md --replies replies.md --dry-run
    ```
 
    Desired behavior:
 
    - Accept one Markdown source with front matter for the root topic and
-     `--- reply ---` sections for instructor-seeded prompt replies.
+     `--- reply ---` sections for instructor-seeded prompt replies, or accept a
+     root topic source plus a separate seeded-replies source.
    - Create the discussion topic and top-level instructor replies in one command.
    - Preserve graded discussion assignment metadata.
+   - Post seed replies in the intended Canvas display order, accounting for the
+     observed reverse-order display behavior when needed.
    - Return topic ID, assignment ID, URL, and seeded entry IDs.
+   - Write `.danvas/source-map.json` provenance for the topic and seeded entries
+     after successful readback.
+   - Verify the created topic and prompt replies after posting.
 
 Definition of done:
 
@@ -550,7 +590,11 @@ Definition of done:
   recommendations.
 - Skill docs are updated because the command surface changes materially.
 
-## Sprint Candidate F: Submission Grading Workflow Improvements
+## Delivered In 0.6.0: Submission And Grade Safety
+
+Implementation status (2026-07-10): goals 1-4 and 6 are delivered. This section
+retains the field rationale behind the shipped behavior. The optional local
+replacement helper in goal 5 is the only remaining product follow-up.
 
 Theme: reduce custom scripting and catch bad local submission artifacts earlier.
 
@@ -560,9 +604,11 @@ Recommended goals:
 
    ```bash
    danvas submissions grades --assignment-id 19838584 \
-     --output grading/case1-graded-comments.csv \
-     --json grading/case1-graded-comments.json
+     --output grading/case1-graded-comments.csv
    ```
+
+   Status: delivered. Choose a `.csv` or `.json` output path; one invocation
+   writes one explicit private export.
 
    Desired behavior:
 
@@ -574,6 +620,8 @@ Recommended goals:
 
 2. Add attachment integrity checks to `submissions media`.
 
+   Status: delivered.
+
    Desired behavior:
 
    - Validate `.zip`, `.xlsx`, `.docx`, and `.pptx` downloads as ZIP/OOXML
@@ -582,6 +630,8 @@ Recommended goals:
    - Emit clear terminal warnings for malformed downloads.
 
 3. Add a submission manifest.
+
+   Status: delivered.
 
    Desired behavior:
 
@@ -593,6 +643,8 @@ Recommended goals:
 
 4. Preserve text comments separately from media.
 
+   Status: delivered.
+
    Desired behavior:
 
    - Emit `submission-comments.csv` and/or JSON when downloading media or pulling
@@ -601,6 +653,8 @@ Recommended goals:
 
 5. Add a provenance-friendly local replacement helper only if malformed-download
    recovery keeps recurring.
+
+   Status: deferred pending repeated field need.
 
    ```bash
    danvas submissions replace-local-file \
@@ -616,20 +670,66 @@ Recommended goals:
    - Update or write local provenance metadata so grading evidence is not silently
      overwritten.
 
-Definition of done:
+6. Add grade-patch safety and comment-management improvements from the Case Study
+   1 cross-check workflow.
+
+   Status: delivered through online baseline preflight, rollback artifacts,
+   targeted clearing, exact-match or explicit-ID instructor-comment cleanup,
+   stable submission manifests, and live readback verification.
+
+   Session note:
+
+   - Grade comments should support replace/delete for instructor-owned comments.
+     The Case Study 1 workflow required manually deleting bad comments in Canvas.
+     `danvas grades post` can add comments, but there should be a safe way to list
+     and delete or replace comments authored by the current user, ideally scoped by
+     assignment/submission/comment IDs.
+   - Grade patch preflight should compare against a baseline. Before posting,
+     danvas could validate original grade, proposed grade, numeric delta, and any
+     "additional deduction" language in the comment. That would have caught the
+     Royster/Reeves mismatch where the grade reflected `-9/-5` but the comment
+     still said `14/10`.
+   - `grades post` should create an automatic rollback CSV. Before live posting,
+     it should save the exact current grades/comments for targeted rows as a
+     rollback artifact.
+   - Submission downloads should avoid nested duplicate folders. The
+     `Case_Study_1/Case_Study_1` duplication was easy to miss. `danvas
+     submissions media` should either flatten into the specified output directory
+     or warn when the output path already looks like the assignment folder.
+   - Sidecar metadata should avoid volatile resolved URLs. The `.info.json` files
+     differed mostly because Canvas CDN tokens changed. Storing the stable Canvas
+     file ID/download URL is useful; storing expiring signed URLs makes duplicate
+     detection noisy.
+   - A generated submission archive manifest would help. A `manifest.csv/json`
+     with student, submission ID, filenames, hashes, download time, and source
+     (`canvas` vs `manual_off_canvas_copy`) would make later review cleaner and
+     reduce the need for ad hoc hash checks.
+
+Delivered outcome:
 
 - Case grading workflows no longer need a local script just to pull graded
   comments and grades.
 - Bad Office/ZIP downloads are detected immediately.
 - Download manifests make grading folders auditable without reading each sidecar.
+- Grade patches are preflighted against current Canvas state, automatically
+  rollbackable, and support safe cleanup of instructor-owned comments.
 
-## Sprint Candidate G: Exam Reconciliation And Roster/Override Support
+## Sprint Candidate G: Exam Reconciliation And Roster Sections
+
+Implementation status (2026-07-10): metadata-only submission export,
+override-aware redacted snapshots/status, and explicit private override
+membership export are prerequisites already delivered in 0.6.0. The remaining
+candidate is section-aware roster data plus report-first exam reconciliation.
+Override mutation should be considered only after a concrete field workflow
+justifies its additional privacy and write surface.
 
 Theme: support multi-version exam reconciliation with explicit, private reports.
 
 Recommended goals:
 
 1. Add metadata-only submissions export.
+
+   Status: delivered by `danvas submissions export`.
 
    ```bash
    danvas submissions export --assignment-id 19901542 --output .danvas/proctoru-submissions.json
@@ -643,6 +743,10 @@ Recommended goals:
 
 2. Add assignment override member export.
 
+   Status: delivered for explicit private export. The example local override
+   file and dry-run sync/update workflow below remain possible future extensions,
+   not current command behavior.
+
    ```bash
    danvas assignments overrides --assignment-id 19901488
    ```
@@ -651,8 +755,79 @@ Recommended goals:
 
    - Export override IDs, titles, due/unlock/lock dates, and member Canvas IDs.
    - Keep student membership private and explicit.
+   - Support a local private override file referenced from the authored
+     assignment source, for example:
 
-3. Include sections in roster and optionally `.danvas/course.json`.
+     ```yaml
+     # content/cases/case1-assignment.md
+     availability_overrides_ref: grading/25-26.Su/assignment-overrides/case-study-1.yaml
+     ```
+
+     The referenced file should preserve the Canvas base window plus
+     differentiated student windows:
+
+     ```yaml
+     assignment_id: 19838584
+     source: content/cases/case1-assignment.md
+
+     base:
+       due_at: 2026-06-15T04:59:00Z
+       lock_at: 2026-06-15T04:59:59Z
+
+     overrides:
+       - canvas_override_id: 900773
+         title: "extension group 1"
+         due_at: 2026-06-17T04:59:59Z
+         lock_at: null
+         assignees:
+           canvas_user_ids: [123, 456]
+     ```
+
+   - Prefer `grading/<term>/assignment-overrides/` over `content/` for these
+     records because override membership is student material.
+   - Avoid student names in the override file by default; use Canvas user IDs
+     or SIS IDs, and keep reports count-first unless member detail is explicitly
+     requested.
+   - Add a dry-run-first sync/update workflow for assignment overrides. Live
+     writes should require explicit confirmation, especially for deleting
+     Canvas overrides or changing assignee membership.
+
+3. Make assignment status comparisons override-aware.
+
+   Status: delivered for redacted schema-v3 snapshots, base-window comparison,
+   and untracked-override reporting. Local override-file reconciliation remains
+   future scope.
+
+   Current problem:
+
+   - `danvas refresh` and `danvas assignments export --full` request
+     `include=["all_dates", "overrides"]`, but the simplified
+     `.danvas/course.json` assignment rows drop `all_dates`.
+   - `danvas status` compares local assignment front matter to Canvas top-level
+     `due_at`/`unlock_at`/`lock_at`, which can be misleading when Canvas reports
+     an override-derived top-level due date.
+   - Example observed in INSY 6600 Case Study 1: the local source matched the
+     Canvas `all_dates` base / "Everyone else" window, while Canvas top-level
+     `due_at` reflected a later differentiated student window.
+
+   Desired behavior:
+
+   - Preserve a redacted override summary in `.danvas/course.json`, including
+     `has_overrides`, `all_dates` window metadata, override IDs/titles, and
+     assignee counts, but not student names by default.
+   - When `all_dates` includes a base row, compare local assignment front matter
+     against that base row rather than Canvas top-level date fields.
+   - If Canvas has override windows but no local `availability_overrides_ref`,
+     report "Canvas has untracked assignment overrides" separately from base
+     assignment metadata mismatches.
+   - If a local override reference exists, classify each override as exact,
+     local-only, Canvas-only, or metadata/member mismatch.
+   - Keep full override membership in the referenced private grading file or in
+     explicit private reports, not in normal status output.
+
+4. Include sections in roster and optionally `.danvas/course.json`.
+
+   Status: not started; this is the first active goal in this candidate.
 
    Desired roster fields:
 
@@ -660,7 +835,9 @@ Recommended goals:
    SectionID, SectionName, EnrollmentState, LastActivityAt
    ```
 
-4. Add a report-first reconciliation command.
+5. Add a report-first reconciliation command.
+
+   Status: not started; build it after section-aware roster data.
 
    ```bash
    danvas exams reconcile \
@@ -684,6 +861,445 @@ Definition of done:
 - The observed Test 1 reconciliation workflow can be reproduced without direct
   Canvas API scripts.
 - Student-identifying outputs are explicit and marked private.
+
+## Sprint Candidate H: Canvas Pages Follow-Ons
+
+Implementation status (2026-07-10): the bounded Sprint 4/4.5 subset is delivered:
+list/export/render, restricted CSS check/inlining, draft create/readback,
+body/publication-only update, verification, and local source linting. Sync,
+asset upload/rewriting, deletion, rename, general upsert, and status integration
+remain deferred. The active backlog starts at those boundaries rather than
+reopening the delivered V1/V2 contract.
+
+Theme: manage student-facing Canvas Pages from durable local sources with the
+same dry-run, verification, readback, and provenance safeguards used for
+assignments and announcements.
+
+The Additional Resources paths and names below are illustrative examples only.
+The command family, renderer, compatibility rules, and tests must remain general
+and must not branch on a course ID, Page title, filename, content phrase, CSS
+class, or example-specific layout.
+
+Why this belongs in its own command family:
+
+- Canvas Pages are durable instructional content, not files or assignments.
+- The Canvas API stores a Page body as HTML, while Markdown is the more useful
+  local authoring format for most course repositories.
+- Page titles determine Canvas URL slugs, so renames require stable ID-based
+  resolution and explicit readback rather than title-only matching.
+- Pages can be drafts, scheduled for publication, designated as a course front
+  page, and linked from modules or other rich content. Those states should not
+  be hidden inside a generic raw API command.
+
+Delivered command set:
+
+```bash
+danvas pages list --course-id 1742812
+danvas pages export --course-id 1742812 --output .danvas/pages.json
+danvas pages render content/pages/example-page.md --output /tmp/example-page.html
+danvas pages css-check content/pages/example-page.canvas.css
+danvas pages create content/pages/example-page.md --dry-run
+danvas pages verify content/pages/example-page.md
+danvas pages update content/pages/example-page.md --dry-run
+```
+
+Possible future commands, not current behavior:
+
+```bash
+danvas pages sync --output-dir content/pages --format markdown --dry-run
+danvas pages upsert content/pages/example-page.md --dry-run
+```
+
+Recommended goals:
+
+1. Add read-only listing and export.
+
+   Status: delivered for broad JSON export and a single Page selected by
+   `--page-id` or `--url`. HTML-to-Markdown conversion is not implemented.
+
+   Desired behavior:
+
+   - `pages list` prints a compact table with page ID, title, Canvas URL/slug,
+     published state, front-page state, scheduled publication, editing roles,
+     editor type, and updated time.
+   - `pages export` writes JSON for all Pages or one Page selected by `--page-id`
+     or `--url`.
+   - Page bodies should be omitted from broad list output unless explicitly
+     requested with `--full`.
+   - Preserve Canvas HTML in HTML exports. Treat HTML-to-Markdown conversion as
+     a convenience representation that may be lossy, especially for embedded
+     Canvas files, media, tables, and Rich Content Editor attributes.
+
+2. Add Canvas-to-local source sync.
+
+   Status: deferred. This is the first Pages-specific follow-on.
+
+   ```bash
+   danvas pages sync --output-dir content/pages --format markdown --dry-run
+   danvas pages sync --output-dir content/pages --format html --dry-run
+   ```
+
+   Desired behavior:
+
+   - Follow the announcement/discussion sync model: report first, create only
+     missing local sources, and never overwrite an authored source.
+   - Support `--format markdown|html`. Markdown should be the default for
+     ordinary prose pages; HTML should be available when exact Rich Content
+     Editor structure matters.
+   - Use safe filenames derived from the Canvas page URL, with collision and
+     existing-source statuses matching other sync commands:
+     `would_create`, `created`, `skipped_exists`, `skipped_known_local`,
+     `conflict`, and `error`.
+   - Write stable page metadata in front matter where useful and source-map
+     provenance after live source creation. Do not place volatile Canvas URLs,
+     verifier URLs, or full bodies in `.danvas/source-map.json`.
+
+3. Define the local Page source contract.
+
+   Status: the conservative Markdown/native-HTML source contract, fragment
+   renderer, matching-H1 handling, stable anchors, compatibility profile V1,
+   and restricted `canvas_css` sidecar are delivered. Preview-document styling,
+   scheduled publication, front-page mutation, and broader profiles remain
+   deferred.
+
+   Markdown example:
+
+   ```yaml
+   ---
+   title: "Additional Resources"
+   page_id: 1234567
+   published: false
+   front_page: false
+   editing_roles:
+     - teachers
+   publish_at: null
+   ---
+   ```
+
+   Desired behavior:
+
+   - Treat Markdown as the normal authored source. Always render it to semantic
+     HTML internally before sending `wiki_page[body]`, but do not require or
+     create a tracked sibling `.html` artifact during create/update/upsert.
+   - Add `pages render SOURCE` as a local-only inspection command that emits the
+     exact Canvas-bound HTML fragment on request. `--output -` should print it;
+     an explicit output path should write it. The default should not write into
+     `content/` or update source-map provenance.
+   - Accept `.html` as an optional native source for pages whose required
+     structure cannot be represented cleanly in Markdown. Send an HTML source
+     body without Markdown conversion, but still validate and normalize it
+     before planning a Canvas write.
+   - Use Canvas-safe, predictable Markdown conversion for headings, links,
+     lists, tables, code blocks, and explicit heading IDs. Do not inject a full
+     HTML document, stylesheet, scripts, or unsupported page-level metadata into
+     the Canvas body.
+   - Treat `title` as required. Support `page_id`/`canvas_id`, `published`,
+     `front_page`, `editing_roles`, and `publish_at`. Default new pages to
+     unpublished unless the source explicitly requests publication.
+   - Keep `notify_of_update` an explicit CLI/source option defaulting to false;
+     a routine content correction should not unexpectedly notify the class.
+   - Reject `front_page: true` with `published: false`, or plan the required
+     publication transition explicitly if Canvas permits it.
+
+   HTML rendering and comparison rules:
+
+   - The renderer should produce an HTML fragment suitable for
+     `wiki_page[body]`, not a standalone document with `html`, `head`, or `body`
+     wrappers.
+   - Dry-run and verify reports should expose the rendered body hash and a
+     readable normalized-body diff. An explicit `--save-rendered-html PATH` may
+     preserve the planned/readback fragments for debugging, but report runs and
+     normal source directories should not accumulate rendered copies by default.
+   - Normalize insignificant differences introduced by Canvas, such as safe
+     attribute ordering or Rich Content Editor metadata, without hiding removed
+     elements, changed links, missing IDs, or meaningful text differences.
+   - Pin or document the Markdown rendering profile so a danvas upgrade does not
+     silently rewrite every Page. Renderer-version changes should be visible in
+     dry-run reports.
+
+   CSS policy:
+
+   - Do not treat a linked stylesheet as part of an ordinary Canvas Page source.
+     Canvas Pages are stored as HTML fragments inside the Canvas application,
+     and account/theme CSS is outside the Page API and instructor-level course
+     ownership.
+   - Distinguish two stylesheet roles. Preview-only CSS belongs to the author's
+     local preview workflow and is never sent to Canvas. `canvas_css` is a
+     restricted sidecar declared in Page front matter; danvas validates it and
+     compiles allowlisted declarations into inline `style` attributes in the
+     Canvas-bound fragment.
+   - Allow the source front matter to declare the restricted stylesheet and
+     validation mode:
+
+     ```yaml
+     canvas_css: additional-resources.canvas.css
+     css_policy: strict
+     ```
+
+   - Add a local validation command and integrate the same checks into render and
+     write plans:
+
+     ```bash
+     danvas pages css-check content/pages/additional-resources.canvas.css
+     danvas pages render content/pages/additional-resources.md --output -
+     ```
+
+   - Parse CSS with a structured CSS parser rather than regular expressions.
+     Apply supported selectors to the rendered HTML with a real selector engine,
+     then serialize the resulting inline declarations deterministically.
+   - Maintain a versioned Canvas compatibility profile for supported elements,
+     attributes, CSS properties, and value constraints. Record the selected
+     profile version in dry-run/render reports so rule changes do not silently
+     restyle existing Pages.
+   - In strict mode, reject unsupported or unsafe constructs before a Canvas
+     write. At minimum reject `@import`, `@font-face`, scripts, JavaScript URLs,
+     external stylesheet links, unsupported at-rules, and selectors or values
+     that cannot survive safe inlining. Warn or fail on pseudo-elements,
+     pseudo-classes, media queries, CSS custom properties, and external asset
+     URLs according to the documented profile.
+   - Report unsupported properties and values, unused or unmatched selectors,
+     conflicting declarations, selector-specificity surprises, and rules lost
+     during inlining. Include basic accessibility diagnostics where they can be
+     stated reliably, but do not present CSS validation as a complete
+     accessibility audit.
+   - Prefer semantic HTML that inherits Canvas typography and responsive styles.
+     Restricted CSS is an escape hatch for useful presentation, not the default
+     authoring model.
+   - Run native `.html` source inline styles through the same compatibility
+     validator. Reject `style` blocks, external stylesheet links, scripts, and
+     JavaScript in the default source profile unless a future explicit mode has
+     a justified Canvas-safe implementation.
+   - Treat saved-page readback as the definitive compatibility check. After a
+     live create or update, compare planned inline declarations with returned
+     Canvas HTML and report every element, attribute, or style Canvas removed or
+     changed. A static check should say "compatible with Canvas profile X," not
+     claim that Canvas is guaranteed to preserve it.
+   - Institution-wide Theme Editor CSS/JS is a separate administrative workflow
+     and out of scope for `danvas pages`.
+
+4. Add conservative create, verify, update, and upsert workflows.
+
+   Status: create/readback/verify and body/publication-only update are delivered.
+   Title/slug rename, front-page mutation, general upsert, and delete remain
+   deliberately unsupported.
+
+   Desired behavior:
+
+   - `pages create SOURCE --dry-run` shows title, converted-body summary/hash,
+     publish state, front-page state, editing roles, and scheduled publication.
+   - Live create prints the Canvas mutation banner, creates the Page, reads it
+     back, verifies stable fields and normalized body content, writes report
+     evidence, and records `.danvas/source-map.json` provenance only after
+     successful readback.
+   - Resolve existing Pages by explicit `--page-id`, then front matter ID, then
+     source-map ID. Update and verify do not title-match and never create a
+     missing Page.
+   - `pages verify SOURCE` compares title, normalized HTML body, publication
+     state, stable slug/URL, and supported compatibility fields. Canvas-normalized
+     attributes and inline styles are compared semantically.
+   - `pages update SOURCE --dry-run` produces a field-by-field before/after
+     report and accepts only body and publication-state changes.
+   - Live update changes only those supported fields, reads the Page back, and
+     does not alter title/slug, front-page state, module membership, or links
+     elsewhere in the course.
+   - A future `pages upsert` would need explicit create/update confirmation and
+     separately designed rename behavior.
+   - Do not add a broad delete command in the first implementation. Unpublishing
+     is safer than deletion and can be handled as an explicit update.
+
+5. Handle links and local assets deliberately.
+
+   Status: same-page anchors are covered by the delivered renderer and tests.
+   Local asset upload and Canvas-bound link rewriting remain deferred.
+
+   Desired behavior:
+
+   - Preserve ordinary external links and same-page anchors through Markdown
+     conversion and Canvas readback.
+   - Detect local relative asset links before a write. In the first
+     implementation, fail with a clear message or require an explicit
+     `--allow-unresolved-assets`; do not silently publish broken links.
+   - Later integrate with the planned Markdown asset-rewriting workflow on top
+     of `danvas files upload`, rewriting only the Canvas-bound HTML and leaving
+     the authored Markdown unchanged.
+   - Report course-relative Canvas links and embedded file/media references in
+     verification output without persisting signed or verifier URLs.
+
+6. Integrate Pages with snapshots, source discovery, and status.
+
+   Status: deferred. Source lint can inspect explicit Page inputs, but Pages are
+   not yet part of `.danvas/course.json` or `danvas status`.
+
+   Desired behavior:
+
+   - Add Page summaries to `.danvas/course.json` without including full bodies by
+     default. Preserve page ID, title, URL/slug, published/front-page state,
+     publish time, editing roles, editor type, updated time, and an optional
+     normalized body hash.
+   - Add `[sources.pages]` configuration with a default such as
+     `content/pages/*.{md,html}`.
+   - Extend `danvas status` with Pages classifications and next actions:
+     exact, metadata mismatch, body mismatch, local-only, and Canvas-only.
+   - Keep Pages out of assignment/discussion comparisons even when a Page is
+     linked from a module.
+
+### Future V3: Pandoc-Flavored Markdown Authoring Profile
+
+- Add an explicit extended Markdown profile for authors who need structural
+  features beyond the conservative default Markdown renderer:
+
+  ```yaml
+  markdown_profile: pandoc
+  canvas_css: resources.canvas.css
+  ```
+
+- Keep `.md` as the source format. This is Pandoc-flavored Markdown support, not
+  a Quarto `.qmd` workflow and not an executable-document feature.
+- Define and pin the exact Pandoc extensions in a versioned renderer profile.
+  Candidate extensions include fenced divs, bracketed spans, header attributes,
+  link attributes, definition lists, pipe or grid tables, and explicit raw HTML
+  blocks where the Canvas compatibility profile allows them.
+- Use fenced divs, spans, classes, and IDs as general authoring hooks that can be
+  consumed by restricted `canvas_css` and then safely inlined. Do not introduce
+  Page-specific syntax for layouts, callouts, resource indexes, or other content
+  patterns that Pandoc can already express structurally.
+- Continue producing an HTML fragment rather than a standalone document. Run the
+  result through the same Canvas element/attribute/style validator, asset checks,
+  CSS inliner, dry-run reports, and live readback verification as ordinary
+  Markdown and native HTML sources.
+- Treat raw HTML as input to validation, not an escape hatch around it. Reject or
+  report elements and attributes outside the selected Canvas compatibility
+  profile.
+- Detect Pandoc availability and version explicitly. Record the Pandoc version,
+  enabled extension set, and danvas renderer-profile version in render and
+  readback evidence so upgrades cannot silently rewrite every Page.
+- Add generic fixtures for fenced divs, spans, explicit and duplicate heading
+  IDs, same-page links, definition lists, tables, raw HTML, and CSS selectors
+  targeting author-supplied classes. Do not key behavior to a course ID, source
+  path, Page title, or one field-validation Page.
+- Keep Quarto, Jupyter/Knitr execution, shortcodes, Bootstrap themes, JavaScript
+  widgets, tabsets, citations requiring browser dependencies, generated resource
+  directories, and full-document template extraction out of scope. Reconsider a
+  Quarto adapter only if a concrete Canvas workflow later requires computational
+  document rendering rather than ordinary Page authoring.
+
+Report and safety requirements:
+
+- Dry-run, sync, verify, update, upsert, and live readback should use report
+  runs with Markdown and JSON evidence.
+- Body comparisons should store hashes and concise normalized diffs rather than
+  duplicate full student-facing content in source-map metadata.
+- All live writes print the standard Canvas mutation banner.
+- No command publishes, schedules, renames, or changes the course front page
+  unless that state is explicit in the reviewed plan/source.
+- Skill documentation must be updated when this command family ships.
+
+Definition of done for the remaining candidate:
+
+- The already-delivered bounded Page workflow remains backward compatible and
+  course-agnostic.
+- Canvas-only Pages can be inventoried and safely synced to missing local
+  Markdown or HTML sources without overwriting authored files.
+- Any later rename, front-page, upsert, or asset behavior is introduced through
+  explicit plans and readback rather than silently widening `pages update`.
+- `danvas refresh` and `danvas status` can identify local-only, Canvas-only, and
+  drifted Page sources.
+
+## Recent Field-Observed Workflow Gaps
+
+These items came from the INSY 7750 Unit 4 discussion workflow after the
+2026-06-24 backlog consolidation. Items 3 and 4 shipped in 0.6.0, and item 5 is
+now reflected in the external skill docs. Items 1 and 2 remain product work.
+
+1. Generalize seeded discussion creation beyond grouped cases.
+
+   Existing related item: Sprint Candidate E.3. The new evidence is that seeded
+   prompts are useful for ordinary course discussions, not just grouped-case
+   setup. The command should replace course-specific posting scripts, support
+   dry-run/readback, preserve graded-discussion assignment metadata, write source
+   map provenance, and return topic, assignment, URL, and entry IDs.
+
+2. Add safe discussion source update and verification.
+
+   ```bash
+   danvas discussions verify content/discussions/unit-4.md --discussion-id 10819092
+   danvas discussions update content/discussions/unit-4.md --discussion-id 10819092 --body-only --dry-run
+   ```
+
+   Desired behavior:
+
+   - Compare local discussion Markdown/front matter to Canvas topic state and
+     the associated graded assignment: title, body, due date, points, published
+     state, assignment linkage, and Canvas URL.
+   - Compare seeded prompt count and headings when entry IDs or prompt source
+     metadata are available.
+   - Support scoped updates such as `--body-only` that do not delete, reorder,
+     or repost existing prompt replies or student responses.
+   - Resolve IDs through explicit CLI options, front matter, or
+     `.danvas/source-map.json`, following the assignment/announcement update
+     safety model.
+   - Write report-run evidence for dry-runs, mismatches, live readback, and
+     verification.
+
+3. Add a general Canvas-facing source linter.
+
+   Status: delivered by `danvas sources lint` in 0.6.0. External HTTP checking
+   and automatic rewriting remain out of scope.
+
+   ```bash
+   danvas sources lint content/discussions/*.md
+   danvas sources lint --kind discussion --project-root .
+   ```
+
+   Desired behavior:
+
+   - Check authored Markdown before Canvas posting or update, not only after a
+     mismatch is discovered in Canvas.
+   - Flag source issues that commonly cause Canvas-facing friction: duplicate
+     native title/body H1, broken links, missing or suspicious due dates,
+     timezone-offset mistakes, prose point totals that do not match front matter,
+     excessive or repeated prompt headings, and missing source-map provenance for
+     previously posted items.
+   - Keep checks general across Canvas-facing source kinds where practical, with
+     discussion-specific checks only where the content model requires them.
+
+4. Add targeted grade clearing with exact-match comment cleanup.
+
+   Status: delivered by `danvas grades clear` in 0.6.0, including online
+   preflight, rollback evidence, instructor-owned exact-match/explicit-ID comment
+   cleanup, and readback verification.
+
+   ```bash
+   danvas grades clear --assignment-id 19952228 \
+     --grades-csv grades-to-clear.csv --comments exact-match --dry-run
+   ```
+
+   Desired behavior:
+
+   - Clear mistaken grades for targeted students without requiring ad hoc Canvas
+     API scripts.
+   - Preflight current Canvas grade/comment state and produce rollback evidence
+     before live mutation.
+   - Optionally delete only instructor-owned comments that match exact supplied
+     text or explicit comment IDs; do not bulk-delete comments by loose matching.
+   - Verify the cleared grades and remaining comments after live mutation.
+   - Treat this as a concrete refinement of Sprint Candidate F.6 rather than a
+     replacement for broader grade-patch safety work.
+
+5. Update external teaching-danvas skill timeout guidance.
+
+   Status: done in the external teaching-danvas skill and command reference on
+   2026-07-10.
+
+   Desired behavior:
+
+   - In the Codex teaching-danvas skill, document that 1Password or other secret
+     provider timeouts should be treated as likely user-interaction timeouts
+     first.
+   - On timeout, retry with clear messaging that an authentication popup may be
+     waiting for user action before treating the behavior as a danvas defect.
+   - Keep this in external skill docs, not as a `danvas` command feature, unless
+     repeated evidence shows the CLI itself needs better timeout messaging.
 
 ## Smaller Backlog Items
 

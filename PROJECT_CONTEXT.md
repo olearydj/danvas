@@ -3,8 +3,9 @@
 ## Purpose
 
 `danvas` is an operational Canvas CLI for day-to-day course work: rosters,
-assignments, submissions, grading, discussions, announcements, files, recording
-captions, status reports, and local audit workflows.
+assignments, submissions, grading, discussions, announcements, Canvas Pages,
+files, recording captions, status reports, source linting, and local audit
+workflows.
 
 Keep `danvas` separate from archival/history tooling such as Canvas ledger
 databases. It should produce useful operational evidence through reports,
@@ -19,12 +20,15 @@ system.
   candidates, deferred items, and not-recommended directions.
 - `docs/course-yaml.md`: narrow reference for the optional course policy YAML
   used by audit commands.
+- `docs/sprints/`: implemented 0.6.0 feature contracts and their acceptance
+  boundaries. These remain useful implementation records, not an active sprint
+  ordering mandate.
 - `.ho/`: transient session handoffs. Read the latest relevant note for restart
   state, but do not treat handoffs as durable project documentation.
 
-Historical sprint notes, the old upload spec, `design.md`, and `HANDOFF.md` were
-removed after their useful content was consolidated into this file and
-`docs/backlog.md`. Use git history for the full old text.
+Older pre-0.6 sprint notes, the old upload spec, `design.md`, and `HANDOFF.md`
+were removed after their useful content was consolidated. Use git history for
+their full text.
 
 ## Source Map
 
@@ -34,9 +38,14 @@ removed after their useful content was consolidated into this file and
 - `src/danvas/reports.py`: report-run directories, manifests, and report
   discovery helpers.
 - `src/danvas/sources.py`: local course source discovery.
+- `src/danvas/source_lint.py`: local Canvas-facing Markdown/HTML validation.
 - `src/danvas/status.py`: read-only Canvas-vs-local status report.
 - `src/danvas/assignments.py`, `announcements.py`, `discussions.py`: course
   object operations.
+- `src/danvas/overrides.py`: redacted assignment override summaries and explicit
+  private membership exports.
+- `src/danvas/pages.py`: bounded Page listing/export, rendering, restricted CSS,
+  create/update, readback, and verification workflows.
 - `src/danvas/files.py`: Canvas Files inventory, targeted metadata compare,
   download, and upload.
 - `src/danvas/quiz_import.py`, `quiz.py`: QTI import and quiz analysis.
@@ -50,6 +59,10 @@ removed after their useful content was consolidated into this file and
 `pyproject.toml` is the version source. `danvas --version` and
 `danvas.__version__` read installed package metadata. Bump the minor version for
 feature sprints or new commands, and the patch version for fixes.
+
+Current local version: 0.6.0. The sprint-aligned implementation is committed on
+local `main` and locally verified; it is not considered released until pushed,
+green in CI, and optionally tagged.
 
 Recommended local checks:
 
@@ -71,6 +84,9 @@ and the external Codex teaching skill docs:
 - Keep generated snapshots, reports, and manifests free of secrets, Canvas file
   verifier URLs, and student-sensitive data unless a command explicitly produces
   private output.
+- Keep assignment snapshots and normal status output redacted and count-first.
+  Full override membership, submission evidence, grades, and comments are
+  explicit private outputs.
 - `danvas status` stays read-only and stdout-first by default; saved report runs
   are opt-in for that command.
 - Raw exports, rosters, submissions, grades, file downloads, and caption downloads
@@ -97,6 +113,10 @@ and the external Codex teaching skill docs:
   privacy surface.
 - `danvas quiz analysis` analyzes Canvas student-analysis CSV exports. Source
   Markdown quiz analysis remains separate tooling unless explicitly consolidated.
+- Keep the initial Canvas Pages workflow deliberately bounded: Markdown or native
+  HTML rendering, restricted inline CSS, draft creation, body/publication update,
+  and readback verification. Sync, asset upload/rewriting, rename, deletion,
+  general upsert, and status integration require separate future designs.
 
 ## Report Output Contract
 
