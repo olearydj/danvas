@@ -12,13 +12,19 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from danvas.auth import canvas_from_args
 from danvas.files import canvas_file_record
 from danvas.overrides import redacted_assignment_overrides
+from danvas.pages import (
+    BODY_NORMALIZER_VERSION,
+    canonicalize_page_html,
+    canonicalize_page_url,
+    page_record,
+)
 from danvas.reports import create_report_run
 from danvas.utils import canvas_object_to_dict, html_to_text
 
 CONFIG_DIR_NAME = ".danvas"
 CONFIG_FILE_NAME = "config.toml"
 COURSE_SNAPSHOT_NAME = "course.json"
-SNAPSHOT_SCHEMA_VERSION = 3
+SNAPSHOT_SCHEMA_VERSION = 4
 
 
 def project_dir(root: Path | None = None) -> Path:
@@ -242,6 +248,7 @@ def build_course_snapshot(course: Any) -> dict[str, Any]:
         "discussions": snapshot_discussions(course),
         "announcements": snapshot_announcements(course),
         "quizzes": snapshot_quizzes(course),
+        "pages": snapshot_pages(course),
         "group_categories": snapshot_group_categories(course),
     }
 
@@ -252,6 +259,37 @@ def snapshot_files(course: Any, folder_objs: list[Any]) -> list[dict[str, Any]]:
     }
     rows = [canvas_file_record(file_obj, folders_by_id) for file_obj in course.get_files()]
     rows.sort(key=lambda row: (str(row["folder_full_name"]), str(row["display_name"])))
+    return rows
+
+
+def snapshot_pages(course: Any) -> list[dict[str, Any]]:
+    rows = []
+    course_id = int(getattr(course, "id", 0) or 0)
+    for summary in course.get_pages():
+        record = page_record(summary)
+        if not record["body"] and record["url"]:
+            record = page_record(course.get_page(record["url"]))
+        canonical = canonicalize_page_html(record.pop("body", ""), course_id=course_id)
+        record["html_url"], unsafe_html_url = canonicalize_page_url(
+            str(record.get("html_url") or ""), course_id=course_id
+        )
+        if unsafe_html_url:
+            record["html_url"] = ""
+        rows.append(
+            {
+                **record,
+                "body_sha256": canonical["body_sha256"],
+                "body_hash_status": canonical["body_hash_status"],
+                "volatile_url_count": canonical["volatile_url_count"],
+                "body_normalizer": BODY_NORMALIZER_VERSION,
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            " ".join(str(row.get("title") or "").casefold().split()),
+            str(row.get("page_id") or row.get("url") or ""),
+        )
+    )
     return rows
 
 
@@ -363,6 +401,11 @@ DIFF_SECTIONS: list[tuple[str, str, list[str]]] = [
     ),
     ("announcements", "title", ["title", "posted_at", "delayed_post_at", "published"]),
     ("discussions", "title", ["title", "published", "locked", "assignment_id"]),
+    (
+        "pages",
+        "title",
+        ["title", "url", "published", "front_page", "publish_at", "body_sha256"],
+    ),
     ("group_categories", "name", ["name", "group_count", "member_count"]),
 ]
 

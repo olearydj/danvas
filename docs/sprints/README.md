@@ -37,11 +37,12 @@ The combined implementation passed all three checks and was published as
 
 ## Planned Pages Follow-Ons
 
-The next selected work continues the bounded Pages workflow:
+The selected follow-on work continues the bounded Pages workflow:
 
 - Sprint 6: [Canvas Pages Discovery, Snapshot, And Status](06-canvas-pages-status.md)
 - Sprint 7: [Canvas Pages Source Sync And Conversion](07-canvas-pages-sync.md)
 
-Sprint 6 adds the read-only schema and comparison foundation. Sprint 7 depends
-on it for project-wide identity matching and is the only one of the two that
-writes local course sources. Neither sprint broadens Canvas mutation behavior.
+Sprint 6 is implemented and adds the read-only schema and comparison foundation.
+Sprint 7 depends on it for project-wide identity matching and is the only one of
+the two that writes local course sources. Neither sprint broadens Canvas mutation
+behavior.

@@ -10,8 +10,9 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 
 - report course status
   - compares the `.danvas` course snapshot and local course sources in one read-only command
-  - covers assignments, announcements, discussions, quiz shells, and files
-  - classifies each item as exact, metadata mismatch, local-only, Canvas-only, filename-only match, or unsupported comparison
+  - covers assignments, announcements, discussions, Pages, quiz shells, and files
+  - classifies Pages by stable identity and normalized body hash; title-only candidates remain visibly unbound
+  - classifies each item as exact, metadata/body mismatch, local-only, Canvas-only, filename-only match, probable unbound match, or unsupported comparison
   - warns when the snapshot is stale
   - optional JSON output and Markdown report
 
@@ -61,6 +62,8 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - deterministic Markdown or native-HTML fragment rendering with stable heading anchors
   - restricted `.canvas.css` validation and deterministic style inlining under a versioned compatibility profile
   - list/export, draft creation, body/publication-only update, source-map provenance, and readback verification
+  - schema-v4 snapshot summaries and local-source status comparison without storing full Page bodies
+  - canonicalizes stable Canvas links and blocks unresolved signed/verifier URLs before hashing
 
 - lint Canvas-facing local sources
   - assignment, announcement, discussion, and Page validation without Canvas access
@@ -262,7 +265,8 @@ non-secret defaults such as the Canvas base URL, course ID, course timezone, and
 assignment group name-to-ID mappings. `course.json` is a generated Canvas
 metadata snapshot for local lookup and comparison; it covers assignments,
 assignment groups, files, announcements, discussions, quiz shells, and
-group-category summaries, and it never stores download verifier URLs or student
+group-category summaries, plus Page metadata and normalized body hashes. Snapshot
+schema version 4 never stores Page bodies, download verifier URLs, or student
 data. If the project is a git repo, `danvas init` adds `.danvas/course.json` to
 `.gitignore`.
 
@@ -300,6 +304,7 @@ Canvas `*_at` datetimes using the course timezone in `.danvas/config.toml`.
 - `content/discussions/*.md`
 - `content/quizzes/chap*.md`
 - `content/cases/*-assignment.md`
+- `content/pages/*.md` and `content/pages/*.html` (excluding `*-preview.html`)
 
 Override them per course in `.danvas/config.toml` when a teaching repo uses a
 different layout:
@@ -311,6 +316,10 @@ exclude = [
   "content/assignments/*-draft-notes.md",
   "content/assignments/*-starter-spec.md",
 ]
+
+[sources.pages]
+include = ["content/pages/*.md", "content/pages/*.html"]
+exclude = ["content/pages/*-preview.html"]
 ```
 
 When custom assignment include patterns are configured, `danvas status` only

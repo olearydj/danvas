@@ -10,6 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from danvas.cli import app
+from danvas.pages import BODY_NORMALIZER_VERSION, load_page_source
 from danvas.status import build_status, command_status
 
 runner = CliRunner()
@@ -19,7 +20,7 @@ NOW = dt.datetime(2026, 6, 12, 1, 0, tzinfo=dt.UTC)
 
 def build_snapshot() -> dict[str, Any]:
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "generated_at": "2026-06-12T00:00:00Z",
         "course": {"id": 101, "name": "INSY 6600"},
         "assignment_groups": [],
@@ -108,6 +109,7 @@ def build_snapshot() -> dict[str, Any]:
             {"id": 500, "assignment_id": 98, "title": "Chapter 7 Quiz", "published": True},
             {"id": 501, "assignment_id": 97, "title": "Chapter 8 Quiz", "published": False},
         ],
+        "pages": [],
         "group_categories": [
             {
                 "id": 700,
@@ -209,6 +211,81 @@ def test_build_status_excludes_discussion_backed_assignments(tmp_path: Path) -> 
 
     titles = [item["title"] for item in payload["sections"]["assignments"]]
     assert "Case Discussion" not in titles
+
+
+def test_build_status_compares_bound_pages_and_keeps_title_matches_unbound(
+    tmp_path: Path,
+) -> None:
+    bound = tmp_path / "content/pages/bound.md"
+    write(
+        bound,
+        "---\ntitle: Bound Page\npage_id: 601\npublished: false\n---\n\nHello.\n",
+    )
+    unbound = tmp_path / "content/pages/unbound.md"
+    write(
+        unbound,
+        "---\ntitle: Unbound Page\npublished: true\n---\n\nCandidate.\n",
+    )
+    snapshot = build_snapshot()
+    snapshot["pages"] = [
+        {
+            "page_id": 601,
+            "url": "bound-page",
+            "title": "Bound Page",
+            "published": False,
+            "front_page": False,
+            "body_sha256": load_page_source(bound).body_sha256,
+            "body_hash_status": "available",
+            "body_normalizer": BODY_NORMALIZER_VERSION,
+        },
+        {
+            "page_id": 602,
+            "url": "unbound-page",
+            "title": "Unbound Page",
+            "published": True,
+            "front_page": False,
+            "body_sha256": load_page_source(unbound).body_sha256,
+            "body_hash_status": "available",
+            "body_normalizer": BODY_NORMALIZER_VERSION,
+        },
+    ]
+
+    payload = build_status(snapshot, tmp_path, now=NOW)
+    page_items = payload["sections"]["pages"]
+
+    assert classifications(page_items) == {
+        "Bound Page": "exact",
+        "Unbound Page": "probable match, unbound",
+    }
+    candidate = next(item for item in page_items if item["title"] == "Unbound Page")
+    assert candidate["canvas_id"] == 602
+    assert "--page-id 602" in candidate["next_action"]
+
+
+def test_build_status_reports_page_body_and_metadata_drift(tmp_path: Path) -> None:
+    source = tmp_path / "content/pages/drift.md"
+    write(
+        source,
+        "---\ntitle: Drift\npage_id: 603\npublished: true\n---\n\nLocal.\n",
+    )
+    snapshot = build_snapshot()
+    snapshot["pages"] = [
+        {
+            "page_id": 603,
+            "url": "drift",
+            "title": "Drift",
+            "published": False,
+            "front_page": False,
+            "body_sha256": "different",
+            "body_hash_status": "available",
+            "body_normalizer": BODY_NORMALIZER_VERSION,
+        }
+    ]
+
+    item = build_status(snapshot, tmp_path, now=NOW)["sections"]["pages"][0]
+
+    assert item["classification"] == "metadata and body mismatch"
+    assert "body hash differs" in item["details"]
 
 
 def test_build_status_uses_base_window_and_reports_untracked_overrides(tmp_path: Path) -> None:
@@ -487,3 +564,28 @@ def test_command_status_requires_current_snapshot_schema(tmp_path: Path) -> None
 
     with pytest.raises(SystemExit, match="predates the current format"):
         command_status(args)
+
+
+def test_command_status_renders_non_page_sections_for_schema_three(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write(tmp_path / ".danvas" / "config.toml", "[canvas]\ncourse_id = 101\n")
+    snapshot = build_snapshot()
+    snapshot["schema_version"] = 3
+    snapshot.pop("pages")
+    write(tmp_path / ".danvas" / "course.json", json.dumps(snapshot))
+    args = SimpleNamespace(
+        project_root=str(tmp_path),
+        max_age_hours=None,
+        output=None,
+        report_md=None,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    command_status(args)
+
+    output = capsys.readouterr().out
+    assert "Assignments:" in output
+    assert "Pages: unavailable" in output

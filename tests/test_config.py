@@ -135,6 +135,46 @@ class FakeCourse:
         ]
         return [category]
 
+    def get_pages(self):
+        return [
+            SimpleNamespace(
+                page_id=601,
+                url="resources",
+                title="Resources",
+                published=True,
+                front_page=False,
+                editing_roles="teachers",
+                updated_at="2026-06-10T00:00:00Z",
+                body="",
+            ),
+            SimpleNamespace(
+                page_id=602,
+                url="external",
+                title="External",
+                published=False,
+                front_page=False,
+                updated_at="2026-06-11T00:00:00Z",
+                body='<p><a href="https://cdn.test/item?X-Amz-Signature=secret-token">X</a></p>',
+            ),
+        ]
+
+    def get_page(self, url):
+        assert url == "resources"
+        return SimpleNamespace(
+            page_id=601,
+            url="resources",
+            html_url="https://canvas.test/courses/1742717/pages/resources",
+            title="Resources",
+            published=True,
+            front_page=False,
+            editing_roles="teachers",
+            updated_at="2026-06-10T00:00:00Z",
+            body=(
+                '<p><a href="https://canvas.test/courses/1742717/files/300/download'
+                '?verifier=secret-token">File</a></p>'
+            ),
+        )
+
 
 def test_write_project_config_and_snapshot(tmp_path: Path) -> None:
     snapshot = config.build_course_snapshot(FakeCourse())
@@ -194,6 +234,14 @@ def test_build_course_snapshot_includes_expanded_sections() -> None:
     assert category["group_count"] == 2
     assert category["member_count"] == 8
     assert [group["name"] for group in category["groups"]] == ["Group A", "Group B"]
+
+    external, resources = snapshot["pages"]
+    assert resources["url"] == "resources"
+    assert resources["body_hash_status"] == "available"
+    assert resources["body_sha256"]
+    assert external["body_hash_status"] == "blocked_volatile_url"
+    assert external["body_sha256"] is None
+    assert external["volatile_url_count"] == 1
 
 
 def test_build_course_snapshot_contains_no_secrets_or_member_lists() -> None:

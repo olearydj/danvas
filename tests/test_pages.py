@@ -9,6 +9,7 @@ import pytest
 
 from danvas.pages import (
     COMPATIBILITY_PROFILE,
+    canonicalize_page_html,
     check_and_inline_css,
     command_pages_create,
     command_pages_update,
@@ -131,6 +132,23 @@ def test_style_normalization_accepts_common_canvas_equivalents() -> None:
         '<p style="color: rgb(255, 255, 255); margin: 0rem">Text</p>'
     )
     assert actual == expected
+
+
+def test_page_url_canonicalization_removes_canvas_verifiers_and_blocks_external_signatures() -> None:
+    canvas = canonicalize_page_html(
+        '<a href="https://canvas.test/courses/42/files/7/download?verifier=secret&wrap=1">File</a>',
+        course_id=42,
+    )
+    assert canvas["body_hash_status"] == "available"
+    assert "secret" not in canvas["html"]
+    assert 'href="/courses/42/files/7/download?wrap=1"' in canvas["html"]
+
+    external = canonicalize_page_html(
+        '<img src="https://cdn.test/image?X-Amz-Signature=secret">', course_id=42
+    )
+    assert external["body_hash_status"] == "blocked_volatile_url"
+    assert external["body_sha256"] is None
+    assert external["volatile_url_count"] == 1
 
 
 @pytest.mark.parametrize(

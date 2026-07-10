@@ -148,3 +148,22 @@ def test_scan_sources_skips_readme_files(tmp_path: Path) -> None:
     assert [record["path"] for record in records] == [
         "content/discussions/case-discussion.md"
     ]
+
+
+def test_scan_sources_discovers_pages_and_excludes_previews(tmp_path: Path) -> None:
+    write(
+        tmp_path / "content/pages/resources.md",
+        "---\ntitle: Resources\npublished: false\n---\n\n## Links {#links}\n",
+    )
+    write(
+        tmp_path / "content/pages/resources-preview.html",
+        "---\ntitle: Preview\n---\n\n<p>Generated preview</p>\n",
+    )
+
+    pages = [record for record in scan_sources(tmp_path) if record["kind"] == "page"]
+
+    assert len(pages) == 1
+    assert pages[0]["path"] == "content/pages/resources.md"
+    assert pages[0]["metadata"] == {"published": False, "front_page": False}
+    assert pages[0]["artifacts"]["body_sha256"]
+    assert pages[0]["artifacts"]["anchors"] == ["links"]

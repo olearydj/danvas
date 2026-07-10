@@ -872,7 +872,7 @@ asset upload/rewriting, deletion, rename, general upsert, and status integration
 remain deferred. The active backlog starts at those boundaries rather than
 reopening the delivered V1/V2 contract.
 
-Planning status: source discovery/snapshot/status is specified in Sprint 6, and
+Implementation status: source discovery/snapshot/status is delivered by Sprint 6, and
 safe Canvas-to-local source sync plus optional HTML/Markdown conversion is
 specified in Sprint 7. Asset handling and broader Page lifecycle/profile work
 remain unscheduled.
@@ -1133,8 +1133,9 @@ Recommended goals:
 
 6. Integrate Pages with snapshots, source discovery, and status.
 
-   Status: specified in Sprint 6. Source lint can inspect explicit Page inputs,
-   but Pages are not yet part of `.danvas/course.json` or `danvas status`.
+   Status: delivered in Sprint 6 through schema-v4 snapshots, Page source
+   discovery, provisional title candidates, body-hash comparison, and status
+   next actions.
 
    Desired behavior:
 

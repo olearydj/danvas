@@ -9,25 +9,30 @@ from typing import Any
 
 from danvas.frontmatter import normalize_canvas_value, parse_frontmatter
 
-SOURCE_KINDS = ("announcement", "discussion", "quiz", "assignment")
+SOURCE_KINDS = ("announcement", "discussion", "quiz", "assignment", "page")
 SOURCE_CONFIG_KEYS = {
     "announcement": "announcements",
     "discussion": "discussions",
     "quiz": "quizzes",
     "assignment": "assignments",
+    "page": "pages",
 }
 DEFAULT_SOURCE_PATTERNS = {
     "announcement": ["content/announcements/*.md"],
     "discussion": ["content/discussions/*.md"],
     "quiz": ["content/quizzes/chap*.md"],
     "assignment": ["content/cases/*-assignment.md"],
+    "page": ["content/pages/*.md", "content/pages/*.html"],
 }
+
+DEFAULT_SOURCE_EXCLUDES = {"page": ["content/pages/*-preview.html"]}
 
 COMPARABLE_FIELDS = {
     "assignment": ["points_possible", "due_at", "unlock_at", "lock_at", "published"],
     "announcement": ["published", "delayed_post_at"],
     "discussion": ["points_possible", "due_at", "published"],
     "quiz": [],
+    "page": ["published", "front_page", "publish_at", "editing_roles"],
 }
 
 QUIZ_TITLE_RE = re.compile(r"^quiz title:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
@@ -83,7 +88,7 @@ def source_options(kind: str, source_config: dict[str, Any]) -> dict[str, Any]:
     )
     exclude = patterns_from_config(
         raw_options.get("exclude", raw_options.get("excludes")),
-        default=[],
+        default=DEFAULT_SOURCE_EXCLUDES.get(kind, []),
         label=f"sources.{config_key}.exclude",
     )
     require_assignment_metadata = False
@@ -166,6 +171,22 @@ def source_record(
         if kind == "quiz":
             record["title"] = quiz_source_title(text)
             record["artifacts"]["qti_zip"] = find_qti_zip(path, root)
+        elif kind == "page":
+            from danvas.pages import canonicalize_page_html, load_page_source
+
+            local = load_page_source(path)
+            canonical = canonicalize_page_html(local.html)
+            record["title"] = str(local.metadata["title"])
+            record["metadata"] = comparable_metadata(kind, local.metadata)
+            record["source_metadata"] = normalize_canvas_value(local.metadata)
+            record["artifacts"].update(
+                {
+                    "body_sha256": canonical["body_sha256"],
+                    "body_hash_status": canonical["body_hash_status"],
+                    "anchors": local.anchors,
+                    "unresolved_assets": local.unresolved_assets,
+                }
+            )
         else:
             if (
                 kind == "assignment"

@@ -10,7 +10,6 @@ from typing import Any
 
 from danvas.config import (
     COURSE_SNAPSHOT_NAME,
-    SNAPSHOT_SCHEMA_VERSION,
     find_config_dir,
     load_project_config,
 )
@@ -21,6 +20,7 @@ from danvas.overrides import (
     load_local_override_file,
 )
 from danvas.reports import create_report_run
+from danvas.source_map import find_source_entry, load_source_map
 from danvas.sources import scan_sources
 from danvas.utils import write_json
 
@@ -44,7 +44,7 @@ def command_status(args: Any) -> None:
     if not snapshot_path.is_file():
         raise SystemExit(f"Course snapshot not found: {snapshot_path}. Run `danvas refresh`.")
     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
-    if int(snapshot.get("schema_version") or 1) < SNAPSHOT_SCHEMA_VERSION:
+    if int(snapshot.get("schema_version") or 1) < 3:
         raise SystemExit(
             "Course snapshot predates the current format. Run `danvas refresh` first."
         )
@@ -117,6 +117,8 @@ def build_status(
     for record in sources:
         by_kind[record["kind"]].append(record)
 
+    snapshot_version = int(snapshot.get("schema_version") or 1)
+    pages_available = snapshot_version >= 4
     sections = {
         "assignments": compare_assignments(by_kind["assignment"], snapshot, root),
         "announcements": compare_titled(
@@ -125,6 +127,11 @@ def build_status(
         "discussions": compare_discussions(by_kind["discussion"], snapshot),
         "quizzes": compare_quizzes(by_kind["quiz"], snapshot.get("quizzes") or []),
         "files": compare_files(snapshot.get("files") or [], root),
+        "pages": (
+            compare_pages(by_kind["page"], snapshot.get("pages") or [], root)
+            if pages_available
+            else []
+        ),
     }
     add_next_actions(sections)
     summary: Counter[str] = Counter()
@@ -146,6 +153,7 @@ def build_status(
             "age_hours": round(age_hours, 1) if age_hours is not None else None,
             "max_age_hours": max_age_hours,
             "stale": stale,
+            "pages_available": pages_available,
         },
         "summary": dict(summary),
         "sections": sections,
@@ -161,8 +169,134 @@ def build_status(
             "Quiz comparison covers titles only; question-body comparison is unavailable "
             "from the snapshot.",
             "Local files not present in Canvas are not reported.",
-        ],
+        ]
+        + (
+            []
+            if pages_available
+            else ["Pages unavailable from this schema-3 snapshot. Run `danvas refresh`."]
+        ),
     }
+
+
+def compare_pages(
+    local_records: list[dict[str, Any]], canvas_rows: list[dict[str, Any]], root: Path
+) -> list[dict[str, Any]]:
+    by_identity: dict[str, dict[str, Any]] = {}
+    by_title: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in canvas_rows:
+        for value in (row.get("page_id"), row.get("url")):
+            if value not in (None, ""):
+                by_identity[str(value)] = row
+        by_title[normalize_title(str(row.get("title") or ""))].append(row)
+    try:
+        source_map = load_source_map(root)
+        source_map_error = ""
+    except SystemExit as exc:
+        source_map = {"sources": []}
+        source_map_error = str(exc)
+    matched: set[int] = set()
+    items = []
+    for record in local_records:
+        item = {
+            "classification": "",
+            "title": record.get("title") or record.get("path") or "",
+            "local_path": record.get("path") or "",
+            "canvas_id": None,
+            "canvas_url": "",
+            "details": [],
+        }
+        if record.get("error"):
+            item["classification"] = "unsupported comparison"
+            item["details"].append(record["error"])
+            items.append(item)
+            continue
+        entry = find_source_entry(source_map, kind="page", path=str(record["path"]))
+        canvas_entry = entry.get("canvas") if isinstance(entry, dict) else {}
+        if not isinstance(canvas_entry, dict):
+            canvas_entry = {}
+        metadata = record.get("source_metadata") or {}
+        frontmatter = metadata.get("page_id", metadata.get("canvas_id"))
+        map_identity = canvas_entry.get("id", canvas_entry.get("url"))
+        if source_map_error and frontmatter in (None, ""):
+            item["classification"] = "unsupported comparison"
+            item["details"].append(source_map_error)
+            items.append(item)
+            continue
+        if frontmatter not in (None, "") and map_identity not in (None, ""):
+            map_values = {str(canvas_entry.get("id") or ""), str(canvas_entry.get("url") or "")}
+            if str(frontmatter) not in map_values:
+                item["classification"] = "unsupported comparison"
+                item["details"].append(
+                    f"front matter identity {frontmatter!r} conflicts with source-map identity"
+                )
+                items.append(item)
+                continue
+        identity = frontmatter if frontmatter not in (None, "") else map_identity
+        row = by_identity.get(str(identity)) if identity not in (None, "") else None
+        if identity not in (None, "") and row is None:
+            item["classification"] = "local-only"
+            item["details"].append(f"stable Page identity {identity!r} not found in snapshot")
+            items.append(item)
+            continue
+        title_candidate = False
+        if row is None:
+            candidates = by_title.get(normalize_title(str(record.get("title") or "")), [])
+            if len(candidates) == 1:
+                row = candidates[0]
+                title_candidate = True
+            elif len(candidates) > 1:
+                item["classification"] = "unsupported comparison"
+                item["details"].append(f"{len(candidates)} Canvas Pages share this title")
+                matched.update(id(candidate) for candidate in candidates)
+                items.append(item)
+                continue
+            else:
+                item["classification"] = "local-only"
+                items.append(item)
+                continue
+        matched.add(id(row))
+        item["canvas_id"] = row.get("page_id")
+        item["canvas_url"] = row.get("url") or ""
+        metadata_diffs = field_diffs(record.get("metadata") or {}, row)
+        local_hash = (record.get("artifacts") or {}).get("body_sha256")
+        canvas_hash = row.get("body_sha256")
+        body_supported = bool(local_hash and canvas_hash) and row.get("body_hash_status") == "available"
+        body_diff = body_supported and local_hash != canvas_hash
+        if title_candidate:
+            item["classification"] = "probable match, unbound"
+            item["details"].extend(metadata_diffs)
+            if body_diff:
+                item["details"].append("body hash differs from title candidate")
+        elif not body_supported:
+            item["classification"] = "unsupported comparison"
+            item["details"].extend(metadata_diffs)
+            item["details"].append("body comparison unavailable because URL canonicalization blocked hashing")
+        elif body_diff and metadata_diffs:
+            item["classification"] = "metadata and body mismatch"
+            item["details"].extend(metadata_diffs)
+            item["details"].append("body hash differs")
+        elif body_diff:
+            item["classification"] = "body mismatch"
+            item["details"].append("body hash differs")
+        elif metadata_diffs:
+            item["classification"] = "metadata mismatch"
+            item["details"].extend(metadata_diffs)
+        else:
+            item["classification"] = "exact"
+        items.append(item)
+    for row in canvas_rows:
+        if id(row) not in matched:
+            items.append(
+                {
+                    "classification": "Canvas-only",
+                    "title": str(row.get("title") or ""),
+                    "local_path": "",
+                    "canvas_id": row.get("page_id"),
+                    "canvas_url": row.get("url") or "",
+                    "details": [],
+                }
+            )
+    return items
 
 
 def comparable_assignments(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
@@ -418,6 +552,20 @@ def next_action_for(section: str, item: dict[str, Any]) -> str:
         return "Add a local quiz source if this Canvas quiz should be tracked in the course repo."
     if section == "files" and classification == "filename-only match":
         return "Inspect Canvas/local size and timestamps before deciding whether Canvas or local content is stale."
+    if section == "pages" and classification == "Canvas-only":
+        return "Run `danvas pages sync --output-dir content/pages --dry-run` to plan a local source."
+    if section == "pages" and classification == "local-only":
+        return "Run `danvas pages create SOURCE --dry-run` before creating this Page."
+    if section == "pages" and classification == "probable match, unbound":
+        identity = item.get("canvas_id") or item.get("canvas_url") or "CANDIDATE"
+        return (
+            f"Run `danvas pages verify SOURCE --page-id {identity}` and then bind the verified "
+            "Page deliberately."
+        )
+    if section == "pages" and classification in {
+        "metadata mismatch", "body mismatch", "metadata and body mismatch"
+    }:
+        return "Run `danvas pages verify SOURCE` or `danvas pages update SOURCE --dry-run`."
     if classification == "metadata mismatch":
         return "Review metadata differences before deciding whether local source or Canvas should change."
     return ""
@@ -443,6 +591,9 @@ def render_status_lines(payload: dict[str, Any]) -> list[str]:
             "Summary: " + ", ".join(f"{name}: {count}" for name, count in sorted(summary.items()))
         )
     for section, items in payload["sections"].items():
+        if section == "pages" and not snapshot.get("pages_available", True):
+            lines.append("Pages: unavailable (run `danvas refresh` for schema-v4 Page data)")
+            continue
         counts = Counter(item["classification"] for item in items)
         count_text = ", ".join(f"{name}: {count}" for name, count in sorted(counts.items()))
         lines.append(f"{section.capitalize()}: {count_text or 'none'}")
@@ -484,6 +635,9 @@ def render_status_markdown(payload: dict[str, Any]) -> str:
         lines.append(f"- {name}: {count}")
     for section, items in payload["sections"].items():
         lines.extend(["", f"## {section.capitalize()}", ""])
+        if section == "pages" and not snapshot.get("pages_available", True):
+            lines.append("Unavailable from this snapshot. Run `danvas refresh`.")
+            continue
         if not items:
             lines.append("None.")
             continue
