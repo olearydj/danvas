@@ -59,7 +59,12 @@ from danvas.reports import (
     should_write_report_run,
 )
 from danvas.status import command_status
-from danvas.submissions import command_submissions_feedback, command_submissions_media
+from danvas.submissions import (
+    command_submissions_export,
+    command_submissions_feedback,
+    command_submissions_grades,
+    command_submissions_media,
+)
 from danvas.utils import slugify, write_json
 
 SecretProvider = Literal["auto", "1password", "env"]
@@ -69,6 +74,7 @@ AnnouncementExportFormat = Literal["auto", "json", "csv", "markdown"]
 AnnouncementLatestFormat = Literal["auto", "json", "markdown"]
 FileDuplicatePolicy = Literal["overwrite", "rename"]
 AssignmentUpsertConfirm = Literal["", "create", "update"]
+SubmissionLayout = Literal["flat", "assignment-subdir"]
 
 
 app = typer.Typer(
@@ -1393,6 +1399,85 @@ def quiz_import_qti(
 
 
 @submissions_app.command(
+    "export", help="Export private submission metadata without downloading attachments."
+)
+def submissions_export(
+    assignment_id: AssignmentId,
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="Private JSON or CSV output path.")
+    ],
+    include_comments: Annotated[
+        bool, typer.Option("--include-comments", help="Include full text submission comments.")
+    ] = False,
+    include_history: Annotated[
+        bool, typer.Option("--include-history", help="Include submission history when available.")
+    ] = False,
+    save_raw: Annotated[
+        Path | None,
+        typer.Option("--save-raw", help="Explicit path for private raw Canvas payload JSON."),
+    ] = None,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace existing explicit outputs.")
+    ] = False,
+    course_id: CourseId = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_submissions_export,
+        args_for(
+            course_id=course_id,
+            assignment_id=assignment_id,
+            output=str(output),
+            include_comments=include_comments,
+            include_history=include_history,
+            save_raw=str(save_raw) if save_raw else None,
+            overwrite=overwrite,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@submissions_app.command("grades", help="Export current grades and submission comments for review.")
+def submissions_grades(
+    assignment_id: AssignmentId,
+    output: Annotated[
+        Path, typer.Option("--output", "-o", help="Private JSON or CSV output path.")
+    ],
+    only_graded: Annotated[
+        bool, typer.Option("--only-graded", help="Exclude submissions without a current grade.")
+    ] = False,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace an existing explicit output.")
+    ] = False,
+    course_id: CourseId = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_submissions_grades,
+        args_for(
+            course_id=course_id,
+            assignment_id=assignment_id,
+            output=str(output),
+            only_graded=only_graded,
+            overwrite=overwrite,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@submissions_app.command(
     "media", help="Download all submission attachments and media comments for one assignment."
 )
 def submissions_media(
@@ -1404,6 +1489,13 @@ def submissions_media(
             "--output-dir", help="Base directory for downloaded files and .info.json metadata."
         ),
     ] = Path("canvas_assignment_files"),
+    layout: Annotated[
+        SubmissionLayout,
+        typer.Option("--layout", help="Use a flat output or an assignment subdirectory."),
+    ] = "assignment-subdir",
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace existing downloaded files.")
+    ] = False,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -1415,6 +1507,8 @@ def submissions_media(
             course_id=course_id,
             assignment_id=assignment_id,
             output_dir=str(output_dir),
+            layout=layout,
+            overwrite=overwrite,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

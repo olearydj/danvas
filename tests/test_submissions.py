@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import io
+import json
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import requests
 
 from danvas.submissions import (
+    command_submissions_export,
     command_submissions_feedback,
+    command_submissions_grades,
+    command_submissions_media,
+    file_integrity,
     load_roster_ids,
     match_files_to_students,
 )
@@ -149,3 +157,205 @@ def test_submissions_feedback_uploads_matched_files(
     command_submissions_feedback(feedback_args(roster, feedback_dir, comment="Graded."))
 
     assert uploads == [(4024825, "4024825-feedback.pdf", "Graded.")]
+
+
+class FakeAttachment:
+    id = 700
+    filename = "workbook.xlsx"
+    display_name = "workbook.xlsx"
+    content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    size = 42
+    url = "https://canvas.test/download?verifier=secret"
+
+
+class FakeSubmission:
+    def __init__(self, *, grade: str | None = "90") -> None:
+        self.id = 800
+        self.user_id = 4024825
+        self.user = {"sortable_name": "Lawson, Jack"}
+        self.attempt = 1
+        self.workflow_state = "graded"
+        self.submitted_at = "2026-07-01T12:00:00Z"
+        self.graded_at = "2026-07-02T12:00:00Z"
+        self.score = 90.0 if grade else None
+        self.grade = grade
+        self.grader_id = 99
+        self.late = False
+        self.missing = False
+        self.excused = False
+        self.attachments = [FakeAttachment()]
+        self.submission_comments = [
+            {
+                "id": 44,
+                "author_id": 99,
+                "author_name": "Instructor",
+                "comment": "Good work.",
+                "created_at": "2026-07-02T12:00:00Z",
+            }
+        ]
+        self.submission_history = [{"attempt": 1}]
+        self.media_comment = None
+
+
+class FakeSubmissionAssignment:
+    id = 5
+    name = "Case Study 1"
+
+    def __init__(self, submissions: list[FakeSubmission]) -> None:
+        self.submissions = submissions
+
+    def get_submissions(self, include: list[str]) -> list[FakeSubmission]:
+        return self.submissions
+
+
+class FakeSubmissionCanvas:
+    def __init__(self, assignment: FakeSubmissionAssignment) -> None:
+        self.assignment = assignment
+
+    def get_course(self, course_id: int) -> FakeSubmissionCanvas:
+        return self
+
+    def get_assignment(self, assignment_id: int) -> FakeSubmissionAssignment:
+        return self.assignment
+
+
+def submission_args(tmp_path: Path, **overrides: Any) -> Any:
+    defaults = {
+        "course_id": 101,
+        "assignment_id": 5,
+        "output": str(tmp_path / "submissions.json"),
+        "include_comments": False,
+        "include_history": False,
+        "save_raw": None,
+        "only_graded": False,
+        "overwrite": False,
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
+def test_submissions_export_writes_sanitized_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    canvas = FakeSubmissionCanvas(FakeSubmissionAssignment([FakeSubmission()]))
+    monkeypatch.setattr("danvas.submissions.canvas_from_args", lambda args: canvas)
+
+    command_submissions_export(
+        submission_args(tmp_path, include_comments=True, include_history=True)
+    )
+
+    payload = json.loads((tmp_path / "submissions.json").read_text(encoding="utf-8"))
+    row = payload["submissions"][0]
+    assert row["canvas_user_id"] == 4024825
+    assert row["attachment_ids"] == [700]
+    assert row["attachment_content_types"] == [FakeAttachment.content_type]
+    assert row["attachment_sizes"] == [42]
+    assert row["comments"][0]["comment"] == "Good work."
+    assert "verifier" not in json.dumps(payload)
+    assert "download" not in json.dumps(payload)
+
+
+def test_submissions_grades_only_graded_flattens_comments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    canvas = FakeSubmissionCanvas(
+        FakeSubmissionAssignment([FakeSubmission(), FakeSubmission(grade=None)])
+    )
+    monkeypatch.setattr("danvas.submissions.canvas_from_args", lambda args: canvas)
+    output = tmp_path / "grades.csv"
+
+    command_submissions_grades(
+        submission_args(tmp_path, output=str(output), only_graded=True)
+    )
+
+    text = output.read_text(encoding="utf-8")
+    assert "Good work." in text
+    assert "comment_author_id" in text
+    assert text.count("Lawson, Jack") == 1
+
+
+def test_submissions_media_flat_writes_hash_integrity_and_safe_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("xl/workbook.xml", "<workbook/>")
+    body = buffer.getvalue()
+
+    class Response:
+        headers = {"Content-Type": FakeAttachment.content_type}
+
+        def raise_for_status(self) -> None:
+            pass
+
+        def iter_content(self, chunk_size: int) -> list[bytes]:
+            return [body]
+
+    monkeypatch.setattr("danvas.submissions.requests.get", lambda *args, **kwargs: Response())
+    canvas = FakeSubmissionCanvas(FakeSubmissionAssignment([FakeSubmission()]))
+    monkeypatch.setattr("danvas.submissions.canvas_from_args", lambda args: canvas)
+    output = tmp_path / "downloads"
+
+    command_submissions_media(
+        SimpleNamespace(
+            course_id=101,
+            assignment_id=5,
+            output_dir=str(output),
+            layout="flat",
+            overwrite=False,
+        )
+    )
+
+    downloaded = output / "Lawson,_Jack_sub800_workbook.xlsx"
+    assert downloaded.is_file()
+    sidecar = json.loads(
+        downloaded.with_suffix(".xlsx.info.json").read_text(encoding="utf-8")
+    )
+    assert sidecar["integrity_status"] == "valid"
+    assert sidecar["downloaded_at"].endswith("+00:00")
+    assert len(sidecar["sha256"]) == 64
+    assert "url" not in json.dumps(sidecar).lower()
+    manifest = json.loads(
+        (output / "submissions-manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["files"][0]["stable_canvas_id"] == 700
+    assert "verifier" not in json.dumps(manifest)
+
+
+def test_office_integrity_rejects_plain_zip_missing_ooxml_parts(tmp_path: Path) -> None:
+    path = tmp_path / "fake.xlsx"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("notes.txt", "not a workbook")
+    status, error = file_integrity(path)
+    assert status == "invalid"
+    assert "OOXML" in error
+
+
+def test_media_http_failure_is_sanitized_in_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(*args: Any, **kwargs: Any) -> None:
+        raise requests.ConnectionError(
+            "failed https://canvas.test/download?verifier=secret-token"
+        )
+
+    monkeypatch.setattr("danvas.submissions.requests.get", fail)
+    canvas = FakeSubmissionCanvas(FakeSubmissionAssignment([FakeSubmission()]))
+    monkeypatch.setattr("danvas.submissions.canvas_from_args", lambda args: canvas)
+    output = tmp_path / "downloads"
+    command_submissions_media(
+        SimpleNamespace(
+            course_id=101,
+            assignment_id=5,
+            output_dir=str(output),
+            layout="flat",
+            overwrite=False,
+        )
+    )
+    manifest = json.loads(
+        (output / "submissions-manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["files"][0]["download_status"] == "failed"
+    assert "secret-token" not in json.dumps(manifest)
+    assert not list(output.glob("*.part"))
