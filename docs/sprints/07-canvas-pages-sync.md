@@ -33,8 +33,8 @@ remains an explicit-output command.
 ## Planning And Collision Rules
 
 Use Sprint 6 discovery and identity matching across all configured Page sources,
-not only files already inside `--output-dir`. Plan one of these statuses per
-Canvas Page:
+not only files already inside `--output-dir`. After inventory-wide target
+planning, assign one of these statuses to each Page selected for action:
 
 - `would_create`
 - `created`
@@ -45,6 +45,13 @@ Canvas Page:
 - `recovered_provenance`
 - `source_created_provenance_failed`
 - `error`
+
+Always load the complete current course Page inventory and derive canonical
+targets for the entire inventory before applying `--page-id` or `--url`. Filters
+limit which actions appear and may execute; they must not change filename
+normalization, collision sets, Page-ID suffixing, or the chosen target for any
+Page. If the complete inventory cannot be obtained, even a targeted sync fails
+safely rather than deriving a potentially different path from partial data.
 
 Derive filenames from the stable Canvas Page slug and use `.md` or `.html`
 according to the selected format. Apply one strict cross-platform filename
@@ -77,8 +84,8 @@ target without either relationship is never overwritten: report
 Page.
 
 Do not add `--overwrite` or update existing Page sources in this sprint. Recheck
-the target immediately before every write so a file created after planning is
-still protected.
+the target immediately before every write, then install with the no-clobber
+primitive defined below so a file created after that check is still protected.
 
 ## Generated Source Contract
 
@@ -108,9 +115,22 @@ write provenance.
 ## Transaction And Recovery Contract
 
 Build and validate the complete source in memory, write it to an exclusive
-temporary file in the target directory, flush it, and atomically rename it into
-place only after the final collision check. Source-map updates likewise use
-temporary-file replacement and must not expose partially written JSON.
+temporary file in the target directory, and flush it before installation. Install
+the completed temporary file with an operating-system no-replace primitive such
+as `renameat2(RENAME_NOREPLACE)`, `renamex_np(RENAME_EXCL)`, or an atomic
+same-filesystem hard link followed by temporary-file removal. Destination
+existence must be tested by the installation primitive itself, not only by an
+earlier path check.
+
+If the destination appears before installation, classify the action as
+`skipped_exists` or `conflict` after safe identity inspection and remove only the
+temporary file. Never replace, truncate, open for ordinary writing, or unlink the
+destination. `os.replace()` and any rename API with replace-on-existence
+semantics are prohibited. If the platform/filesystem offers no proven
+no-clobber primitive, fail the action safely rather than weakening the guarantee.
+Source-map updates likewise use temporary-file replacement and must not expose
+partially written JSON; replacing the danvas-owned source-map file does not grant
+permission to replace authored Page sources.
 
 The generated source's `page_id` and normalized body hash are the recovery
 record if interruption occurs between source creation and provenance update. If
@@ -195,8 +215,14 @@ is supplied. Export does not update source-map provenance.
   source-map changes.
 - Live sync creates only planned missing sources and never overwrites an existing
   path or known source.
+- A destination created after the final path check but before installation is
+  preserved byte-for-byte and classified without using replace-on-existence
+  rename behavior.
 - Repeating sync after success reports `skipped_known_local` and creates no
   duplicate Page source.
+- Broad and targeted sync compute targets from the same complete Page inventory;
+  a fixture with colliding slugs receives the same Page-ID-suffixed path in both
+  plans.
 - Markdown fixtures round-trip ordinary prose, lists, links, anchors, code, and
   tables through the existing renderer.
 - Safe inline styles and structures either survive through Markdown/raw-HTML
