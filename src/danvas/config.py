@@ -11,13 +11,14 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from danvas.auth import canvas_from_args
 from danvas.files import canvas_file_record
+from danvas.overrides import redacted_assignment_overrides
 from danvas.reports import create_report_run
 from danvas.utils import canvas_object_to_dict, html_to_text
 
 CONFIG_DIR_NAME = ".danvas"
 CONFIG_FILE_NAME = "config.toml"
 COURSE_SNAPSHOT_NAME = "course.json"
-SNAPSHOT_SCHEMA_VERSION = 2
+SNAPSHOT_SCHEMA_VERSION = 3
 
 
 def project_dir(root: Path | None = None) -> Path:
@@ -208,22 +209,22 @@ def build_course_snapshot(course: Any) -> dict[str, Any]:
     assignments = []
     for assignment in course.get_assignments(include=["all_dates", "overrides"]):
         group = groups_by_id.get(int(getattr(assignment, "assignment_group_id", 0) or 0), {})
-        assignments.append(
-            {
-                "id": getattr(assignment, "id", ""),
-                "name": getattr(assignment, "name", ""),
-                "assignment_group_id": getattr(assignment, "assignment_group_id", ""),
-                "assignment_group_name": group.get("name", ""),
-                "points_possible": getattr(assignment, "points_possible", ""),
-                "due_at": getattr(assignment, "due_at", ""),
-                "unlock_at": getattr(assignment, "unlock_at", ""),
-                "lock_at": getattr(assignment, "lock_at", ""),
-                "published": getattr(assignment, "published", ""),
-                "html_url": getattr(assignment, "html_url", ""),
-                "submission_types": getattr(assignment, "submission_types", []) or [],
-                "description_text": html_to_text(getattr(assignment, "description", "")),
-            }
-        )
+        row = {
+            "id": getattr(assignment, "id", ""),
+            "name": getattr(assignment, "name", ""),
+            "assignment_group_id": getattr(assignment, "assignment_group_id", ""),
+            "assignment_group_name": group.get("name", ""),
+            "points_possible": getattr(assignment, "points_possible", ""),
+            "due_at": getattr(assignment, "due_at", ""),
+            "unlock_at": getattr(assignment, "unlock_at", ""),
+            "lock_at": getattr(assignment, "lock_at", ""),
+            "published": getattr(assignment, "published", ""),
+            "html_url": getattr(assignment, "html_url", ""),
+            "submission_types": getattr(assignment, "submission_types", []) or [],
+            "description_text": html_to_text(getattr(assignment, "description", "")),
+        }
+        row.update(redacted_assignment_overrides(assignment))
+        assignments.append(row)
     assignments.sort(key=lambda row: (str(row["due_at"] or ""), str(row["name"] or "")))
     folder_objs = list(course.get_folders())
     folders = [

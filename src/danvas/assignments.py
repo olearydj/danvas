@@ -9,18 +9,22 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
+import yaml
 from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.auth import canvas_from_args
 from danvas.config import resolve_assignment_group_id, resolve_course_timezone
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
+from danvas.overrides import private_assignment_overrides
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
 from danvas.utils import (
     canvas_object_to_dict,
     html_to_text,
+    mark_private,
     print_mutation_banner,
     slugify,
+    write_json,
     write_rows,
 )
 
@@ -154,6 +158,26 @@ def command_assignments_export(args: Any) -> None:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Wrote {len(rows)} assignments to {output}")
+
+
+def command_assignments_overrides(args: Any) -> None:
+    output = Path(args.output)
+    if output.exists() and not getattr(args, "overwrite", False):
+        raise SystemExit(f"Refusing to overwrite existing private output: {output}")
+    canvas = canvas_from_args(args)
+    assignment = canvas.get_course(args.course_id).get_assignment(
+        args.assignment_id, include=["all_dates", "overrides"]
+    )
+    payload = private_assignment_overrides(
+        assignment, source=str(getattr(args, "source", "") or "")
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.suffix.lower() in {".yaml", ".yml"}:
+        output.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    else:
+        write_json(output, payload)
+    mark_private(output)
+    print(f"Wrote private assignment override export: {output}")
 
 
 def resolve_format(output: Path, requested: str) -> str:

@@ -19,7 +19,7 @@ NOW = dt.datetime(2026, 6, 12, 1, 0, tzinfo=dt.UTC)
 
 def build_snapshot() -> dict[str, Any]:
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "generated_at": "2026-06-12T00:00:00Z",
         "course": {"id": 101, "name": "INSY 6600"},
         "assignment_groups": [],
@@ -209,6 +209,91 @@ def test_build_status_excludes_discussion_backed_assignments(tmp_path: Path) -> 
 
     titles = [item["title"] for item in payload["sections"]["assignments"]]
     assert "Case Discussion" not in titles
+
+
+def test_build_status_uses_base_window_and_reports_untracked_overrides(tmp_path: Path) -> None:
+    build_workspace(tmp_path)
+    snapshot = build_snapshot()
+    snapshot["assignments"][0].update(
+        {
+            "due_at": "2026-06-17T04:59:59Z",
+            "lock_at": None,
+            "has_overrides": True,
+            "all_dates": [
+                {
+                    "id": None,
+                    "title": "Everyone else",
+                    "base": True,
+                    "due_at": "2026-06-15T04:59:00Z",
+                    "unlock_at": None,
+                    "lock_at": None,
+                    "assignee_count": 0,
+                },
+                {
+                    "id": 900,
+                    "title": "Extension",
+                    "base": False,
+                    "due_at": "2026-06-17T04:59:59Z",
+                    "unlock_at": None,
+                    "lock_at": None,
+                    "assignee_count": 2,
+                },
+            ],
+        }
+    )
+
+    payload = build_status(snapshot, tmp_path, now=NOW)
+
+    item = next(
+        item for item in payload["sections"]["assignments"] if item["title"] == "Case Study 1"
+    )
+    assert item["classification"] == "override untracked"
+    assert not any("due_at:" in detail for detail in item["details"])
+    assert "Canvas has untracked assignment overrides (1)" in item["details"]
+
+
+def test_build_status_compares_private_override_reference_by_count(tmp_path: Path) -> None:
+    build_workspace(tmp_path)
+    assignment_source = tmp_path / "content/cases/case-1-assignment.md"
+    assignment_source.write_text(
+        assignment_source.read_text(encoding="utf-8").replace(
+            "published: true",
+            "published: true\navailability_overrides_ref: grading/overrides/case1.yaml",
+        ),
+        encoding="utf-8",
+    )
+    write(
+        tmp_path / "grading/overrides/case1.yaml",
+        "assignment_id: 1\noverrides:\n"
+        "  - canvas_override_id: 900\n"
+        "    title: Extension\n"
+        "    due_at: 2026-06-17T04:59:59Z\n"
+        "    assignees:\n      canvas_user_ids: [10, 11]\n",
+    )
+    snapshot = build_snapshot()
+    snapshot["assignments"][0].update(
+        {
+            "has_overrides": True,
+            "all_dates": [
+                {
+                    "id": 900,
+                    "title": "Extension",
+                    "base": False,
+                    "due_at": "2026-06-17T04:59:59Z",
+                    "unlock_at": None,
+                    "lock_at": None,
+                    "assignee_count": 2,
+                }
+            ],
+        }
+    )
+
+    payload = build_status(snapshot, tmp_path, now=NOW)
+    item = next(
+        item for item in payload["sections"]["assignments"] if item["title"] == "Case Study 1"
+    )
+    assert item["classification"] == "exact"
+    assert item["override_status"] == "exact"
 
 
 def test_build_status_flags_stale_snapshot(tmp_path: Path) -> None:

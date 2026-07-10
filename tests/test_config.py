@@ -34,6 +34,31 @@ class FakeCourse:
                 html_url="https://canvas.test/assignments/100",
                 submission_types=["online_upload"],
                 description="<p>Submit files.</p>",
+                all_dates=[
+                    {
+                        "id": None,
+                        "title": "Everyone else",
+                        "base": True,
+                        "due_at": "2026-06-15T04:59:00Z",
+                        "unlock_at": None,
+                        "lock_at": "2026-06-15T04:59:59Z",
+                    },
+                    {
+                        "id": 900,
+                        "title": "Extension",
+                        "base": False,
+                        "due_at": "2026-06-17T04:59:59Z",
+                        "student_ids": [10, 11],
+                    },
+                ],
+                overrides=[
+                    {
+                        "id": 900,
+                        "title": "Extension",
+                        "due_at": "2026-06-17T04:59:59Z",
+                        "student_ids": [10, 11],
+                    }
+                ],
             )
         ]
 
@@ -134,6 +159,8 @@ def test_write_project_config_and_snapshot(tmp_path: Path) -> None:
     payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
     assert payload["course"]["id"] == 1742717
     assert payload["assignments"][0]["assignment_group_name"] == "Case Studies"
+    assert payload["assignments"][0]["has_overrides"] is True
+    assert payload["assignments"][0]["all_dates"][1]["assignee_count"] == 2
     assert payload["folders"][1]["full_name"] == "course files/Case Studies"
 
 
@@ -178,6 +205,7 @@ def test_build_course_snapshot_contains_no_secrets_or_member_lists() -> None:
     for category in snapshot["group_categories"]:
         for group in category["groups"]:
             assert set(group) == {"id", "name", "members_count"}
+    assert "student_ids" not in json.dumps(snapshot["assignments"][0])
 
 
 def test_diff_snapshots_reports_added_removed_changed() -> None:

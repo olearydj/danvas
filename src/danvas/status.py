@@ -15,6 +15,11 @@ from danvas.config import (
     load_project_config,
 )
 from danvas.files import local_files, status_for
+from danvas.overrides import (
+    assignment_base_compare_row,
+    compare_local_overrides,
+    load_local_override_file,
+)
 from danvas.reports import create_report_run
 from danvas.sources import scan_sources
 from danvas.utils import write_json
@@ -113,9 +118,7 @@ def build_status(
         by_kind[record["kind"]].append(record)
 
     sections = {
-        "assignments": compare_titled(
-            by_kind["assignment"], comparable_assignments(snapshot), title_key="name"
-        ),
+        "assignments": compare_assignments(by_kind["assignment"], snapshot, root),
         "announcements": compare_titled(
             by_kind["announcement"], snapshot.get("announcements") or []
         ),
@@ -171,8 +174,50 @@ def comparable_assignments(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             types = [item.strip() for item in types.split(",") if item.strip()]
         if {"discussion_topic", "online_quiz"} & set(types):
             continue
-        rows.append(row)
+        rows.append(assignment_base_compare_row(row))
     return rows
+
+
+def compare_assignments(
+    local_records: list[dict[str, Any]], snapshot: dict[str, Any], root: Path
+) -> list[dict[str, Any]]:
+    canvas_rows = comparable_assignments(snapshot)
+    items = compare_titled(local_records, canvas_rows, title_key="name")
+    records_by_path = {record["path"]: record for record in local_records}
+    canvas_by_id = {row.get("id"): row for row in canvas_rows}
+    for item in items:
+        row = canvas_by_id.get(item.get("canvas_id"))
+        record = records_by_path.get(item.get("local_path"))
+        if not row or not record or not row.get("has_overrides"):
+            continue
+        source_metadata = record.get("source_metadata") or {}
+        reference = str(source_metadata.get("availability_overrides_ref") or "").strip()
+        count = len(
+            [
+                window
+                for window in row.get("all_dates") or []
+                if isinstance(window, dict) and not window.get("base")
+            ]
+        )
+        if not reference:
+            item["override_status"] = "untracked"
+            item["details"].append(f"Canvas has untracked assignment overrides ({count})")
+            if item["classification"] == "exact":
+                item["classification"] = "override untracked"
+            continue
+        payload, error = load_local_override_file(root, reference)
+        if error or payload is None:
+            item["override_status"] = "error"
+            item["details"].append(error)
+            if item["classification"] == "exact":
+                item["classification"] = "override mismatch"
+            continue
+        status, details = compare_local_overrides(row, payload)
+        item["override_status"] = status.removeprefix("override ")
+        item["details"].extend(details)
+        if status == "override mismatch" and item["classification"] == "exact":
+            item["classification"] = status
+    return items
 
 
 def snapshot_age_hours(generated_at: str, now: dt.datetime | None) -> float | None:
@@ -365,6 +410,10 @@ def next_action_for(section: str, item: dict[str, Any]) -> str:
         )
     if section == "assignments" and classification == "local-only":
         return "Run `danvas assignments create SOURCE --dry-run` before posting this local assignment."
+    if section == "assignments" and classification == "override untracked":
+        return "Export and reference the private Canvas assignment overrides if they should be tracked."
+    if section == "assignments" and classification == "override mismatch":
+        return "Review the private assignment override reference against Canvas before changing dates or membership."
     if section == "quizzes" and classification == "Canvas-only":
         return "Add a local quiz source if this Canvas quiz should be tracked in the course repo."
     if section == "files" and classification == "filename-only match":

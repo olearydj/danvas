@@ -24,6 +24,7 @@ from danvas.announcements import (
 from danvas.assignments import (
     command_assignments_create,
     command_assignments_export,
+    command_assignments_overrides,
     command_assignments_update,
     command_assignments_upsert,
     command_assignments_verify,
@@ -683,6 +684,48 @@ def assignments_export(
             output=str(output),
             format=output_format,
             full=full,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@assignments_app.command(
+    "overrides", help="Export one assignment's override windows and private membership."
+)
+def assignments_overrides(
+    assignment_id: AssignmentId,
+    output: Annotated[
+        Path,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Private YAML or JSON output path.",
+        ),
+    ],
+    source: Annotated[
+        Path | None,
+        typer.Option("--source", help="Optional authored assignment source path to record."),
+    ] = None,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace an existing private output file.")
+    ] = False,
+    course_id: CourseId = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_assignments_overrides,
+        args_for(
+            course_id=course_id,
+            assignment_id=assignment_id,
+            output=str(output),
+            source=str(source) if source else "",
+            overwrite=overwrite,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

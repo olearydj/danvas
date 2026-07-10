@@ -157,6 +157,7 @@ def source_record(
         "path": path.relative_to(root).as_posix(),
         "title": "",
         "metadata": {},
+        "source_metadata": {},
         "artifacts": {},
         "error": "",
     }
@@ -183,6 +184,7 @@ def source_record(
                 return None
             record["title"] = str(metadata.get("title") or metadata.get("name") or "")
             record["metadata"] = comparable_metadata(kind, metadata)
+            record["source_metadata"] = normalize_canvas_value(metadata)
     except SystemExit as exc:
         record["error"] = str(exc)
     except OSError as exc:
