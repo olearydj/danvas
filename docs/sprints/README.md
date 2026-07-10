@@ -34,3 +34,14 @@ required the standard Ruff, ty, and pytest checks to pass.
 The combined implementation passed all three checks and was published as
 `v0.6.0` at commit `05201fa`. Release status is recorded in
 `docs/backlog.md`.
+
+## Planned Pages Follow-Ons
+
+The next selected work continues the bounded Pages workflow:
+
+- Sprint 6: [Canvas Pages Discovery, Snapshot, And Status](06-canvas-pages-status.md)
+- Sprint 7: [Canvas Pages Source Sync And Conversion](07-canvas-pages-sync.md)
+
+Sprint 6 adds the read-only schema and comparison foundation. Sprint 7 depends
+on it for project-wide identity matching and is the only one of the two that
+writes local course sources. Neither sprint broadens Canvas mutation behavior.

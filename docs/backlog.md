@@ -22,9 +22,8 @@ The following feature slices were implemented and locally verified in order on
 | Sprint documentation | `docs/sprints/` | `c5fe6fa` |
 
 Ruff, ty, and the full pytest suite passed for the combined implementation. The
-INSY 7970 Page fixture was validated locally, including rendering and restricted
-CSS inlining. Its live draft-to-published transition remains intentionally
-unperformed until that course workspace gives explicit mutation confirmation.
+INSY 7970 Page fixture passed local rendering/restricted-CSS checks and the
+explicitly approved live draft-to-published acceptance sequence.
 The implementation is published on `origin/main` and tagged `v0.6.0` at
 `05201fa`. GitHub Actions passed for that exact commit, and the global CLI was
 reinstalled non-editably from the tag and smoke-tested locally.
@@ -873,6 +872,11 @@ asset upload/rewriting, deletion, rename, general upsert, and status integration
 remain deferred. The active backlog starts at those boundaries rather than
 reopening the delivered V1/V2 contract.
 
+Planning status: source discovery/snapshot/status is specified in Sprint 6, and
+safe Canvas-to-local source sync plus optional HTML/Markdown conversion is
+specified in Sprint 7. Asset handling and broader Page lifecycle/profile work
+remain unscheduled.
+
 Theme: manage student-facing Canvas Pages from durable local sources with the
 same dry-run, verification, readback, and provenance safeguards used for
 assignments and announcements.
@@ -916,8 +920,8 @@ Recommended goals:
 
 1. Add read-only listing and export.
 
-   Status: delivered for broad JSON export and a single Page selected by
-   `--page-id` or `--url`. HTML-to-Markdown conversion is not implemented.
+   Status: broad all-Pages JSON export is delivered. Targeted single-Page
+   HTML/Markdown export is specified for Sprint 7.
 
    Desired behavior:
 
@@ -934,7 +938,7 @@ Recommended goals:
 
 2. Add Canvas-to-local source sync.
 
-   Status: deferred. This is the first Pages-specific follow-on.
+   Status: specified in Sprint 7, dependent on Sprint 6 identity/status work.
 
    ```bash
    danvas pages sync --output-dir content/pages --format markdown --dry-run
@@ -1129,8 +1133,8 @@ Recommended goals:
 
 6. Integrate Pages with snapshots, source discovery, and status.
 
-   Status: deferred. Source lint can inspect explicit Page inputs, but Pages are
-   not yet part of `.danvas/course.json` or `danvas status`.
+   Status: specified in Sprint 6. Source lint can inspect explicit Page inputs,
+   but Pages are not yet part of `.danvas/course.json` or `danvas status`.
 
    Desired behavior:
 

@@ -20,9 +20,9 @@ system.
   candidates, deferred items, and not-recommended directions.
 - `docs/course-yaml.md`: narrow reference for the optional course policy YAML
   used by audit commands.
-- `docs/sprints/`: implemented 0.6.0 feature contracts and their acceptance
-  boundaries. These remain useful implementation records, not an active sprint
-  ordering mandate.
+- `docs/sprints/`: lightweight implemented and planned feature contracts with
+  explicit status and acceptance boundaries. Completed 0.6.0 specs remain useful
+  implementation records; planned specs define only their named slices.
 - `.ho/`: transient session handoffs. Read the latest relevant note for restart
   state, but do not treat handoffs as durable project documentation.
 
