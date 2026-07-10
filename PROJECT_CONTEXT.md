@@ -60,9 +60,9 @@ their full text.
 `danvas.__version__` read installed package metadata. Bump the minor version for
 feature sprints or new commands, and the patch version for fixes.
 
-Current local version: 0.6.0. The sprint-aligned implementation is committed on
-local `main` and locally verified; it is not considered released until pushed,
-green in CI, and optionally tagged.
+Current release: 0.6.0. The annotated `v0.6.0` tag points to `05201fa`; that
+revision is on `origin/main`, passed GitHub Actions, and was smoke-tested through
+a non-editable global installation resolved from the tag.
 
 Recommended local checks:
 

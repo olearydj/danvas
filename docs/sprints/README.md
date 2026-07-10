@@ -31,5 +31,6 @@ Each sprint updated `README.md`, `docs/backlog.md`, and the external
 teaching-danvas command reference when its command surface shipped. Completion
 required the standard Ruff, ty, and pytest checks to pass.
 
-The combined implementation passed all three checks. Release push, CI
-confirmation, and any 0.6.0 tag are tracked separately in `docs/backlog.md`.
+The combined implementation passed all three checks and was published as
+`v0.6.0` at commit `05201fa`. Release status is recorded in
+`docs/backlog.md`.

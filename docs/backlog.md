@@ -25,8 +25,9 @@ Ruff, ty, and the full pytest suite passed for the combined implementation. The
 INSY 7970 Page fixture was validated locally, including rendering and restricted
 CSS inlining. Its live draft-to-published transition remains intentionally
 unperformed until that course workspace gives explicit mutation confirmation.
-The commits are local on `main`; pushing, CI confirmation, and an optional 0.6.0
-tag remain release-closeout work.
+The implementation is published on `origin/main` and tagged `v0.6.0` at
+`05201fa`. GitHub Actions passed for that exact commit, and the global CLI was
+reinstalled non-editably from the tag and smoke-tested locally.
 
 ## Delivered Baseline
 
@@ -123,7 +124,7 @@ sprint sequence as canonical.
   import progress polling can inform future group-import polling. The actual
   `groups` command family has not started.
 
-## Sprint Candidate A: Release And Documentation Cleanup
+## Delivered: 0.6.0 Release And Documentation Cleanup
 
 Theme: make the local release state durable, pushed, and documented before
 starting a larger new feature.
@@ -135,18 +136,19 @@ Why this should come first:
 - External skill docs need explicit checking after command-surface or behavior
   changes because they live outside this repo.
 
-Current status (2026-07-10): repo documentation and the external teaching-danvas
-command reference have been reconciled with 0.6.0. The remaining work is to push
-the local sprint-aligned commits, observe CI, and decide whether to tag 0.6.0.
+Status (2026-07-10): done. The sprint-aligned commits are on `origin/main`, CI
+passed at `05201fa`, the annotated `v0.6.0` tag points to that commit, the global
+CLI was reinstalled non-editably from the tag, and repo/external skill docs were
+reconciled.
 
-Scope:
+Completed scope:
 
-- Push local commits when ready and confirm GitHub Actions.
-- Decide whether the current version should be tagged after CI passes.
+- Push local commits and confirm GitHub Actions.
+- Tag the green revision as `v0.6.0`.
 - Keep `PROJECT_CONTEXT.md` and `docs/backlog.md` current when release status
   changes during close-out.
-- Recheck the already-updated external Codex teaching skill docs after any
-  further command-surface change:
+- Recheck the updated external Codex teaching skill docs after any future
+  command-surface change:
   - `/Users/djo/.codex/skills/teaching-danvas/SKILL.md`
   - `/Users/djo/.codex/skills/teaching-danvas/references/danvas-commands.md`
 
