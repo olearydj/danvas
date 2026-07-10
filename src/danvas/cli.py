@@ -50,6 +50,15 @@ from danvas.grades import (
     command_grades_post,
     command_grades_verify,
 )
+from danvas.pages import (
+    command_pages_create,
+    command_pages_css_check,
+    command_pages_export,
+    command_pages_list,
+    command_pages_render,
+    command_pages_update,
+    command_pages_verify,
+)
 from danvas.panopto import command_panopto_captions
 from danvas.quiz_import import command_quiz_import_qti
 from danvas.reports import (
@@ -120,6 +129,10 @@ announcements_app = typer.Typer(
     help="Create/export course announcements and filtered instructor replies.",
     no_args_is_help=True,
 )
+pages_app = typer.Typer(
+    help="Render, inspect, create, update, and verify Canvas Pages.",
+    no_args_is_help=True,
+)
 files_app = typer.Typer(
     help="Inventory Canvas course Files and compare them to local course files.",
     no_args_is_help=True,
@@ -162,6 +175,7 @@ app.add_typer(submissions_app, name="submissions")
 app.add_typer(grades_app, name="grades")
 app.add_typer(discussions_app, name="discussions")
 app.add_typer(announcements_app, name="announcements")
+app.add_typer(pages_app, name="pages")
 app.add_typer(files_app, name="files")
 app.add_typer(recordings_app, name="recordings")
 app.add_typer(reports_app, name="reports")
@@ -1845,6 +1859,101 @@ def discussions_sync_prompts(
             api_key_env=api_key_env,
         ),
     )
+
+
+@pages_app.command("list", help="List Canvas Pages without writing local files.")
+def pages_list(
+    course_id: CourseId = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(command_pages_list, args_for(course_id=course_id, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+
+
+@pages_app.command("export", help="Export Canvas Page metadata and bodies to explicit JSON output.")
+def pages_export(
+    output: Annotated[Path, typer.Option("--output", "-o", help="Private JSON output path.")],
+    course_id: CourseId = None,
+    overwrite: Annotated[bool, typer.Option("--overwrite", help="Replace an existing output file.")] = False,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(command_pages_export, args_for(course_id=course_id, output=str(output), overwrite=overwrite, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+
+
+@pages_app.command("render", help="Render a local Page source to a Canvas-compatible HTML fragment.")
+def pages_render(
+    source: Annotated[Path, typer.Argument(help="Markdown or HTML Page source with front matter.")],
+    output: Annotated[str, typer.Option("--output", "-o", help="Output path, or - for stdout.")] = "-",
+) -> None:
+    run_command(command_pages_render, args_for(source=str(source), output=output))
+
+
+@pages_app.command("css-check", help="Validate restricted Canvas CSS and optionally show its inline plan.")
+def pages_css_check(
+    css: Annotated[Path, typer.Argument(help="Restricted .canvas.css sidecar.")],
+    source: Annotated[Path | None, typer.Option("--source", help="Optional Page source used to test selector matches.")] = None,
+) -> None:
+    run_command(command_pages_css_check, args_for(css=str(css), source=str(source) if source else None))
+
+
+@pages_app.command("create", help="Create one Page after a dry-run plan, then verify Canvas readback.")
+def pages_create(
+    source: Annotated[Path, typer.Argument(help="Markdown or HTML Page source with front matter.")],
+    course_id: CourseId = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Plan without creating a Page.")] = False,
+    project_root: Annotated[Path, typer.Option("--project-root", help="Course project root containing .danvas.")] = Path("."),
+    no_report: Annotated[bool, typer.Option("--no-report", help="Suppress the default report run.")] = False,
+    report_root: Annotated[Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")] = None,
+    report_dir: Annotated[Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")] = None,
+    report_slug: Annotated[str | None, typer.Option("--report-slug", help="Override the report run slug.")] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(command_pages_create, args_for(course_id=course_id, source=str(source), dry_run=dry_run, project_root=str(project_root), no_report=no_report, report_root=str(report_root) if report_root else None, report_dir=str(report_dir) if report_dir else None, report_slug=report_slug, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+
+
+@pages_app.command("update", help="Update only an existing Page's body and published state.")
+def pages_update(
+    source: Annotated[Path, typer.Argument(help="Page source resolvable by ID or source map.")],
+    course_id: CourseId = None,
+    page_id: Annotated[str | None, typer.Option("--page-id", help="Canvas Page numeric ID or URL slug.")] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show body/publication changes without updating.")] = False,
+    project_root: Annotated[Path, typer.Option("--project-root", help="Course project root containing .danvas.")] = Path("."),
+    no_report: Annotated[bool, typer.Option("--no-report", help="Suppress the default report run.")] = False,
+    report_root: Annotated[Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")] = None,
+    report_dir: Annotated[Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")] = None,
+    report_slug: Annotated[str | None, typer.Option("--report-slug", help="Override the report run slug.")] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(command_pages_update, args_for(course_id=course_id, source=str(source), page_id=page_id, dry_run=dry_run, project_root=str(project_root), no_report=no_report, report_root=str(report_root) if report_root else None, report_dir=str(report_dir) if report_dir else None, report_slug=report_slug, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+
+
+@pages_app.command("verify", help="Verify a rendered Page source and publication state against Canvas.")
+def pages_verify(
+    source: Annotated[Path, typer.Argument(help="Page source resolvable by ID or source map.")],
+    course_id: CourseId = None,
+    page_id: Annotated[str | None, typer.Option("--page-id", help="Canvas Page numeric ID or URL slug.")] = None,
+    project_root: Annotated[Path, typer.Option("--project-root", help="Course project root containing .danvas.")] = Path("."),
+    no_report: Annotated[bool, typer.Option("--no-report", help="Suppress the default report run.")] = False,
+    report_root: Annotated[Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")] = None,
+    report_dir: Annotated[Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")] = None,
+    report_slug: Annotated[str | None, typer.Option("--report-slug", help="Override the report run slug.")] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(command_pages_verify, args_for(course_id=course_id, source=str(source), page_id=page_id, project_root=str(project_root), no_report=no_report, report_root=str(report_root) if report_root else None, report_dir=str(report_dir) if report_dir else None, report_slug=report_slug, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
 
 
 @announcements_app.command(
