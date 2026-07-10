@@ -157,6 +157,36 @@ def test_page_url_canonicalization_removes_canvas_verifiers_and_blocks_external_
     assert external["volatile_url_count"] == 1
 
 
+def test_page_canonicalization_ignores_canvas_readback_edge_decorators() -> None:
+    body = '<p id="content">Page body</p>'
+    decorated = (
+        '<link rel="stylesheet" href="https://uploads.example/account.css">'
+        + body
+        + '<script src="https://uploads.example/account.js"></script>'
+    )
+
+    expected = canonicalize_page_html(body, course_id=42)
+    actual = canonicalize_page_html(decorated, course_id=42)
+
+    assert actual["html"] == expected["html"]
+    assert actual["body_sha256"] == expected["body_sha256"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        '<link rel="stylesheet" href="https://example.test/course.css"><p>No</p>',
+        '<p>No</p><script src="https://example.test/course.js"></script>',
+    ],
+)
+def test_page_source_rejects_authored_readback_decorator_tags(
+    tmp_path: Path, body: str
+) -> None:
+    source = write_source(tmp_path / "unsafe.html", body)
+    with pytest.raises(SystemExit, match="Unsupported or unsafe"):
+        load_page_source(source)
+
+
 @pytest.mark.parametrize(
     "css",
     [

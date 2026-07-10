@@ -79,6 +79,12 @@ body hashing or serialization into authored sources.
   `Key-Pair-Id`, matched case-insensitively.
 - Never include a volatile value in a hash input, snapshot, report, diagnostic,
   generated source, or source-map entry.
+- Remove only non-authorable account decorators that Canvas injects as direct
+  outer-edge children of Page readback: leading/trailing stylesheet `link`
+  elements and empty external `script` elements. Apply this before hashing so
+  account theme injection cannot create false drift. Authored sources continue
+  to reject both elements, and unsupported elements inside Page content are not
+  silently removed.
 
 If a volatile Canvas or external URL can be reduced to a stable Canvas-relative
 identity, hash the rewritten form. Otherwise do not hash the body: set

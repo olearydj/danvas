@@ -35,7 +35,7 @@ from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_jso
 
 RENDERER_VERSION = "pages-markdown-v1"
 COMPATIBILITY_PROFILE = "canvas-page-v1"
-BODY_NORMALIZER_VERSION = "pages-html-v2"
+BODY_NORMALIZER_VERSION = "pages-html-v3"
 
 ALLOWED_TAGS = {
     "a", "abbr", "blockquote", "br", "caption", "code", "col", "colgroup", "dd", "del",
@@ -135,6 +135,7 @@ def canonicalize_page_html(html: str, *, course_id: int | None = None) -> dict[s
     """Canonicalize Page URLs before hashing or writing durable output."""
     soup = BeautifulSoup(f"<div data-danvas-root>{html}</div>", "html.parser")
     root = soup.find("div", attrs={"data-danvas-root": True})
+    strip_canvas_readback_edge_decorators(root)
     volatile_count = 0
     for tag in soup.find_all(True):
         for name, raw_value in list(tag.attrs.items()):
@@ -157,6 +158,34 @@ def canonicalize_page_html(html: str, *, course_id: int | None = None) -> dict[s
         "volatile_url_count": volatile_count,
         "body_normalizer": BODY_NORMALIZER_VERSION,
     }
+
+
+def strip_canvas_readback_edge_decorators(root: Tag | None) -> None:
+    """Remove non-authorable account decorators Canvas adds around a Page body."""
+    if root is None:
+        return
+    while True:
+        children = [child for child in root.children if isinstance(child, Tag)]
+        if not children:
+            return
+        first = children[0]
+        if is_canvas_readback_edge_decorator(first):
+            first.decompose()
+            continue
+        last = children[-1]
+        if is_canvas_readback_edge_decorator(last):
+            last.decompose()
+            continue
+        return
+
+
+def is_canvas_readback_edge_decorator(tag: Tag) -> bool:
+    if tag.name == "link":
+        rel = {str(value).casefold() for value in (tag.get("rel") or [])}
+        return bool(tag.get("href")) and "stylesheet" in rel
+    if tag.name == "script":
+        return bool(tag.get("src")) and not tag.get_text(strip=True)
+    return False
 
 
 def load_page_source(source: Path, *, apply_css: bool = True) -> PageSource:

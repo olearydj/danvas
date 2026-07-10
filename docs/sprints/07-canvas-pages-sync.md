@@ -158,6 +158,13 @@ then validate the result with the existing Canvas Page compatibility profile.
 Unsafe or unsupported elements, attributes, styles, or URLs block conversion
 rather than being silently dropped.
 
+Canvas account customizations may prepend or append non-authorable stylesheet
+`link` and empty external `script` elements to API readback. The shared Page
+normalizer removes those elements only when they are direct outer-edge children
+of the returned fragment. Sync and export never persist them; authored sources
+still reject `link` and `script`, and the normalizer does not remove unsupported
+elements embedded within meaningful Page content.
+
 Apply Sprint 6's shared Page URL canonicalizer before conversion. Stable Canvas
 course/file links are written in their canonical root-relative form. Verifier
 parameters, signed query values, embedded credentials, and expiring URLs are

@@ -270,8 +270,10 @@ metadata snapshot for local lookup and comparison; it covers assignments,
 assignment groups, files, announcements, discussions, quiz shells, and
 group-category summaries, plus Page metadata and normalized body hashes. Snapshot
 schema version 4 never stores Page bodies, download verifier URLs, or student
-data. If the project is a git repo, `danvas init` adds `.danvas/course.json` to
-`.gitignore`.
+data. Page hashing also ignores non-authorable account stylesheet/script
+decorators that Canvas injects around API readback while continuing to reject
+those elements in authored Page sources. If the project is a git repo, `danvas
+init` adds `.danvas/course.json` to `.gitignore`.
 
 Refresh the generated snapshot without changing Canvas; `--diff` summarizes what
 changed since the previous snapshot:

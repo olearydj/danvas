@@ -1020,6 +1020,9 @@ Recommended goals:
    - Normalize insignificant differences introduced by Canvas, such as safe
      attribute ordering or Rich Content Editor metadata, without hiding removed
      elements, changed links, missing IDs, or meaningful text differences.
+     Direct outer-edge account stylesheet/script decorators injected around API
+     readback are ignored for hashing and conversion, but are never persisted
+     into authored sources or treated as allowed Page markup.
    - Pin or document the Markdown rendering profile so a danvas upgrade does not
      silently rewrite every Page. Renderer-version changes should be visible in
      dry-run reports.
