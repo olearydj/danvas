@@ -77,6 +77,22 @@ The six complexity-only refactors remain deferred. The combined implementation
 is published on `origin/main`, passes CI, and is released as `v0.7.1`; the global
 CLI is installed from the tagged release.
 
+## 0.7.2 Page Comparison Regression Patch
+
+A post-release adversarial audit found three regressions introduced by the 0.7.1
+Page correctness remediation. The 0.7.2 patch:
+
+- compares date-only and timezone-equivalent `publish_at` values semantically in
+  both Page planning and verification
+- keeps duplicate unbound local Pages classified as `local-only` when Canvas has
+  no title candidate, while retaining ambiguity protection when a candidate exists
+- uses the same conflict-aware Page identity resolution in status pre-scan and
+  main comparison so a rejected binding cannot orphan an eligible Canvas row
+
+The patch is published on `origin/main`, passes CI with all 320 tests, and is
+released as `v0.7.2`; the global CLI is installed from the tagged release.
+Complexity-only refactors remain deferred.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as

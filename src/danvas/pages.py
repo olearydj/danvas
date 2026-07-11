@@ -10,7 +10,7 @@ import tempfile
 import unicodedata
 from contextlib import suppress
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
@@ -603,7 +603,7 @@ def page_plan(
                         "after_sha256": local.body_sha256,
                     }
                 continue
-            if current != target:
+            if not page_metadata_values_match(field, current, target):
                 changes[field] = {"before": current, "after": target}
     return {
         "status": "blocked" if local.unresolved_assets else ("no_change" if before is not None and not changes else "planned"),
@@ -672,7 +672,9 @@ def compare_page(
     if bool(canvas_page.get("front_page")) != bool(local.metadata["front_page"]):
         differences.append("front_page")
     for field in ("editing_roles", "publish_at"):
-        if field in local.metadata and canvas_page.get(field) != local.metadata[field]:
+        if field in local.metadata and not page_metadata_values_match(
+            field, canvas_page.get(field), local.metadata[field]
+        ):
             differences.append(field)
     actual_anchors, actual_links = fragment_anchors(actual_body)
     if local.anchors != actual_anchors or local.local_links != actual_links:
@@ -685,6 +687,33 @@ def compare_page(
         "expected_anchors": local.anchors,
         "actual_anchors": actual_anchors,
     }
+
+
+def page_metadata_values_match(field: str, canvas_value: Any, local_value: Any) -> bool:
+    if field != "publish_at":
+        return canvas_value == local_value
+    return publish_at_values_match(canvas_value, local_value)
+
+
+def publish_at_values_match(canvas_value: Any, local_value: Any) -> bool:
+    canvas_text = str(canvas_value or "").strip()
+    local_text = str(local_value or "").strip()
+    if not canvas_text or not local_text:
+        return canvas_text == local_text
+
+    canvas_date_only = re.fullmatch(r"\d{4}-\d{2}-\d{2}", canvas_text)
+    local_date_only = re.fullmatch(r"\d{4}-\d{2}-\d{2}", local_text)
+    try:
+        canvas_datetime = datetime.fromisoformat(canvas_text.replace("Z", "+00:00"))
+        local_datetime = datetime.fromisoformat(local_text.replace("Z", "+00:00"))
+    except ValueError:
+        return canvas_text == local_text
+
+    if canvas_date_only or local_date_only:
+        return canvas_datetime.date() == local_datetime.date()
+    if canvas_datetime.tzinfo is None or local_datetime.tzinfo is None:
+        return canvas_datetime == local_datetime
+    return canvas_datetime.astimezone(UTC) == local_datetime.astimezone(UTC)
 
 
 def resolve_page_identity(local: PageSource, args: Any) -> dict[str, Any]:

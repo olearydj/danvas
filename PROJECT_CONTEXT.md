@@ -60,13 +60,17 @@ their full text.
 `danvas.__version__` read installed package metadata. Bump the minor version for
 feature sprints or new commands, and the patch version for fixes.
 
-Current tagged release: 0.7.1. The annotated `v0.7.1` tag marks the verified
-Sprint 8/9 audit-remediation release. It implements private report
+Current tagged release: 0.7.2. The annotated `v0.7.2` tag marks the verified
+Page-comparison regression patch on top of the Sprint 8/9 audit-remediation
+release. The 0.7.1 baseline implements private report
 permissions, Canvas Files download containment, diagnostic sanitization, Page
 diff/identity/update correctness, malformed-source isolation, and assignment
 audit edge-case fixes. A final audit-cleanup pass adds Panopto timestamp
 resilience, closes documentation drift, and replaces brittle/implicit tests.
-Ruff, ty, and all 312 tests pass locally and in CI. The global CLI is installed
+The 0.7.2 patch normalizes Page `publish_at` comparisons, preserves duplicate
+local-only Page classification when Canvas has no candidate, and prevents
+invalid identity conflicts from reserving Canvas rows during status matching.
+Ruff, ty, and all 320 tests pass locally and in CI. The global CLI is installed
 from the tagged release.
 
 Recommended local checks:

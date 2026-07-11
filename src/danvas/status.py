@@ -209,19 +209,14 @@ def compare_pages(
     for record in local_records:
         if record.get("error"):
             continue
-        entry = find_source_entry(source_map, kind="page", path=str(record["path"]))
-        canvas_entry = entry.get("canvas") if isinstance(entry, dict) else {}
-        if not isinstance(canvas_entry, dict):
-            canvas_entry = {}
-        metadata = record.get("source_metadata") or {}
-        frontmatter = metadata.get("page_id", metadata.get("canvas_id"))
-        map_identity = canvas_entry.get("id", canvas_entry.get("url"))
-        identity = frontmatter if frontmatter not in (None, "") else map_identity
+        frontmatter, map_identity, identity, identity_conflict = page_record_identity(
+            record, source_map
+        )
         if identity in (None, ""):
             unbound_title_counts[
                 normalize_title(str(record.get("title") or ""))
             ] += 1
-        else:
+        elif not identity_conflict:
             claimed = by_identity.get(str(identity))
             if claimed is not None:
                 claimed_canvas_rows.add(id(claimed))
@@ -241,28 +236,21 @@ def compare_pages(
             item["details"].append(record["error"])
             items.append(item)
             continue
-        entry = find_source_entry(source_map, kind="page", path=str(record["path"]))
-        canvas_entry = entry.get("canvas") if isinstance(entry, dict) else {}
-        if not isinstance(canvas_entry, dict):
-            canvas_entry = {}
-        metadata = record.get("source_metadata") or {}
-        frontmatter = metadata.get("page_id", metadata.get("canvas_id"))
-        map_identity = canvas_entry.get("id", canvas_entry.get("url"))
+        frontmatter, map_identity, identity, identity_conflict = page_record_identity(
+            record, source_map
+        )
         if source_map_error and frontmatter in (None, ""):
             item["classification"] = "unsupported comparison"
             item["details"].append(source_map_error)
             items.append(item)
             continue
-        if frontmatter not in (None, "") and map_identity not in (None, ""):
-            map_values = {str(canvas_entry.get("id") or ""), str(canvas_entry.get("url") or "")}
-            if str(frontmatter) not in map_values:
-                item["classification"] = "unsupported comparison"
-                item["details"].append(
-                    f"front matter identity {frontmatter!r} conflicts with source-map identity"
-                )
-                items.append(item)
-                continue
-        identity = frontmatter if frontmatter not in (None, "") else map_identity
+        if identity_conflict:
+            item["classification"] = "unsupported comparison"
+            item["details"].append(
+                f"front matter identity {frontmatter!r} conflicts with source-map identity"
+            )
+            items.append(item)
+            continue
         row = by_identity.get(str(identity)) if identity not in (None, "") else None
         if identity not in (None, "") and row is None:
             item["classification"] = "local-only"
@@ -277,6 +265,10 @@ def compare_pages(
                 for candidate in by_title.get(normalized_title, [])
                 if id(candidate) not in claimed_canvas_rows
             ]
+            if not candidates:
+                item["classification"] = "local-only"
+                items.append(item)
+                continue
             if unbound_title_counts[normalized_title] > 1:
                 item["classification"] = "unsupported comparison"
                 item["details"].append(
@@ -293,10 +285,7 @@ def compare_pages(
                 matched.update(id(candidate) for candidate in candidates)
                 items.append(item)
                 continue
-            else:
-                item["classification"] = "local-only"
-                items.append(item)
-                continue
+        assert row is not None
         matched.add(id(row))
         item["canvas_id"] = row.get("page_id")
         item["canvas_url"] = row.get("url") or ""
@@ -357,6 +346,26 @@ def compare_pages(
                 }
             )
     return items
+
+
+def page_record_identity(
+    record: dict[str, Any], source_map: dict[str, Any]
+) -> tuple[Any, Any, Any, bool]:
+    entry = find_source_entry(source_map, kind="page", path=str(record["path"]))
+    canvas_entry = entry.get("canvas") if isinstance(entry, dict) else {}
+    if not isinstance(canvas_entry, dict):
+        canvas_entry = {}
+    metadata = record.get("source_metadata") or {}
+    frontmatter = metadata.get("page_id", metadata.get("canvas_id"))
+    map_identity = canvas_entry.get("id", canvas_entry.get("url"))
+    map_values = {str(canvas_entry.get("id") or ""), str(canvas_entry.get("url") or "")}
+    conflict = (
+        frontmatter not in (None, "")
+        and map_identity not in (None, "")
+        and str(frontmatter) not in map_values
+    )
+    identity = frontmatter if frontmatter not in (None, "") else map_identity
+    return frontmatter, map_identity, identity, conflict
 
 
 def comparable_assignments(snapshot: dict[str, Any]) -> list[dict[str, Any]]:

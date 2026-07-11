@@ -292,6 +292,23 @@ def test_page_title_candidates_require_unique_unbound_local_source(tmp_path: Pat
     assert all("2 unbound local Pages" in item["details"][0] for item in local_items)
 
 
+def test_duplicate_local_page_titles_without_canvas_match_remain_local_only(
+    tmp_path: Path,
+) -> None:
+    for name in ("one", "two"):
+        write(
+            tmp_path / f"content/pages/{name}.md",
+            "---\ntitle: New Page\npublished: false\n---\n\nBody.\n",
+        )
+    snapshot = build_snapshot()
+    snapshot["pages"] = []
+
+    items = build_status(snapshot, tmp_path, now=NOW)["sections"]["pages"]
+
+    assert len(items) == 2
+    assert {item["classification"] for item in items} == {"local-only"}
+
+
 def test_page_title_candidate_excludes_canvas_page_claimed_by_stable_identity(
     tmp_path: Path,
 ) -> None:
@@ -324,6 +341,65 @@ def test_page_title_candidate_excludes_canvas_page_claimed_by_stable_identity(
 
     assert unbound["classification"] == "local-only"
     assert unbound["canvas_id"] is None
+
+
+def test_conflicting_identity_does_not_orphan_unbound_title_candidate(
+    tmp_path: Path,
+) -> None:
+    conflicting = tmp_path / "content/pages/conflicting.md"
+    write(
+        conflicting,
+        "---\ntitle: Other\npage_id: 100\npublished: false\n---\n\nOther.\n",
+    )
+    unbound = tmp_path / "content/pages/unbound.md"
+    write(
+        unbound,
+        "---\ntitle: Candidate\npublished: false\n---\n\nCandidate.\n",
+    )
+    source_map_dir = tmp_path / ".danvas"
+    source_map_dir.mkdir()
+    (source_map_dir / "source-map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "course_id": 101,
+                "sources": [
+                    {
+                        "kind": "page",
+                        "path": conflicting.relative_to(tmp_path).as_posix(),
+                        "canvas": {"id": 200, "url": "other", "title": "Other"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    snapshot = build_snapshot()
+    snapshot["pages"] = [
+        {
+            "page_id": 100,
+            "url": "candidate",
+            "title": "Candidate",
+            "published": False,
+            "front_page": False,
+            "body_sha256": load_page_source(unbound).body_sha256,
+            "body_hash_status": "available",
+            "body_normalizer": BODY_NORMALIZER_VERSION,
+        }
+    ]
+
+    items = build_status(snapshot, tmp_path, now=NOW)["sections"]["pages"]
+    conflict_item = next(
+        item for item in items if item["local_path"].endswith("conflicting.md")
+    )
+    candidate_item = next(
+        item for item in items if item["local_path"].endswith("unbound.md")
+    )
+
+    assert conflict_item["classification"] == "unsupported comparison"
+    assert candidate_item["classification"] == "probable match, unbound"
+    assert candidate_item["canvas_id"] == 100
+    assert not any(item["classification"] == "Canvas-only" for item in items)
 
 
 def test_build_status_reports_page_body_and_metadata_drift(tmp_path: Path) -> None:

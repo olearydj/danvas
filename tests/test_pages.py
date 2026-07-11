@@ -17,11 +17,13 @@ from danvas.pages import (
     command_pages_sync,
     command_pages_update,
     command_pages_verify,
+    compare_page,
     install_source_no_clobber,
     load_page_source,
     normalize_html_fragment,
     page_plan,
     page_target_plan,
+    publish_at_values_match,
     render_synced_page_source,
 )
 
@@ -314,6 +316,48 @@ def test_update_applies_declared_editing_roles_and_publish_at(
         }
     ]
     command_pages_verify(args(source, tmp_path, page_id="example-page"))
+
+
+@pytest.mark.parametrize(
+    ("canvas_value", "local_value", "matches"),
+    [
+        ("2026-08-01T00:00:00Z", "2026-08-01", True),
+        ("2026-08-01T12:00:00Z", "2026-08-01T07:00:00-05:00", True),
+        ("2026-08-02T00:00:00Z", "2026-08-01", False),
+        (None, None, True),
+        (None, "2026-08-01", False),
+    ],
+)
+def test_publish_at_values_match_canvas_equivalents(
+    canvas_value: object, local_value: object, matches: bool
+) -> None:
+    assert publish_at_values_match(canvas_value, local_value) is matches
+
+
+def test_page_plan_and_verify_normalize_unquoted_publish_date(tmp_path: Path) -> None:
+    source = write_source(
+        tmp_path / "page.md",
+        "Body",
+        extra="publish_at: 2026-08-01\n",
+    )
+    local = load_page_source(source)
+    canvas = {
+        "page_id": 101,
+        "url": "example-page",
+        "title": "Example Page",
+        "body": local.html,
+        "published": False,
+        "front_page": False,
+        "publish_at": "2026-08-01T00:00:00Z",
+    }
+
+    plan = page_plan(local, action="update", before=canvas)
+    verification = compare_page(local, canvas)
+
+    assert local.metadata["publish_at"] == "2026-08-01"
+    assert plan["status"] == "no_change"
+    assert verification["status"] == "matches"
+    assert "publish_at" not in verification["differences"]
 
 
 def test_update_refuses_title_or_front_page_changes(
