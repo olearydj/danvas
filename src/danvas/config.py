@@ -431,8 +431,9 @@ def diff_snapshots(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any] |
         return None
     sections: dict[str, dict[str, Any]] = {}
     for section, label_key, fields in DIFF_SECTIONS:
-        old_rows = rows_by_id(old.get(section) or [])
-        new_rows = rows_by_id(new.get(section) or [])
+        identity_key = "page_id" if section == "pages" else "id"
+        old_rows = rows_by_id(old.get(section) or [], identity_key=identity_key)
+        new_rows = rows_by_id(new.get(section) or [], identity_key=identity_key)
         added = sorted(
             str(new_rows[key].get(label_key) or key) for key in new_rows.keys() - old_rows.keys()
         )
@@ -441,11 +442,24 @@ def diff_snapshots(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any] |
         )
         changed = []
         for key in sorted(old_rows.keys() & new_rows.keys(), key=str):
-            changes = [
-                f"{field}: {old_rows[key].get(field)!r} -> {new_rows[key].get(field)!r}"
-                for field in fields
-                if old_rows[key].get(field) != new_rows[key].get(field)
-            ]
+            changes = []
+            for field in fields:
+                if section == "pages" and field == "body_sha256":
+                    old_normalizer = old_rows[key].get("body_normalizer")
+                    new_normalizer = new_rows[key].get("body_normalizer")
+                    if not (
+                        old_normalizer == new_normalizer == BODY_NORMALIZER_VERSION
+                    ):
+                        changes.append(
+                            "body_sha256: comparison unavailable "
+                            "(normalizer mismatch; refresh required)"
+                        )
+                        continue
+                if old_rows[key].get(field) != new_rows[key].get(field):
+                    changes.append(
+                        f"{field}: {old_rows[key].get(field)!r} -> "
+                        f"{new_rows[key].get(field)!r}"
+                    )
             if changes:
                 changed.append(
                     {
@@ -552,8 +566,14 @@ def render_refresh_diff_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def rows_by_id(rows: list[dict[str, Any]]) -> dict[Any, dict[str, Any]]:
-    return {row.get("id"): row for row in rows if row.get("id") is not None}
+def rows_by_id(
+    rows: list[dict[str, Any]], *, identity_key: str = "id"
+) -> dict[Any, dict[str, Any]]:
+    return {
+        row.get(identity_key): row
+        for row in rows
+        if row.get(identity_key) is not None
+    }
 
 
 def render_snapshot_diff(report: dict[str, Any] | None) -> list[str]:

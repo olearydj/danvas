@@ -159,6 +159,44 @@ def test_submissions_feedback_uploads_matched_files(
     assert uploads == [(4024825, "4024825-feedback.pdf", "Graded.")]
 
 
+def test_submissions_feedback_sanitizes_upload_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    roster = tmp_path / "roster.csv"
+    write_roster(roster)
+    feedback_dir = tmp_path / "feedback"
+    feedback_dir.mkdir()
+    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"x")
+
+    class FailingSubmission:
+        def upload_comment(self, file: str, comment: str) -> None:
+            raise RuntimeError(
+                "POST https://canvas.test/upload?verifier=secret access_token=abc123"
+            )
+
+    class FailingAssignment:
+        def get_submission(self, canvas_id: int) -> FailingSubmission:
+            return FailingSubmission()
+
+    class FailingCanvas:
+        def get_course(self, course_id: int) -> FailingCanvas:
+            return self
+
+        def get_assignment(self, assignment_id: int) -> FailingAssignment:
+            return FailingAssignment()
+
+    monkeypatch.setattr("danvas.submissions.canvas_from_args", lambda args: FailingCanvas())
+
+    with pytest.raises(SystemExit):
+        command_submissions_feedback(feedback_args(roster, feedback_dir))
+
+    output = capsys.readouterr().out
+    assert "FAILED RuntimeError" in output
+    assert "secret" not in output
+    assert "abc123" not in output
+    assert "https://" not in output
+
+
 class FakeAttachment:
     id = 700
     filename = "workbook.xlsx"

@@ -567,14 +567,42 @@ def page_record(page: Any) -> dict[str, Any]:
     }
 
 
-def page_plan(local: PageSource, *, action: str, before: dict[str, Any] | None = None) -> dict[str, Any]:
+def page_plan(
+    local: PageSource,
+    *,
+    action: str,
+    before: dict[str, Any] | None = None,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
+) -> dict[str, Any]:
     changes: dict[str, dict[str, Any]] = {}
     if before is not None:
-        expected = {"body": local.html, "published": bool(local.metadata["published"])}
+        expected = {
+            "body": local.html,
+            "published": bool(local.metadata["published"]),
+        }
+        for field in ("editing_roles", "publish_at"):
+            if field in local.metadata:
+                expected[field] = local.metadata[field]
         for field, target in expected.items():
             current = before.get(field)
             if field == "body":
-                current = normalize_html_fragment(str(current or ""))
+                canonical = canonicalize_page_html(
+                    str(current or ""),
+                    course_id=course_id,
+                    canvas_origin=canvas_origin,
+                )
+                if canonical["body_hash_status"] != "available":
+                    changes[field] = {
+                        "before_status": "blocked_volatile_url",
+                        "after_sha256": local.body_sha256,
+                    }
+                elif canonical["html"] != target:
+                    changes[field] = {
+                        "before_sha256": canonical["body_sha256"],
+                        "after_sha256": local.body_sha256,
+                    }
+                continue
             if current != target:
                 changes[field] = {"before": current, "after": target}
     return {
@@ -641,6 +669,11 @@ def compare_page(
         differences.append("title")
     if "published" in local.metadata and bool(canvas_page.get("published")) != bool(local.metadata["published"]):
         differences.append("published")
+    if bool(canvas_page.get("front_page")) != bool(local.metadata["front_page"]):
+        differences.append("front_page")
+    for field in ("editing_roles", "publish_at"):
+        if field in local.metadata and canvas_page.get(field) != local.metadata[field]:
+            differences.append(field)
     actual_anchors, actual_links = fragment_anchors(actual_body)
     if local.anchors != actual_anchors or local.local_links != actual_links:
         differences.append("anchors")
@@ -1527,7 +1560,13 @@ def command_pages_update(args: Any) -> None:
         raise SystemExit("Page update refuses title/slug changes; local title does not match Canvas.")
     if bool(before["front_page"]) != bool(local.metadata["front_page"]):
         raise SystemExit("Page update refuses front-page changes.")
-    plan = page_plan(local, action="update", before=before)
+    plan = page_plan(
+        local,
+        action="update",
+        before=before,
+        course_id=args.course_id,
+        canvas_origin=getattr(args, "api_url", None),
+    )
     plan["canvas_id"] = before["page_id"]
     plan["canvas_url"] = before["url"]
     if args.dry_run or plan["status"] in {"blocked", "no_change"}:
@@ -1537,7 +1576,15 @@ def command_pages_update(args: Any) -> None:
             raise SystemExit(1)
         return
     print_mutation_banner("update Page body/publication", {"course": args.course_id, "page": before["page_id"], "title": before["title"], "published": local.metadata["published"], "source": local.source})
-    page.edit(wiki_page={"body": local.html, "published": bool(local.metadata["published"]), "notify_of_update": bool(local.metadata["notify_of_update"])})
+    update_payload = {
+        "body": local.html,
+        "published": bool(local.metadata["published"]),
+        "notify_of_update": bool(local.metadata["notify_of_update"]),
+    }
+    for field in ("editing_roles", "publish_at"):
+        if field in local.metadata:
+            update_payload[field] = local.metadata[field]
+    page.edit(wiki_page=update_payload)
     readback = page_record(course.get_page(before["url"]))
     verification = compare_page(
         local,

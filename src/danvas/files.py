@@ -175,6 +175,7 @@ def command_files_download(args: Any) -> None:
     course = canvas.get_course(args.course_id)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    resolved_output_dir = output_dir.resolve()
 
     folders = list(course.get_folders())
     folders_by_id = {int(folder.id): folder for folder in folders if getattr(folder, "id", None)}
@@ -190,7 +191,7 @@ def command_files_download(args: Any) -> None:
             relative_path = relative_path.with_name(
                 f"{relative_path.stem}-{record['id']}{relative_path.suffix}"
             )
-        target = output_dir / relative_path
+        target = contained_download_target(resolved_output_dir, relative_path)
         skipped = target.exists() and not args.overwrite
         if not skipped:
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -198,7 +199,7 @@ def command_files_download(args: Any) -> None:
         rows.append(
             {
                 **record,
-                "download_path": target.relative_to(output_dir).as_posix(),
+                "download_path": target.relative_to(resolved_output_dir).as_posix(),
                 "deduplicated": deduplicated,
                 "status": "skipped_exists" if skipped else "downloaded",
             }
@@ -319,7 +320,7 @@ def command_files_upload(args: Any) -> None:
                 on_duplicate=args.on_duplicate,
                 content_type=row["content_type"],
             )
-        except Exception as exc:  # pragma: no cover - exact CanvasAPI exceptions vary.
+        except Exception as exc:  # noqa: BLE001 - sanitize per-file Canvas failures.
             ok = False
             response = {"error": safe_upload_error_text(f"{type(exc).__name__}: {exc}")}
         result = upload_result_row(row, ok=bool(ok), response=response, folder=folder)
@@ -916,7 +917,17 @@ def download_relative_path(record: dict[str, Any]) -> Path:
 def safe_path_component(value: str) -> str:
     value = value.replace("\\", "/").split("/")[-1]
     value = re.sub(r'[<>:"|?*\x00-\x1f]', "", value).strip()
-    return value or "untitled"
+    return "untitled" if value in {"", ".", ".."} else value
+
+
+def contained_download_target(output_dir: Path, relative_path: Path) -> Path:
+    root = output_dir.resolve()
+    target = (root / relative_path).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError as exc:
+        raise SystemExit("Canvas file path must stay inside the download directory.") from exc
+    return target
 
 
 def canvas_file_record(file_obj: Any, folders_by_id: dict[int, Any]) -> dict[str, Any]:

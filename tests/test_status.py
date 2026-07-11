@@ -262,6 +262,70 @@ def test_build_status_compares_bound_pages_and_keeps_title_matches_unbound(
     assert "--page-id 602" in candidate["next_action"]
 
 
+def test_page_title_candidates_require_unique_unbound_local_source(tmp_path: Path) -> None:
+    for name in ("one", "two"):
+        write(
+            tmp_path / f"content/pages/{name}.md",
+            "---\ntitle: Duplicate\npublished: false\n---\n\nBody.\n",
+        )
+    snapshot = build_snapshot()
+    snapshot["pages"] = [
+        {
+            "page_id": 610,
+            "url": "duplicate",
+            "title": "Duplicate",
+            "published": False,
+            "front_page": False,
+            "body_sha256": "hash",
+            "body_hash_status": "available",
+            "body_normalizer": BODY_NORMALIZER_VERSION,
+        }
+    ]
+
+    items = build_status(snapshot, tmp_path, now=NOW)["sections"]["pages"]
+    local_items = [item for item in items if item["local_path"]]
+
+    assert len(local_items) == 2
+    assert {item["classification"] for item in local_items} == {
+        "unsupported comparison"
+    }
+    assert all("2 unbound local Pages" in item["details"][0] for item in local_items)
+
+
+def test_page_title_candidate_excludes_canvas_page_claimed_by_stable_identity(
+    tmp_path: Path,
+) -> None:
+    write(
+        tmp_path / "content/pages/bound.md",
+        "---\ntitle: Shared\npage_id: 611\npublished: false\n---\n\nBody.\n",
+    )
+    write(
+        tmp_path / "content/pages/unbound.md",
+        "---\ntitle: Shared\npublished: false\n---\n\nOther.\n",
+    )
+    snapshot = build_snapshot()
+    snapshot["pages"] = [
+        {
+            "page_id": 611,
+            "url": "shared",
+            "title": "Shared",
+            "published": False,
+            "front_page": False,
+            "body_sha256": load_page_source(
+                tmp_path / "content/pages/bound.md"
+            ).body_sha256,
+            "body_hash_status": "available",
+            "body_normalizer": BODY_NORMALIZER_VERSION,
+        }
+    ]
+
+    items = build_status(snapshot, tmp_path, now=NOW)["sections"]["pages"]
+    unbound = next(item for item in items if item["local_path"].endswith("unbound.md"))
+
+    assert unbound["classification"] == "local-only"
+    assert unbound["canvas_id"] is None
+
+
 def test_build_status_reports_page_body_and_metadata_drift(tmp_path: Path) -> None:
     source = tmp_path / "content/pages/drift.md"
     write(

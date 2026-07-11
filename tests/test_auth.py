@@ -7,7 +7,12 @@ from types import SimpleNamespace
 import pytest
 from secretpath import SecretMiss, clear_cache
 
-from danvas.auth import build_auth_doctor_report, command_auth_doctor, resolve_api_key
+from danvas.auth import (
+    build_auth_doctor_report,
+    command_auth_doctor,
+    resolve_api_key,
+    safe_auth_error,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -74,6 +79,14 @@ def test_resolve_api_key_exits_with_safe_message(monkeypatch: pytest.MonkeyPatch
     assert "env" in message
     assert "op://" not in message
     assert "CANVAS_API_KEY" not in message
+
+
+@pytest.mark.parametrize("marker", ["token=", "verifier=", "access_token="])
+def test_safe_auth_error_redacts_credentials(marker: str) -> None:
+    message = safe_auth_error(RuntimeError(f"request failed {marker}abc123 trailing"))
+
+    assert "abc123" not in message
+    assert f"{marker}[redacted]" in message
 
 
 def test_auth_doctor_reports_canvas_secret_without_canvas_ping(

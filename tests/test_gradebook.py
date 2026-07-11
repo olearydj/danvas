@@ -38,3 +38,24 @@ def test_audit_gradebook_reconstructs_weighted_total(tmp_path: Path) -> None:
     }
     assert payload["reconstruction"]["status"] == "matches"
     assert payload["reconstruction"]["max_abs_diff"] == 0
+
+
+def test_audit_gradebook_detects_reconstruction_difference(tmp_path: Path) -> None:
+    path = tmp_path / "gradebook.csv"
+    write_gradebook_fixture(path)
+    text = path.read_text(encoding="utf-8").replace('"Doe, Jane",1,90,90,80,85', '"Doe, Jane",1,90,90,80,70')
+    path.write_text(text, encoding="utf-8")
+    gradebook = CanvasGradebook.read(path, exclude_patterns=["^Student, Test$"])
+
+    payload = audit_gradebook(
+        gradebook,
+        policy={
+            "final_score_column": "Unposted Final Score",
+            "weights": {"Homework": 50, "Tests": 50, "Missing": 10},
+        },
+    )
+
+    assert payload["missing_weight_groups"] == ["Missing"]
+    assert payload["reconstruction"]["status"] == "differs"
+    assert payload["reconstruction"]["max_abs_diff"] == 15
+    assert payload["reconstruction"]["rows_over_tolerance"] == 1

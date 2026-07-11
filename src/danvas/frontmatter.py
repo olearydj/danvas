@@ -26,9 +26,15 @@ def parse_frontmatter(text: str, source: Path, label: str) -> tuple[dict[str, An
         raise SystemExit(f"{label} source missing closing {delimiter}: {source}")
     metadata_text = "".join(lines[1:close])
     if delimiter == "+++":
-        metadata = tomllib.loads(metadata_text)
+        try:
+            metadata = tomllib.loads(metadata_text)
+        except tomllib.TOMLDecodeError as exc:
+            raise SystemExit(f"{label} TOML front matter is invalid: {source}") from exc
     else:
-        metadata = yaml.safe_load(metadata_text) or {}
+        try:
+            metadata = yaml.safe_load(metadata_text) or {}
+        except yaml.YAMLError as exc:
+            raise SystemExit(f"{label} YAML front matter is invalid: {source}") from exc
         if not isinstance(metadata, dict):
             raise SystemExit(f"{label} YAML front matter must be a mapping: {source}")
     body = "".join(lines[close + 1 :])

@@ -225,7 +225,7 @@ def command_submissions_feedback(args: Any) -> None:
             time.sleep(args.sleep_seconds)
         except Exception as exc:  # noqa: BLE001
             failed += 1
-            print(f"  {label}: FAILED {type(exc).__name__}: {exc}")
+            print(f"  {label}: FAILED {type(exc).__name__}: {safe_error(str(exc))}")
     print(f"Done. Uploaded: {success}, Failed: {failed}")
     if failed:
         raise SystemExit(1)

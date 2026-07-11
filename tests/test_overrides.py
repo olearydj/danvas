@@ -9,7 +9,11 @@ import pytest
 import yaml
 
 from danvas.assignments import command_assignments_overrides
-from danvas.overrides import private_assignment_overrides, redacted_assignment_overrides
+from danvas.overrides import (
+    load_local_override_file,
+    private_assignment_overrides,
+    redacted_assignment_overrides,
+)
 
 
 def assignment() -> Any:
@@ -57,6 +61,17 @@ def test_private_assignment_overrides_includes_member_ids() -> None:
 
     assert payload["private_student_data"] is True
     assert payload["overrides"][0]["assignees"]["canvas_user_ids"] == [10, 11]
+
+
+def test_invalid_override_yaml_does_not_echo_student_ids(tmp_path: Path) -> None:
+    path = tmp_path / "overrides.yaml"
+    path.write_text("canvas_user_ids: [123456,\n", encoding="utf-8")
+
+    payload, error = load_local_override_file(tmp_path, "overrides.yaml")
+
+    assert payload is None
+    assert error == "invalid override reference overrides.yaml: YAML parse error"
+    assert "123456" not in error
 
 
 def test_command_assignments_overrides_writes_yaml(

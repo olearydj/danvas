@@ -20,6 +20,7 @@ from danvas.pages import (
     install_source_no_clobber,
     load_page_source,
     normalize_html_fragment,
+    page_plan,
     page_target_plan,
     render_synced_page_source,
 )
@@ -168,6 +169,30 @@ def test_page_url_canonicalization_removes_canvas_verifiers_and_blocks_external_
     assert external["volatile_url_count"] == 1
 
 
+def test_page_plan_never_emits_raw_volatile_canvas_body(tmp_path: Path) -> None:
+    source = write_source(tmp_path / "page.md", "New body")
+    local = load_page_source(source, course_id=42, canvas_origin="https://canvas.test")
+
+    plan = page_plan(
+        local,
+        action="update",
+        before={
+            "body": '<img src="https://outside.test/image?X-Amz-Signature=secret">',
+            "published": False,
+        },
+        course_id=42,
+        canvas_origin="https://canvas.test",
+    )
+    serialized = json.dumps(plan)
+
+    assert plan["changes"]["body"] == {
+        "before_status": "blocked_volatile_url",
+        "after_sha256": local.body_sha256,
+    }
+    assert "secret" not in serialized
+    assert "outside.test" not in serialized
+
+
 def test_page_canonicalization_ignores_canvas_readback_edge_decorators() -> None:
     body = '<p id="content">Page body</p>'
     decorated = (
@@ -251,6 +276,42 @@ def test_update_changes_only_body_and_publication_then_verifies(
     command_pages_update(args(source, tmp_path, page_id="example-page"))
     assert course.edits == [
         {"body": "<p>New body</p>", "published": True, "notify_of_update": False}
+    ]
+    command_pages_verify(args(source, tmp_path, page_id="example-page"))
+
+
+def test_update_applies_declared_editing_roles_and_publish_at(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = write_source(
+        tmp_path / "page.md",
+        "New body",
+        extra="editing_roles: teachers,students\npublish_at: '2026-08-01T12:00:00Z'\n",
+    )
+    course = FakeCourse()
+    course.pages["example-page"] = FakePage(
+        course,
+        page_id=101,
+        url="example-page",
+        title="Example Page",
+        body="<p>Old body</p>",
+        published=False,
+        front_page=False,
+        editing_roles="teachers",
+        publish_at=None,
+    )
+    monkeypatch.setattr("danvas.pages.canvas_from_args", lambda _args: FakeCanvas(course))
+
+    command_pages_update(args(source, tmp_path, page_id="example-page"))
+
+    assert course.edits == [
+        {
+            "body": "<p>New body</p>",
+            "published": False,
+            "notify_of_update": False,
+            "editing_roles": "teachers,students",
+            "publish_at": "2026-08-01T12:00:00Z",
+        }
     ]
     command_pages_verify(args(source, tmp_path, page_id="example-page"))
 

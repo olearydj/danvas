@@ -308,6 +308,51 @@ def test_download_relative_path_strips_course_files_prefix() -> None:
     assert download_relative_path(record) == Path("Case Studies/case one.pdf")
 
 
+def test_download_relative_path_neutralizes_dot_components() -> None:
+    record = {
+        "folder_full_name": "course files/../../outside",
+        "display_name": "..",
+    }
+
+    assert download_relative_path(record) == Path("untitled/untitled/outside/untitled")
+
+
+def test_command_files_download_cannot_escape_output_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sentinel = tmp_path / "sentinel.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+    output_dir = tmp_path / "downloads"
+
+    class TraversalCourse(FakeCourse):
+        def get_folders(self) -> list[object]:
+            return [SimpleNamespace(id=9, full_name="course files/../..")]
+
+        def get_files(self) -> list[object]:
+            return [
+                FakeFile(
+                    id=99,
+                    display_name="sentinel.txt",
+                    filename="sentinel.txt",
+                    folder_id=9,
+                    size=7,
+                )
+            ]
+
+    class TraversalCanvas:
+        def get_course(self, course_id: int) -> TraversalCourse:
+            return TraversalCourse()
+
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: TraversalCanvas())
+
+    command_files_download(
+        SimpleNamespace(course_id=101, output_dir=str(output_dir), overwrite=True)
+    )
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+    assert (output_dir / "untitled" / "untitled" / "sentinel.txt").is_file()
+
+
 def test_command_files_download_writes_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

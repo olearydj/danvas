@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from danvas.sources import scan_sources
 
 
@@ -167,3 +169,24 @@ def test_scan_sources_discovers_pages_and_excludes_previews(tmp_path: Path) -> N
     assert pages[0]["metadata"] == {"published": False, "front_page": False}
     assert pages[0]["artifacts"]["body_sha256"]
     assert pages[0]["artifacts"]["anchors"] == ["links"]
+
+
+@pytest.mark.parametrize(
+    ("name", "source", "message"),
+    [
+        ("bad-yaml.md", "---\ntitle: [broken\n---\nBody\n", "YAML front matter is invalid"),
+        ("bad-toml.md", "+++\ntitle = [broken\n+++\nBody\n", "TOML front matter is invalid"),
+    ],
+)
+def test_scan_sources_isolates_malformed_front_matter(
+    tmp_path: Path, name: str, source: str, message: str
+) -> None:
+    write(tmp_path / "content/pages/good.md", "---\ntitle: Good\n---\nBody\n")
+    write(tmp_path / "content/pages" / name, source)
+
+    pages = [record for record in scan_sources(tmp_path) if record["kind"] == "page"]
+
+    assert len(pages) == 2
+    bad = next(record for record in pages if record["path"].endswith(name))
+    assert message in bad["error"]
+    assert next(record for record in pages if record["title"] == "Good")

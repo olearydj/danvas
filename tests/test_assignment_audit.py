@@ -1,6 +1,11 @@
 from pathlib import Path
 
-from danvas.assignment_audit import audit_assignment_file, render_assignment_audit_markdown
+from danvas.assignment_audit import (
+    assignment_group_weights,
+    audit_assignment_file,
+    load_assignment_snapshot,
+    render_assignment_audit_markdown,
+)
 from tests.fixtures import write_assignment_fixture
 
 
@@ -32,3 +37,26 @@ def test_assignment_audit_reports_unavailable_expected_weights(tmp_path: Path) -
     assert payload["expected_weights_status"] == "unavailable"
     assert "Expected weights unavailable" in payload["expected_weights_note"]
     assert "Expected weights unavailable" in markdown
+
+
+def test_assignment_snapshot_file_preserves_top_level_groups(tmp_path: Path) -> None:
+    path = tmp_path / "course.json"
+    path.write_text(
+        '{"assignments": [{"name": "Practice", "assignment_group_name": "Practice"}], '
+        '"assignment_groups": [{"id": 9, "name": "Practice", "group_weight": 0}]}',
+        encoding="utf-8",
+    )
+
+    snapshot = load_assignment_snapshot(path)
+
+    assert snapshot["assignment_groups"] == [
+        {"id": 9, "name": "Practice", "group_weight": 0}
+    ]
+
+
+def test_assignment_group_weights_preserves_zero_weight() -> None:
+    weights = assignment_group_weights(
+        {"assignment_groups": [{"name": "Practice", "group_weight": 0}]}
+    )
+
+    assert weights == {"Practice": 0.0}

@@ -137,8 +137,10 @@ def load_local_override_file(root: Path, reference: str) -> tuple[dict[str, Any]
         return None, f"override reference not found: {reference}"
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError) as exc:
-        return None, f"invalid override reference {reference}: {exc}"
+    except OSError as exc:
+        return None, f"invalid override reference {reference}: {type(exc).__name__}"
+    except yaml.YAMLError:
+        return None, f"invalid override reference {reference}: YAML parse error"
     if not isinstance(payload, dict):
         return None, f"override reference must contain a mapping: {reference}"
     return payload, ""

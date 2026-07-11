@@ -13,13 +13,16 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from danvas import __version__
-from danvas.utils import slugify, write_json, write_rows
+from danvas.utils import mark_private, slugify, write_json, write_rows
 
 CONFIG_DIR_NAME = ".danvas"
 CONFIG_FILE_NAME = "config.toml"
 REPORTS_DIR_NAME = "reports"
 URLISH_RE = re.compile(r"https?://\S+|[A-Za-z]+://\S+")
-SENSITIVE_VALUE_RE = re.compile(r"(?i)\b(verifier|token|secret)=([^&\s]+)")
+SENSITIVE_VALUE_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9])((?:access_)?token|verifier|secret)=([^&\s]+)"
+)
+AUTHORIZATION_RE = re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer|bearer)\s+[^\s,;]+")
 REPORT_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(\d{3})-(.+)$")
 
 
@@ -29,9 +32,16 @@ class ReportRun:
     slug: str
     created_at: dt.datetime
     manifest: dict[str, Any]
+    private_data: bool = False
     _files: list[str] = field(default_factory=list)
 
+    def protect(self, path: Path) -> None:
+        if self.private_data:
+            mark_private(path)
+
     def record_file(self, path: Path) -> None:
+        if path.exists():
+            self.protect(path)
         try:
             name = path.relative_to(self.path).as_posix()
         except ValueError:
@@ -42,12 +52,14 @@ class ReportRun:
     def write_json(self, filename: str, payload: dict[str, Any]) -> Path:
         path = self.path / filename
         write_json(path, payload)
+        self.protect(path)
         self.record_file(path)
         return path
 
     def write_rows(self, filename: str, rows: list[dict[str, Any]], fieldnames: list[str]) -> Path:
         path = self.path / filename
         write_rows(path, rows, fieldnames)
+        self.protect(path)
         self.record_file(path)
         return path
 
@@ -55,6 +67,7 @@ class ReportRun:
         path = self.path / filename
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+        self.protect(path)
         self.record_file(path)
         return path
 
@@ -65,6 +78,7 @@ class ReportRun:
         self.manifest["files"] = list(self._files)
         path = self.path / "manifest.json"
         write_json(path, self.manifest)
+        self.protect(path)
         return path
 
 
@@ -92,7 +106,7 @@ def create_report_run(
 
     if report_dir:
         path = report_dir
-        path.mkdir(parents=True, exist_ok=False)
+        path.mkdir(mode=0o700 if private_data else 0o777, parents=True, exist_ok=False)
     else:
         if report_root:
             base = report_root
@@ -102,7 +116,15 @@ def create_report_run(
             raise SystemExit(
                 "No .danvas project found for report output. Pass --report-root or --report-dir."
             )
-        path = create_sequenced_run_dir(base, report_date, report_slug)
+        path = create_sequenced_run_dir(
+            base,
+            report_date,
+            report_slug,
+            mode=0o700 if private_data else 0o777,
+        )
+
+    if private_data:
+        mark_private(path)
 
     manifest = {
         "command": command,
@@ -120,7 +142,13 @@ def create_report_run(
         "status": "running",
         "files": [],
     }
-    return ReportRun(path=path, slug=report_slug, created_at=created_at, manifest=manifest)
+    return ReportRun(
+        path=path,
+        slug=report_slug,
+        created_at=created_at,
+        manifest=manifest,
+        private_data=private_data,
+    )
 
 
 def should_write_report_run(
@@ -244,13 +272,15 @@ def slug_from_report_dir(name: str) -> str:
     return match.group(2) if match else ""
 
 
-def create_sequenced_run_dir(root: Path, report_date: str, slug: str) -> Path:
+def create_sequenced_run_dir(
+    root: Path, report_date: str, slug: str, *, mode: int = 0o777
+) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     sequence = next_sequence(root, report_date)
     while True:
         path = root / f"{report_date}-{sequence:03d}-{slug}"
         try:
-            path.mkdir(parents=True, exist_ok=False)
+            path.mkdir(mode=mode, parents=True, exist_ok=False)
             return path
         except FileExistsError:
             sequence += 1
@@ -309,4 +339,5 @@ def course_id_for_config(config_dir: Path | None) -> int | None:
 def safe_error(error: str) -> str:
     text = " ".join(str(error).split())
     text = SENSITIVE_VALUE_RE.sub(lambda match: f"{match.group(1)}=[redacted]", text)
+    text = AUTHORIZATION_RE.sub(lambda match: f"{match.group(1)} [redacted]", text)
     return URLISH_RE.sub("[url]", text)

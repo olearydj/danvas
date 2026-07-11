@@ -12,7 +12,9 @@ from danvas.reports import (
     discover_report_runs,
     latest_report_run,
     now_for_config,
+    safe_error,
 )
+from danvas.utils import mark_private
 
 
 def write_config(root: Path, timezone: str = "America/Chicago") -> None:
@@ -62,6 +64,35 @@ def test_create_report_run_writes_manifest(tmp_path: Path) -> None:
     assert manifest["files"] == ["assignment-audit.md"]
 
 
+def test_private_report_run_hardens_directory_and_files_immediately(tmp_path: Path) -> None:
+    run = create_report_run(
+        command="gradebook audit",
+        slug="gradebook-audit",
+        report_dir=tmp_path / "private-run",
+        private_data=True,
+    )
+
+    assert run.path.stat().st_mode & 0o077 == 0
+    json_path = run.write_json("audit.json", {"student": "Example"})
+    text_path = run.write_text("audit.md", "# Private\n")
+    rows_path = run.write_rows("audit.csv", [{"student": "Example"}], ["student"])
+    for path in (json_path, text_path, rows_path):
+        assert path.stat().st_mode & 0o077 == 0
+
+    manifest_path = run.finish()
+    assert manifest_path.stat().st_mode & 0o077 == 0
+
+
+def test_mark_private_removes_only_group_and_other_permissions(tmp_path: Path) -> None:
+    path = tmp_path / "private.txt"
+    path.write_text("private", encoding="utf-8")
+    path.chmod(0o746)
+
+    mark_private(path)
+
+    assert path.stat().st_mode & 0o777 == 0o700
+
+
 def test_create_report_run_uses_config_course_id_when_omitted(tmp_path: Path) -> None:
     write_config(tmp_path)
 
@@ -89,6 +120,22 @@ def test_report_run_can_record_failed_status(tmp_path: Path) -> None:
     assert "secret-token" not in manifest["error"]
     assert "token=abc" not in manifest["error"]
     assert "[url]" in manifest["error"]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "access_token=abc123",
+        "TOKEN=abc123",
+        "Authorization: Bearer abc123",
+        "bearer abc123",
+    ],
+)
+def test_safe_error_redacts_bare_credentials(value: str) -> None:
+    sanitized = safe_error(f"failed with {value} afterward")
+
+    assert "abc123" not in sanitized
+    assert "afterward" in sanitized
 
 
 def test_create_report_run_refuses_existing_exact_report_dir(tmp_path: Path) -> None:

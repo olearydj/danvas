@@ -20,13 +20,15 @@ def load_assignment_snapshot(path: Path) -> dict[str, Any]:
     else:
         payload = json.loads(path.read_text(encoding="utf-8"))
         assignments = payload if isinstance(payload, list) else payload.get("assignments", [])
-        groups_by_name: dict[str, dict[str, Any]] = {}
-        for assignment in assignments:
-            group = assignment.get("assignment_group") or {}
-            name = group.get("name") or assignment.get("assignment_group_name")
-            if name and name not in groups_by_name:
-                groups_by_name[name] = group or {"name": name}
-        groups = list(groups_by_name.values())
+        groups = [] if isinstance(payload, list) else payload.get("assignment_groups", [])
+        if not groups:
+            groups_by_name: dict[str, dict[str, Any]] = {}
+            for assignment in assignments:
+                group = assignment.get("assignment_group") or {}
+                name = group.get("name") or assignment.get("assignment_group_name")
+                if name and name not in groups_by_name:
+                    groups_by_name[name] = group or {"name": name}
+            groups = list(groups_by_name.values())
     return {"source": str(path), "assignments": assignments, "assignment_groups": groups}
 
 
@@ -34,7 +36,11 @@ def assignment_group_weights(snapshot: dict[str, Any]) -> dict[str, float]:
     weights = {}
     for group in snapshot.get("assignment_groups") or []:
         name = group.get("name")
-        weight = group.get("group_weight") or group.get("weight")
+        weight = (
+            group.get("group_weight")
+            if "group_weight" in group
+            else group.get("weight")
+        )
         if name and weight is not None:
             weights[str(name)] = float(weight)
     return weights

@@ -275,6 +275,99 @@ def test_diff_snapshots_reports_added_removed_changed() -> None:
     assert "announcements" not in sections
 
 
+def test_diff_snapshots_tracks_pages_by_page_id() -> None:
+    old = {
+        "schema_version": 4,
+        "generated_at": "2026-07-01T00:00:00Z",
+        "pages": [
+            {
+                "page_id": 1,
+                "title": "Changed",
+                "published": False,
+                "body_sha256": "old",
+                "body_normalizer": config.BODY_NORMALIZER_VERSION,
+            },
+            {
+                "page_id": 2,
+                "title": "Removed",
+                "published": False,
+                "body_sha256": "same",
+                "body_normalizer": config.BODY_NORMALIZER_VERSION,
+            },
+        ],
+    }
+    new = {
+        "schema_version": 4,
+        "generated_at": "2026-07-02T00:00:00Z",
+        "pages": [
+            {
+                "page_id": 1,
+                "title": "Changed",
+                "published": True,
+                "body_sha256": "new",
+                "body_normalizer": config.BODY_NORMALIZER_VERSION,
+            },
+            {
+                "page_id": 3,
+                "title": "Added",
+                "published": False,
+                "body_sha256": "same",
+                "body_normalizer": config.BODY_NORMALIZER_VERSION,
+            },
+        ],
+    }
+
+    report = config.diff_snapshots(old, new)
+
+    assert report is not None
+    pages = report["sections"]["pages"]
+    assert pages["added"] == ["Added"]
+    assert pages["removed"] == ["Removed"]
+    assert pages["changed"] == [
+        {
+            "label": "Changed",
+            "changes": ["published: False -> True", "body_sha256: 'old' -> 'new'"],
+        }
+    ]
+
+
+def test_diff_snapshots_does_not_compare_page_hashes_across_normalizers() -> None:
+    old = {
+        "schema_version": 4,
+        "generated_at": "2026-07-01T00:00:00Z",
+        "pages": [
+            {
+                "page_id": 1,
+                "title": "Page",
+                "body_sha256": "old",
+                "body_normalizer": "pages-html-v3",
+            }
+        ],
+    }
+    new = {
+        "schema_version": 4,
+        "generated_at": "2026-07-02T00:00:00Z",
+        "pages": [
+            {
+                "page_id": 1,
+                "title": "Page",
+                "body_sha256": "new",
+                "body_normalizer": config.BODY_NORMALIZER_VERSION,
+            }
+        ],
+    }
+
+    report = config.diff_snapshots(old, new)
+
+    assert report is not None
+    changes = report["sections"]["pages"]["changed"][0]["changes"]
+    assert changes == [
+        "body_sha256: comparison unavailable (normalizer mismatch; refresh required)"
+    ]
+    assert "old" not in changes[0]
+    assert "new" not in changes[0]
+
+
 def test_diff_snapshots_refuses_schema_mismatch() -> None:
     old = {"schema_version": 1, "generated_at": "2026-06-01T00:00:00Z"}
     new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")

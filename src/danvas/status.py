@@ -204,6 +204,27 @@ def compare_pages(
     except SystemExit as exc:
         source_map = {"sources": []}
         source_map_error = str(exc)
+    unbound_title_counts: dict[str, int] = defaultdict(int)
+    claimed_canvas_rows: set[int] = set()
+    for record in local_records:
+        if record.get("error"):
+            continue
+        entry = find_source_entry(source_map, kind="page", path=str(record["path"]))
+        canvas_entry = entry.get("canvas") if isinstance(entry, dict) else {}
+        if not isinstance(canvas_entry, dict):
+            canvas_entry = {}
+        metadata = record.get("source_metadata") or {}
+        frontmatter = metadata.get("page_id", metadata.get("canvas_id"))
+        map_identity = canvas_entry.get("id", canvas_entry.get("url"))
+        identity = frontmatter if frontmatter not in (None, "") else map_identity
+        if identity in (None, ""):
+            unbound_title_counts[
+                normalize_title(str(record.get("title") or ""))
+            ] += 1
+        else:
+            claimed = by_identity.get(str(identity))
+            if claimed is not None:
+                claimed_canvas_rows.add(id(claimed))
     matched: set[int] = set()
     items = []
     for record in local_records:
@@ -250,7 +271,19 @@ def compare_pages(
             continue
         title_candidate = False
         if row is None:
-            candidates = by_title.get(normalize_title(str(record.get("title") or "")), [])
+            normalized_title = normalize_title(str(record.get("title") or ""))
+            candidates = [
+                candidate
+                for candidate in by_title.get(normalized_title, [])
+                if id(candidate) not in claimed_canvas_rows
+            ]
+            if unbound_title_counts[normalized_title] > 1:
+                item["classification"] = "unsupported comparison"
+                item["details"].append(
+                    f"{unbound_title_counts[normalized_title]} unbound local Pages share this title"
+                )
+                items.append(item)
+                continue
             if len(candidates) == 1:
                 row = candidates[0]
                 title_candidate = True
