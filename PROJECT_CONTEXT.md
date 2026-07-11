@@ -60,9 +60,9 @@ their full text.
 `danvas.__version__` read installed package metadata. Bump the minor version for
 feature sprints or new commands, and the patch version for fixes.
 
-Current tagged release: 0.7.2. The annotated `v0.7.2` tag marks the verified
-Page-comparison regression patch on top of the Sprint 8/9 audit-remediation
-release. The 0.7.1 baseline implements private report
+Current tagged release: 0.7.3. The annotated `v0.7.3` tag marks the documentation
+and CLI-help reconciliation after the verified 0.7.2 Page-comparison regression
+patch. The 0.7.1 baseline implements private report
 permissions, Canvas Files download containment, diagnostic sanitization, Page
 diff/identity/update correctness, malformed-source isolation, and assignment
 audit edge-case fixes. A final audit-cleanup pass adds Panopto timestamp
@@ -70,8 +70,10 @@ resilience, closes documentation drift, and replaces brittle/implicit tests.
 The 0.7.2 patch normalizes Page `publish_at` comparisons, preserves duplicate
 local-only Page classification when Canvas has no candidate, and prevents
 invalid identity conflicts from reserving Canvas rows during status matching.
-Ruff, ty, and all 320 tests pass locally and in CI. The global CLI is installed
-from the tagged release.
+The 0.7.3 patch aligns current Page update scope, report-producing Page commands,
+and semantic scheduling behavior across CLI help, durable repo docs, and the
+external teaching-danvas skill/reference. Ruff, ty, and all 320 tests pass
+locally and in CI. The global CLI is installed from the tagged release.
 
 Recommended local checks:
 
@@ -126,10 +128,11 @@ and the external Codex teaching skill docs:
 - `danvas quiz analysis` analyzes Canvas student-analysis CSV exports. Source
   Markdown quiz analysis remains separate tooling unless explicitly consolidated.
 - Keep the initial Canvas Pages workflow deliberately bounded: Markdown or native
-  HTML rendering, restricted inline CSS, draft creation, body/publication update,
-  and readback verification. Snapshot/status integration and one-way local source
-  creation are delivered by Sprints 6 and 7; asset upload/rewriting, rename,
-  deletion, and general upsert remain future designs.
+  HTML rendering, restricted inline CSS, draft creation, bounded
+  body/publication/declared-roles/scheduling update, and readback verification.
+  Snapshot/status integration and one-way local source creation are delivered by
+  Sprints 6 and 7; asset upload/rewriting, rename, deletion, front-page mutation,
+  and general upsert remain future designs.
 - Page snapshot/sync work canonicalizes stable Canvas links and blocks
   unresolved volatile or signed URLs before hashing or writing authored sources.
   Absolute links are Canvas-relative only when scheme, host, and port match the
@@ -173,6 +176,11 @@ teaching-danvas skill only when behavior changes agent defaults.
 
 ## Recurring Pitfalls
 
+- Do not run multiple syncing `uv run` commands concurrently against the same
+  project `.venv`; a session doing parallel Ruff/ty/pytest runs coincided with a
+  partially installed `secretpath` package. Run one controlled `uv sync --locked`,
+  then run verification sequentially, preferably with `uv run --no-sync` or the
+  `.venv/bin/` executables.
 - Typer/Rich `--help` output wraps differently in headless CI. Do not assert
   option flags against rendered help text; use the Click/Typer introspection
   helpers in `tests/test_cli.py`.

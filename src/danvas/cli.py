@@ -2012,12 +2012,21 @@ def pages_create(
     run_command(command_pages_create, args_for(course_id=course_id, source=str(source), dry_run=dry_run, project_root=str(project_root), no_report=no_report, report_root=str(report_root) if report_root else None, report_dir=str(report_dir) if report_dir else None, report_slug=report_slug, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
 
 
-@pages_app.command("update", help="Update only an existing Page's body and published state.")
+@pages_app.command(
+    "update",
+    help="Update an existing Page's body, publication, declared roles, and schedule.",
+)
 def pages_update(
     source: Annotated[Path, typer.Argument(help="Page source resolvable by ID or source map.")],
     course_id: CourseId = None,
     page_id: Annotated[str | None, typer.Option("--page-id", help="Canvas Page numeric ID or URL slug.")] = None,
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show body/publication changes without updating.")] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="Show body/publication/roles/scheduling changes without updating.",
+        ),
+    ] = False,
     project_root: Annotated[Path, typer.Option("--project-root", help="Course project root containing .danvas.")] = Path("."),
     no_report: Annotated[bool, typer.Option("--no-report", help="Suppress the default report run.")] = False,
     report_root: Annotated[Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")] = None,

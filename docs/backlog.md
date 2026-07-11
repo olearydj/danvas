@@ -93,6 +93,15 @@ The patch is published on `origin/main`, passes CI with all 320 tests, and is
 released as `v0.7.2`; the global CLI is installed from the tagged release.
 Complexity-only refactors remain deferred.
 
+## 0.7.3 Documentation And CLI Help Reconciliation
+
+The documentation-only 0.7.3 patch aligns the current bounded Page update scope
+across CLI help, durable repo documentation, and the external teaching-danvas
+skill/reference. It also records Page sync/create/update/verify in the report-run
+inventory and documents semantic comparison of date-only and timezone-equivalent
+`publish_at` values. The patch is published on `origin/main`, passes CI, and is
+released as `v0.7.3`; the global CLI is installed from the tagged release.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as
@@ -931,11 +940,12 @@ Definition of done:
 ## Sprint Candidate H: Canvas Pages Follow-Ons
 
 Implementation status (2026-07-10): Sprints 4 through 7 deliver list/export,
-rendering, restricted CSS, draft create/readback, body/publication-only update,
-verification, local source linting, schema-v4 discovery/status, targeted
-HTML/Markdown export, and non-overwriting Canvas-to-local source sync. Asset
-upload/rewriting, deletion, rename, general upsert, and broader compatibility
-profiles remain deferred.
+rendering, restricted CSS, draft create/readback, bounded
+body/publication/declared-roles/scheduling update, verification, local source
+linting, schema-v4 discovery/status, targeted HTML/Markdown export, and
+non-overwriting Canvas-to-local source sync. Asset upload/rewriting, deletion,
+rename, front-page mutation, general upsert, and broader compatibility profiles
+remain deferred.
 
 Implementation status: source discovery/snapshot/status is delivered by Sprint 6;
 safe Canvas-to-local source sync and targeted HTML/Markdown conversion are
@@ -1154,9 +1164,10 @@ Recommended goals:
 
 4. Add conservative create, verify, update, and upsert workflows.
 
-   Status: create/readback/verify and body/publication-only update are delivered.
-   Title/slug rename, front-page mutation, general upsert, and delete remain
-   deliberately unsupported.
+   Status: create/readback/verify and bounded
+   body/publication/declared-roles/scheduling update are delivered. Title/slug
+   rename, front-page mutation, general upsert, and delete remain deliberately
+   unsupported.
 
    Desired behavior:
 
@@ -1173,7 +1184,9 @@ Recommended goals:
      state, stable slug/URL, and supported compatibility fields. Canvas-normalized
      attributes and inline styles are compared semantically.
    - `pages update SOURCE --dry-run` produces a field-by-field before/after
-     report and accepts only body and publication-state changes.
+     report and accepts body, publication state, and explicitly declared
+     `editing_roles` and `publish_at` changes. Date-only and timezone-equivalent
+     scheduled publication values compare semantically on readback.
    - Live update changes only those supported fields, reads the Page back, and
      does not alter title/slug, front-page state, module membership, or links
      elsewhere in the course.
