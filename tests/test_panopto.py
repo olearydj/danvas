@@ -12,6 +12,7 @@ from danvas.panopto import (
     discover_panopto_tool,
     download_lti_caption,
     normalize_panopto_base_url,
+    parse_panopto_date,
     write_caption_outputs,
 )
 
@@ -74,6 +75,12 @@ class FakePanoptoSession:
     def get(self, url: str, **kwargs: Any) -> FakeResponse:
         self.get_calls.append({"url": url, **kwargs})
         return FakeResponse(content=self.caption_content, headers=self.caption_headers)
+
+
+def test_parse_panopto_date_preserves_out_of_range_value() -> None:
+    value = "/Date(99999999999999999)/"
+
+    assert parse_panopto_date(value) == value
 
 
 def test_discover_panopto_tool_from_visible_course_nav() -> None:

@@ -370,7 +370,10 @@ def parse_panopto_date(value: Any) -> str:
     if not match:
         return str(value)
     timestamp_ms = int(match.group(1))
-    return datetime.fromtimestamp(timestamp_ms / 1000).isoformat(timespec="seconds")
+    try:
+        return datetime.fromtimestamp(timestamp_ms / 1000).isoformat(timespec="seconds")
+    except (OverflowError, OSError, ValueError):
+        return str(value)
 
 
 def safe_filename(value: str) -> str:

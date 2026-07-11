@@ -61,7 +61,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 - manage Canvas Pages
   - deterministic Markdown or native-HTML fragment rendering with stable heading anchors
   - restricted `.canvas.css` validation and deterministic style inlining under a versioned compatibility profile
-  - list/export, draft creation, body/publication-only update, source-map provenance, and readback verification
+  - list/export, draft creation, bounded body/publication/roles/scheduling update, source-map provenance, and readback verification
   - schema-v4 snapshot summaries and local-source status comparison without storing full Page bodies
   - canonicalizes stable links only on the configured Canvas origin and blocks unresolved signed/verifier URLs before hashing
   - safely syncs missing Canvas Pages to Markdown or native HTML without overwriting authored sources
@@ -388,6 +388,11 @@ The date prefix uses the course timezone from `.danvas/config.toml` when present
 then falls back to the system local date. `danvas init` adds `.danvas/reports/` to
 `.gitignore` in git repositories.
 
+Report runs classified with `may_contain_private_student_data: true`, including
+gradebook checks/audits and quiz analyses, create their run directory and every
+artifact without group or other permissions. This protection applies to default
+and explicitly selected report directories.
+
 Use `--output`, `--report-md`, or `--output-dir` when you need a specific legacy
 path. Use `--report-root` to choose a different root while keeping the dated run
 directory, `--report-dir` to create one exact report directory, and `--no-report`
@@ -478,6 +483,7 @@ danvas announcements update --course-id 1655780 content/announcements/001-update
 
 # Pages
 danvas pages sync --course-id 1706414 --output-dir content/pages --dry-run
+danvas pages sync --course-id 1706414 --output-dir content/pages --page-id 123 --dry-run
 danvas pages export --course-id 1706414 --page-id 123 --format markdown --output /tmp/page.md
 danvas pages render content/pages/resources.md --output -
 danvas pages css-check content/pages/resources.canvas.css --source content/pages/resources.md
@@ -562,6 +568,10 @@ danvas recordings panopto-captions ... --dry-run
 `pages sync --dry-run` reads Canvas and plans local source creation. Live sync
 writes only missing local files with no-clobber installation and recoverable
 source-map provenance; it does not mutate Canvas and has no overwrite mode.
+
+`files download` treats Canvas folder and file names as untrusted input and
+confines every broad-download target to `--output-dir`; `--overwrite` never
+weakens that boundary.
 
 Live Canvas writes print a `== Canvas write: ... ==` banner showing the course, target, and write counts before any change is made.
 

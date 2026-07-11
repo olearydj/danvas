@@ -60,9 +60,14 @@ their full text.
 `danvas.__version__` read installed package metadata. Bump the minor version for
 feature sprints or new commands, and the patch version for fixes.
 
-Current published release: 0.6.0. The annotated `v0.6.0` tag points to `05201fa`.
-Local 0.7.0 feature work adds Page snapshot/status and one-way source sync and
-must pass CI before a later release tag.
+Current tagged release: 0.7.0. The annotated `v0.7.0` tag points to `5988c93`.
+The local 0.7.1 candidate implements Sprints 8 and 9: private report
+permissions, Canvas Files download containment, diagnostic sanitization, Page
+diff/identity/update correctness, malformed-source isolation, and assignment
+audit edge-case fixes. A final audit-cleanup pass adds Panopto timestamp
+resilience, closes documentation drift, and replaces brittle/implicit tests.
+Ruff, ty, and all 312 tests pass locally; the candidate is not yet committed,
+pushed, tagged, or installed globally.
 
 Recommended local checks:
 
@@ -93,6 +98,9 @@ and the external Codex teaching skill docs:
   should keep explicit output paths by default instead of becoming report runs.
 - Report runs are operational evidence and should be collision-safe and
   append-only by default.
+- Report runs classified as containing private student data must create their
+  run directory and every artifact without group or other permissions, including
+  interrupted runs and manifests.
 - Keep `.danvas/` as generated operational state and evidence, not canonical
   authored course content. Snapshots, reports, manifests, reportable dry-runs,
   downloaded comparison caches, and explicit generated outputs may live there.
@@ -120,7 +128,15 @@ and the external Codex teaching skill docs:
   deletion, and general upsert remain future designs.
 - Page snapshot/sync work canonicalizes stable Canvas links and blocks
   unresolved volatile or signed URLs before hashing or writing authored sources.
-  Title-only Page matches are provisional collision evidence, never provenance.
+  Absolute links are Canvas-relative only when scheme, host, and port match the
+  configured Canvas origin. The current Page hash profile is `pages-html-v4`;
+  status requires a matching snapshot normalizer and otherwise requests refresh.
+  Title-only Page matches are provisional collision evidence, never provenance,
+  and must be unique among both local sources and Canvas Pages. Occupied sync
+  targets with provenance for another Page are conflicts.
+- Broad Canvas Files downloads treat Canvas path metadata as untrusted and
+  enforce final resolved-path containment inside the selected output directory;
+  overwrite permission never weakens containment.
 
 ## Report Output Contract
 

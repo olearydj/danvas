@@ -405,15 +405,13 @@ def test_local_report_commands_define_report_options() -> None:
     assert expected.isdisjoint(option_names("discussions", "score"))
 
 
-def test_status_is_read_only() -> None:
-    assert "Read-only" in (command("status").help or "")
+def test_status_report_options() -> None:
     assert {"--report-md", "--report-root", "--report-dir", "--report-slug"} <= option_names(
         "status"
     )
 
 
 def test_recordings_panopto_captions_options() -> None:
-    assert "Panopto" in (command("recordings", "panopto-captions").help or "")
     assert {"--folder-id", "--session-id"} <= option_names("recordings", "panopto-captions")
 
 

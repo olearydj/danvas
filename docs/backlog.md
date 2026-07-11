@@ -3,7 +3,7 @@
 Last consolidated: 2026-07-10.
 
 This document is the planning backlog for `danvas`. It distinguishes the shipped
-0.6.0 surface from genuine follow-on work. The lightweight implementation specs
+0.7.0 surface from genuine follow-on work. The lightweight implementation specs
 in `docs/sprints/` are the durable record for the July 2026 feature sequence;
 older pre-0.6 planning notes remain available in git history.
 
@@ -43,14 +43,38 @@ Ruff, ty, and all 283 tests passed. A non-normative sandbox field case in course
 1576638 passed draft API readback and browser inspection, schema-v4 refresh and
 status, Markdown export, targeted and broad sync path agreement, no-clobber local
 creation, repeat-sync idempotence, and interrupted-provenance recovery. The test
-Page was unpublished and removed after acceptance. This implementation has not
-yet been published or tagged as a 0.7.0 release.
+Page was unpublished and removed after acceptance. The implementation was
+published and tagged as `v0.7.0` at `5988c93`.
 
 Follow-up safety review tightened the same implementation before release:
 foreign origins with Canvas-shaped paths are never rewritten as local Canvas
 links, title-only sync candidates must be unique on both sides, occupied targets
 must have matching provenance, and status refuses body-hash comparison across
 normalizer versions.
+
+## 0.7.1 Audit Remediation Implementation Record
+
+The post-0.7.0 audit findings were triaged into behavioral defects, targeted test
+gaps, documentation drift, and complexity-only debt. The patch-release work is
+implemented in two bounded specifications:
+
+| Slice | Specification | Status |
+|---|---|---|
+| Privacy and filesystem safety hardening | `docs/sprints/08-privacy-filesystem-safety.md` | Implemented and locally verified |
+| Correctness and resilience remediation | `docs/sprints/09-correctness-resilience.md` | Implemented and locally verified |
+
+The candidate hardens private report-run permissions, confines broad Canvas
+Files downloads to their selected output directory, sanitizes public diagnostic
+paths, restores Page-aware snapshot diffs, enforces both-sides Page-title
+uniqueness, covers declared Page roles/scheduling fields, isolates malformed
+front matter during source scans, and fixes assignment-audit snapshot and
+zero-weight edge cases. A final patch-level cleanup adds Panopto out-of-range
+timestamp tolerance, corrects the remaining command/example documentation drift,
+adds direct front-matter tests, and removes brittle help-prose assertions. Ruff,
+ty, and all 312 tests pass locally.
+
+The six complexity-only refactors remain deferred. The 0.7.1 candidate is not
+yet committed, pushed, tagged, or installed globally.
 
 ## Delivered Baseline
 
@@ -88,7 +112,7 @@ Current command families include:
 - `submissions export/grades/media/feedback`
 - `grades post/clear/comments/verify`
 - `discussions export/sync-prompts/score`
-- `announcements create/export/latest/sync/verify/update`
+- `announcements create/export/latest/sync/update/verify`
 - `pages list/export/sync/render/css-check/create/update/verify`
 - `sources lint`
 - `files inventory/download/download-one/compare/upload`
@@ -1306,8 +1330,11 @@ now reflected in the external skill docs. Items 1 and 2 remain product work.
 
    ```bash
    danvas grades clear --assignment-id 19952228 \
-     --grades-csv grades-to-clear.csv --comments exact-match --dry-run
+     --grades-csv grades-to-clear.csv --dry-run
    ```
+
+   Exact comment cleanup is selected per CSV row with the `CommentID` and
+   `Comment` columns; there is no separate `--comments` option.
 
    Desired behavior:
 

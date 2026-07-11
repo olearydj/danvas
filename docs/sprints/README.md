@@ -1,8 +1,8 @@
 # Danvas Sprint Specifications
 
-These are the lightweight implementation specifications used for the Danvas
-0.6.0 feature slices. They turned the broader backlog into bounded, testable
-work without introducing a separate specification framework.
+These are the lightweight implementation specifications used for bounded,
+testable Danvas feature and remediation slices without introducing a separate
+specification framework.
 
 They were implemented and locally verified in this order on 2026-07-10:
 
@@ -35,7 +35,7 @@ The combined implementation passed all three checks and was published as
 `v0.6.0` at commit `05201fa`. Release status is recorded in
 `docs/backlog.md`.
 
-## Planned Pages Follow-Ons
+## Pages Follow-Ons
 
 The selected follow-on work continues the bounded Pages workflow:
 
@@ -48,3 +48,28 @@ and is the only one of the two that writes local course sources. The
 non-normative Sprint 7 field case passed in sandbox course 1576638 on 2026-07-10,
 including browser inspection and cleanup of its temporary draft Page. Neither
 sprint broadens Canvas mutation behavior.
+
+The combined implementation was published as `v0.7.0` at commit `5988c93`.
+
+## 0.7.1 Remediation
+
+A comprehensive post-0.7.0 audit identified a smaller set of behavioral defects
+alongside test gaps, documentation drift, and complexity debt. The patch-release
+work is split by invariant rather than treating all audit findings as equivalent:
+
+- Sprint 8: [Privacy And Filesystem Safety Hardening](08-privacy-filesystem-safety.md)
+- Sprint 9: [Correctness And Resilience Remediation](09-correctness-resilience.md)
+
+Sprint 8 owns private report permissions, untrusted download-path containment,
+and leakage-safe diagnostics. Sprint 9 owns Page diff/identity/update correctness,
+source-scan resilience, assignment-audit edge cases, and directly related test
+gaps. They may be implemented independently except where both touch Page plan or
+report behavior; those overlaps must preserve Sprint 8's stricter output-safety
+boundary.
+
+Both sprints are implemented and locally verified. Complexity-only refactors,
+cosmetic documentation findings, and unrelated broad coverage work remain
+deferred unless a small extraction is necessary to make a remediation safely
+testable. A final audit-cleanup pass also added Panopto timestamp resilience,
+corrected documentation drift, and replaced brittle/implicit tests. Ruff, ty,
+and all 312 tests pass for the combined 0.7.1 candidate.
