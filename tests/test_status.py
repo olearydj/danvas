@@ -288,6 +288,36 @@ def test_build_status_reports_page_body_and_metadata_drift(tmp_path: Path) -> No
     assert "body hash differs" in item["details"]
 
 
+def test_build_status_requires_current_page_body_normalizer(tmp_path: Path) -> None:
+    source = tmp_path / "content/pages/old-normalizer.md"
+    write(
+        source,
+        "---\ntitle: Old Normalizer\npage_id: 604\npublished: false\n---\n\nSame body.\n",
+    )
+    snapshot = build_snapshot()
+    snapshot["pages"] = [
+        {
+            "page_id": 604,
+            "url": "old-normalizer",
+            "title": "Old Normalizer",
+            "published": False,
+            "front_page": False,
+            "body_sha256": load_page_source(source).body_sha256,
+            "body_hash_status": "available",
+            "body_normalizer": "pages-html-v2",
+        }
+    ]
+
+    item = build_status(snapshot, tmp_path, now=NOW)["sections"]["pages"][0]
+
+    assert item["classification"] == "unsupported comparison"
+    assert item["refresh_required"] is True
+    assert "does not match" in item["details"][-1]
+    assert item["next_action"] == (
+        "Run `danvas refresh` to rebuild Page hashes with the current normalizer."
+    )
+
+
 def test_build_status_uses_base_window_and_reports_untracked_overrides(tmp_path: Path) -> None:
     build_workspace(tmp_path)
     snapshot = build_snapshot()

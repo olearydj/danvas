@@ -82,10 +82,17 @@ A matching front-matter/source-map identity anywhere in the project is
 `skipped_known_local`. A unique title-only candidate from Sprint 6 also blocks
 duplicate creation and is reported as `skipped_known_local` with identity
 `title_candidate`, the candidate ID/slug, and an instruction to bind it
-deliberately; sync never writes provenance from a title-only match. An occupied
-target without either relationship is never overwritten: report
-`skipped_exists` when it is unbound and `conflict` when it belongs to a different
-Page.
+deliberately; uniqueness is required among both unbound local sources and the
+complete Canvas Page inventory. Duplicate Canvas titles make the candidate
+ambiguous and produce `conflict`; sync never writes provenance from a title-only
+match. An occupied target without either relationship is never overwritten:
+report `skipped_exists` when it is unbound and `conflict` when it belongs to a
+different Page.
+
+When an occupied canonical target has a Page source-map entry, compare that
+entry's Page ID and slug with the Page being planned. Only matching provenance is
+`skipped_known_local`; provenance for any other Page is `conflict`, regardless of
+the target filename or parseable front matter.
 
 Do not add `--overwrite` or update existing Page sources in this sprint. Recheck
 the target immediately before every write, then install with the no-clobber

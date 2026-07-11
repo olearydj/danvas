@@ -63,7 +63,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - restricted `.canvas.css` validation and deterministic style inlining under a versioned compatibility profile
   - list/export, draft creation, body/publication-only update, source-map provenance, and readback verification
   - schema-v4 snapshot summaries and local-source status comparison without storing full Page bodies
-  - canonicalizes stable Canvas links and blocks unresolved signed/verifier URLs before hashing
+  - canonicalizes stable links only on the configured Canvas origin and blocks unresolved signed/verifier URLs before hashing
   - safely syncs missing Canvas Pages to Markdown or native HTML without overwriting authored sources
   - targeted HTML/Markdown export with normalized-body and anchor round-trip checks
 
@@ -272,8 +272,10 @@ group-category summaries, plus Page metadata and normalized body hashes. Snapsho
 schema version 4 never stores Page bodies, download verifier URLs, or student
 data. Page hashing also ignores non-authorable account stylesheet/script
 decorators that Canvas injects around API readback while continuing to reject
-those elements in authored Page sources. If the project is a git repo, `danvas
-init` adds `.danvas/course.json` to `.gitignore`.
+those elements in authored Page sources. Absolute links become Canvas-relative
+only when their origin matches the configured Canvas origin. Status requests a
+refresh instead of comparing Page hashes produced by an older normalizer. If the
+project is a git repo, `danvas init` adds `.danvas/course.json` to `.gitignore`.
 
 Refresh the generated snapshot without changing Canvas; `--diff` summarizes what
 changed since the previous snapshot:

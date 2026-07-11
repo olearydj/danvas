@@ -70,6 +70,10 @@ body hashing or serialization into authored sources.
 - Preserve same-page fragments such as `#installation`.
 - Convert absolute links on the configured Canvas origin to stable root-relative
   Canvas paths when their course/object identity is known.
+- Never infer trust from a Canvas-shaped path alone. An absolute URL is eligible
+  for Canvas-relative rewriting only when its normalized scheme, host, and port
+  match the configured Canvas origin. Preserve foreign origins, and block body
+  hashing when such a URL contains volatile credentials or expiry parameters.
 - Canonicalize Canvas file links to stable course/file-ID paths while preserving
   only documented non-secret behavior such as preview versus download.
 - Sort ordinary, non-secret query parameters deterministically.
@@ -138,6 +142,12 @@ Compare rendered body hashes, title, `published`, and `front_page`. Compare
 `publish_at` and `editing_roles` only when the local source declares them.
 Treat `updated_at`, editor type, and stable URLs as diagnostics rather than
 authoritative authored fields.
+
+Compare a local body hash only when the snapshot row's `body_normalizer` equals
+the running `BODY_NORMALIZER_VERSION`. A missing or older normalizer makes body
+comparison unsupported even within schema 4; status recommends `danvas refresh`
+instead of reporting exactness or drift across incompatible hash profiles. The
+configured-origin safety change advances the profile to `pages-html-v4`.
 
 Useful next actions should point to:
 

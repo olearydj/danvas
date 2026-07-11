@@ -39,12 +39,18 @@ The current branch implements the two Pages follow-on sprints planned after the
 | Canvas-to-local Page sync and conversion | `docs/sprints/07-canvas-pages-sync.md` | `7517c0c` |
 | Account-decorator readback normalization found during field testing | Sprints 6 and 7 | `f4252d7` |
 
-Ruff, ty, and all 280 tests passed. A non-normative sandbox field case in course
+Ruff, ty, and all 283 tests passed. A non-normative sandbox field case in course
 1576638 passed draft API readback and browser inspection, schema-v4 refresh and
 status, Markdown export, targeted and broad sync path agreement, no-clobber local
 creation, repeat-sync idempotence, and interrupted-provenance recovery. The test
 Page was unpublished and removed after acceptance. This implementation has not
 yet been published or tagged as a 0.7.0 release.
+
+Follow-up safety review tightened the same implementation before release:
+foreign origins with Canvas-shaped paths are never rewritten as local Canvas
+links, title-only sync candidates must be unique on both sides, occupied targets
+must have matching provenance, and status refuses body-hash comparison across
+normalizer versions.
 
 ## Delivered Baseline
 

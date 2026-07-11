@@ -177,7 +177,7 @@ class FakeCourse:
 
 
 def test_write_project_config_and_snapshot(tmp_path: Path) -> None:
-    snapshot = config.build_course_snapshot(FakeCourse())
+    snapshot = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
     config_path = tmp_path / ".danvas" / "config.toml"
     snapshot_path = tmp_path / ".danvas" / "course.json"
 
@@ -205,7 +205,7 @@ def test_write_project_config_and_snapshot(tmp_path: Path) -> None:
 
 
 def test_build_course_snapshot_includes_expanded_sections() -> None:
-    snapshot = config.build_course_snapshot(FakeCourse())
+    snapshot = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
 
     assert snapshot["schema_version"] == config.SNAPSHOT_SCHEMA_VERSION
 
@@ -245,7 +245,7 @@ def test_build_course_snapshot_includes_expanded_sections() -> None:
 
 
 def test_build_course_snapshot_contains_no_secrets_or_member_lists() -> None:
-    snapshot = config.build_course_snapshot(FakeCourse())
+    snapshot = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
     text = json.dumps(snapshot)
 
     assert "verifier" not in text
@@ -257,7 +257,7 @@ def test_build_course_snapshot_contains_no_secrets_or_member_lists() -> None:
 
 
 def test_diff_snapshots_reports_added_removed_changed() -> None:
-    old = config.build_course_snapshot(FakeCourse())
+    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
     new = json.loads(json.dumps(old))
     new["assignments"][0]["points_possible"] = 50
     new["quizzes"] = []
@@ -277,7 +277,7 @@ def test_diff_snapshots_reports_added_removed_changed() -> None:
 
 def test_diff_snapshots_refuses_schema_mismatch() -> None:
     old = {"schema_version": 1, "generated_at": "2026-06-01T00:00:00Z"}
-    new = config.build_course_snapshot(FakeCourse())
+    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
 
     assert config.diff_snapshots(old, new) is None
     assert "diff unavailable" in config.render_snapshot_diff(None)[0]
@@ -285,7 +285,7 @@ def test_diff_snapshots_refuses_schema_mismatch() -> None:
 
 def test_build_refresh_diff_report_handles_schema_mismatch(tmp_path: Path) -> None:
     old = {"schema_version": 1, "generated_at": "2026-06-01T00:00:00Z"}
-    new = config.build_course_snapshot(FakeCourse())
+    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
 
     report = config.build_refresh_diff_report(old, new, tmp_path / ".danvas" / "course.json")
 
@@ -297,7 +297,7 @@ def test_build_refresh_diff_report_handles_schema_mismatch(tmp_path: Path) -> No
 
 
 def test_build_refresh_diff_report_handles_missing_previous_snapshot(tmp_path: Path) -> None:
-    new = config.build_course_snapshot(FakeCourse())
+    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
 
     report = config.build_refresh_diff_report(None, new, tmp_path / ".danvas" / "course.json")
 
@@ -311,7 +311,7 @@ def test_command_refresh_with_diff_prints_summary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / ".danvas").mkdir()
-    old = config.build_course_snapshot(FakeCourse())
+    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
     old["assignments"][0]["points_possible"] = 50
     config.write_course_snapshot(tmp_path / ".danvas" / "course.json", old)
 
@@ -334,7 +334,7 @@ def test_command_refresh_with_diff_writes_report_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / ".danvas").mkdir()
-    old = config.build_course_snapshot(FakeCourse())
+    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
     old["assignments"][0]["points_possible"] = 50
     config.write_course_snapshot(tmp_path / ".danvas" / "course.json", old)
 

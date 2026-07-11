@@ -131,7 +131,9 @@ def command_init(args: Any) -> None:
         raise SystemExit(f"Config already exists: {config}. Use --force to replace it.")
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
-    payload = build_course_snapshot(course)
+    payload = build_course_snapshot(
+        course, canvas_origin=getattr(args, "api_url", None)
+    )
     write_project_config(
         config,
         course_snapshot=payload,
@@ -158,7 +160,9 @@ def command_refresh(args: Any) -> None:
         raise SystemExit("Refresh report output requires --diff.")
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
-    payload = build_course_snapshot(course)
+    payload = build_course_snapshot(
+        course, canvas_origin=getattr(args, "api_url", None)
+    )
     snapshot = course_snapshot_path(root)
     diff_report = None
     if getattr(args, "diff", False):
@@ -199,7 +203,9 @@ def command_refresh(args: Any) -> None:
             raise
 
 
-def build_course_snapshot(course: Any) -> dict[str, Any]:
+def build_course_snapshot(
+    course: Any, *, canvas_origin: str | None = None
+) -> dict[str, Any]:
     course_payload = canvas_object_to_dict(course)
     for key in ("id", "name", "course_code", "start_at", "end_at"):
         value = getattr(course, key, None)
@@ -248,7 +254,7 @@ def build_course_snapshot(course: Any) -> dict[str, Any]:
         "discussions": snapshot_discussions(course),
         "announcements": snapshot_announcements(course),
         "quizzes": snapshot_quizzes(course),
-        "pages": snapshot_pages(course),
+        "pages": snapshot_pages(course, canvas_origin=canvas_origin),
         "group_categories": snapshot_group_categories(course),
     }
 
@@ -262,16 +268,24 @@ def snapshot_files(course: Any, folder_objs: list[Any]) -> list[dict[str, Any]]:
     return rows
 
 
-def snapshot_pages(course: Any) -> list[dict[str, Any]]:
+def snapshot_pages(
+    course: Any, *, canvas_origin: str | None = None
+) -> list[dict[str, Any]]:
     rows = []
     course_id = int(getattr(course, "id", 0) or 0)
     for summary in course.get_pages():
         record = page_record(summary)
         if not record["body"] and record["url"]:
             record = page_record(course.get_page(record["url"]))
-        canonical = canonicalize_page_html(record.pop("body", ""), course_id=course_id)
+        canonical = canonicalize_page_html(
+            record.pop("body", ""),
+            course_id=course_id,
+            canvas_origin=canvas_origin,
+        )
         record["html_url"], unsafe_html_url = canonicalize_page_url(
-            str(record.get("html_url") or ""), course_id=course_id
+            str(record.get("html_url") or ""),
+            course_id=course_id,
+            canvas_origin=canvas_origin,
         )
         if unsafe_html_url:
             record["html_url"] = ""

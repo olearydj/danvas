@@ -19,6 +19,7 @@ from danvas.overrides import (
     compare_local_overrides,
     load_local_override_file,
 )
+from danvas.pages import BODY_NORMALIZER_VERSION
 from danvas.reports import create_report_run
 from danvas.source_map import find_source_entry, load_source_map
 from danvas.sources import scan_sources
@@ -55,6 +56,8 @@ def command_status(args: Any) -> None:
         config_dir.parent,
         max_age_hours=max_age_hours,
         source_config=config.get("sources") or {},
+        course_id=(snapshot.get("course") or {}).get("id"),
+        canvas_origin=getattr(args, "api_url", None),
     )
     payload["snapshot"]["path"] = str(snapshot_path)
     for line in render_status_lines(payload):
@@ -111,8 +114,15 @@ def build_status(
     max_age_hours: float = DEFAULT_MAX_SNAPSHOT_AGE_HOURS,
     now: dt.datetime | None = None,
     source_config: dict[str, Any] | None = None,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
 ) -> dict[str, Any]:
-    sources = scan_sources(root, source_config=source_config)
+    sources = scan_sources(
+        root,
+        source_config=source_config,
+        course_id=course_id,
+        canvas_origin=canvas_origin,
+    )
     by_kind: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for record in sources:
         by_kind[record["kind"]].append(record)
@@ -260,7 +270,12 @@ def compare_pages(
         metadata_diffs = field_diffs(record.get("metadata") or {}, row)
         local_hash = (record.get("artifacts") or {}).get("body_sha256")
         canvas_hash = row.get("body_sha256")
-        body_supported = bool(local_hash and canvas_hash) and row.get("body_hash_status") == "available"
+        normalizer_matches = row.get("body_normalizer") == BODY_NORMALIZER_VERSION
+        body_supported = (
+            bool(local_hash and canvas_hash)
+            and row.get("body_hash_status") == "available"
+            and normalizer_matches
+        )
         body_diff = body_supported and local_hash != canvas_hash
         if title_candidate:
             item["classification"] = "probable match, unbound"
@@ -270,7 +285,19 @@ def compare_pages(
         elif not body_supported:
             item["classification"] = "unsupported comparison"
             item["details"].extend(metadata_diffs)
-            item["details"].append("body comparison unavailable because URL canonicalization blocked hashing")
+            if not normalizer_matches:
+                snapshot_normalizer = str(row.get("body_normalizer") or "missing")
+                item["details"].append(
+                    "body comparison unavailable because snapshot normalizer "
+                    f"{snapshot_normalizer!r} does not match {BODY_NORMALIZER_VERSION!r}"
+                )
+                item["refresh_required"] = True
+            elif row.get("body_hash_status") != "available":
+                item["details"].append(
+                    "body comparison unavailable because URL canonicalization blocked hashing"
+                )
+            else:
+                item["details"].append("body comparison unavailable because a body hash is missing")
         elif body_diff and metadata_diffs:
             item["classification"] = "metadata and body mismatch"
             item["details"].extend(metadata_diffs)
@@ -562,6 +589,8 @@ def next_action_for(section: str, item: dict[str, Any]) -> str:
             f"Run `danvas pages verify SOURCE --page-id {identity}` and then bind the verified "
             "Page deliberately."
         )
+    if section == "pages" and item.get("refresh_required"):
+        return "Run `danvas refresh` to rebuild Page hashes with the current normalizer."
     if section == "pages" and classification in {
         "metadata mismatch", "body mismatch", "metadata and body mismatch"
     }:

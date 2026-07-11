@@ -144,10 +144,21 @@ def test_page_url_canonicalization_removes_canvas_verifiers_and_blocks_external_
     canvas = canonicalize_page_html(
         '<a href="https://canvas.test/courses/42/files/7/download?verifier=secret&wrap=1">File</a>',
         course_id=42,
+        canvas_origin="https://canvas.test/",
     )
     assert canvas["body_hash_status"] == "available"
     assert "secret" not in canvas["html"]
     assert 'href="/courses/42/files/7/download?wrap=1"' in canvas["html"]
+
+    hostile = canonicalize_page_html(
+        '<a href="https://evil.example/courses/42/pages/phish?access_token=secret">Phish</a>',
+        course_id=42,
+        canvas_origin="https://canvas.test/",
+    )
+    assert hostile["body_hash_status"] == "blocked_volatile_url"
+    assert "secret" not in hostile["html"]
+    assert 'href="https://evil.example/courses/42/pages/phish"' in hostile["html"]
+    assert 'href="/courses/42/pages/phish"' not in hostile["html"]
 
     external = canonicalize_page_html(
         '<img src="https://cdn.test/image?X-Amz-Signature=secret">', course_id=42
@@ -357,6 +368,75 @@ def test_page_target_plan_is_inventory_wide_and_cross_platform(tmp_path: Path) -
     special_targets = page_target_plan([reserved, trailing], tmp_path, "html")
     assert special_targets["103"].name == "CON--page-103.html"
     assert special_targets["104"].name == "trailing.html"
+
+
+def test_pages_sync_rejects_title_candidate_when_canvas_title_is_duplicated(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "content/pages/duplicate.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "---\ntitle: Duplicate\npublished: false\n---\n\nLocal candidate.\n",
+        encoding="utf-8",
+    )
+    first = canvas_record(page_id=101, url="duplicate-one", title="Duplicate")
+    second = canvas_record(page_id=102, url="duplicate-two", title="Duplicate")
+
+    plan = build_pages_sync_plan(
+        inventory=[first, second],
+        selected=[first, second],
+        output_dir=tmp_path / "content/pages",
+        fmt="markdown",
+        project_root=tmp_path,
+        dry_run=True,
+    )
+
+    assert [action["status"] for action in plan["actions"]] == ["conflict", "conflict"]
+    assert all("Multiple Canvas Pages share this title" in action["reason"] for action in plan["actions"])
+
+
+def test_pages_sync_conflicts_when_occupied_target_provenance_belongs_to_other_page(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "synced"
+    output_dir.mkdir()
+    target = write_source(
+        output_dir / "example-page.md",
+        "# Example Page\n\nExisting.",
+        extra="page_id: 101\n",
+    )
+    source_map_dir = tmp_path / ".danvas"
+    source_map_dir.mkdir()
+    (source_map_dir / "source-map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "course_id": 42,
+                "sources": [
+                    {
+                        "kind": "page",
+                        "path": target.relative_to(tmp_path).as_posix(),
+                        "canvas": {"id": 99, "url": "other-page", "title": "Other"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    record = canvas_record(page_id=101, url="example-page", title="Example Page")
+
+    plan = build_pages_sync_plan(
+        inventory=[record],
+        selected=[record],
+        output_dir=output_dir,
+        fmt="markdown",
+        project_root=tmp_path,
+        dry_run=True,
+    )
+
+    action = plan["actions"][0]
+    assert action["status"] == "conflict"
+    assert action["reason"] == "Target provenance belongs to a different Canvas Page."
 
 
 def test_no_clobber_install_preserves_destination_created_during_race(tmp_path: Path) -> None:

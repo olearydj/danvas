@@ -55,7 +55,13 @@ ASSIGNMENT_SOURCE_MARKER_FIELDS = {
 }
 
 
-def scan_sources(root: Path, source_config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+def scan_sources(
+    root: Path,
+    source_config: dict[str, Any] | None = None,
+    *,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
+) -> list[dict[str, Any]]:
     source_config = source_config or {}
     if not isinstance(source_config, dict):
         raise SystemExit("[sources] must be a TOML table.")
@@ -68,6 +74,8 @@ def scan_sources(root: Path, source_config: dict[str, Any] | None = None) -> lis
                 path,
                 root,
                 require_assignment_metadata=options["require_assignment_metadata"],
+                course_id=course_id,
+                canvas_origin=canvas_origin,
             )
             if record is not None:
                 records.append(record)
@@ -156,6 +164,8 @@ def source_record(
     root: Path,
     *,
     require_assignment_metadata: bool = False,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
 ) -> dict[str, Any] | None:
     record: dict[str, Any] = {
         "kind": kind,
@@ -174,8 +184,16 @@ def source_record(
         elif kind == "page":
             from danvas.pages import canonicalize_page_html, load_page_source
 
-            local = load_page_source(path)
-            canonical = canonicalize_page_html(local.html)
+            local = load_page_source(
+                path,
+                course_id=course_id,
+                canvas_origin=canvas_origin,
+            )
+            canonical = canonicalize_page_html(
+                local.html,
+                course_id=course_id,
+                canvas_origin=canvas_origin,
+            )
             record["title"] = str(local.metadata["title"])
             record["metadata"] = comparable_metadata(kind, local.metadata)
             record["source_metadata"] = normalize_canvas_value(local.metadata)

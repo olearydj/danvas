@@ -35,7 +35,7 @@ from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_jso
 
 RENDERER_VERSION = "pages-markdown-v1"
 COMPATIBILITY_PROFILE = "canvas-page-v1"
-BODY_NORMALIZER_VERSION = "pages-html-v3"
+BODY_NORMALIZER_VERSION = "pages-html-v4"
 
 ALLOWED_TAGS = {
     "a", "abbr", "blockquote", "br", "caption", "code", "col", "colgroup", "dd", "del",
@@ -98,7 +98,12 @@ def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def canonicalize_page_url(value: str, *, course_id: int | None = None) -> tuple[str, bool]:
+def canonicalize_page_url(
+    value: str,
+    *,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
+) -> tuple[str, bool]:
     """Return a stable Page URL and whether an unresolved secret/expiry value was found."""
     parsed = urlsplit(value)
     query = parse_qsl(parsed.query, keep_blank_values=True)
@@ -111,14 +116,16 @@ def canonicalize_page_url(value: str, *, course_id: int | None = None) -> tuple[
     path = parsed.path
     course_path = re.match(r"^/courses/(\d+)(/.*)?$", path)
     file_path = re.match(r"^/(?:courses/(\d+)/)?files/(\d+)(/(?:download|preview))?/?$", path)
-    stable_canvas = bool(course_path or file_path)
-    if file_path:
+    relative_url = not parsed.scheme and not parsed.netloc
+    trusted_origin = relative_url or same_url_origin(value, canvas_origin)
+    stable_canvas = bool(course_path or file_path) and trusted_origin
+    if file_path and trusted_origin:
         found_course = file_path.group(1) or (str(course_id) if course_id is not None else "")
         if found_course:
             mode = file_path.group(3) or ""
             path = f"/courses/{found_course}/files/{file_path.group(2)}{mode}"
             stable_canvas = True
-    elif course_path:
+    elif course_path and trusted_origin:
         path = f"/courses/{course_path.group(1)}{course_path.group(2) or ''}"
     unresolved = bool(parsed.username or parsed.password or (volatile and not stable_canvas))
     kept = [item for item in query if item not in volatile]
@@ -131,7 +138,39 @@ def canonicalize_page_url(value: str, *, course_id: int | None = None) -> tuple[
     return urlunsplit((scheme, netloc, path, urlencode(kept, doseq=True), parsed.fragment)), unresolved
 
 
-def canonicalize_page_html(html: str, *, course_id: int | None = None) -> dict[str, Any]:
+def same_url_origin(value: str, canvas_origin: str | None) -> bool:
+    """Return whether an absolute URL belongs to the explicitly configured Canvas origin."""
+    if not canvas_origin:
+        return False
+    value_origin = normalized_url_origin(value)
+    configured_origin = normalized_url_origin(canvas_origin)
+    return (
+        value_origin is not None
+        and configured_origin is not None
+        and value_origin == configured_origin
+    )
+
+
+def normalized_url_origin(value: str) -> tuple[str, str, int | None] | None:
+    parsed = urlsplit(value)
+    if not parsed.scheme or not parsed.hostname:
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    scheme = parsed.scheme.casefold()
+    if port is None:
+        port = {"http": 80, "https": 443}.get(scheme)
+    return scheme, parsed.hostname.casefold(), port
+
+
+def canonicalize_page_html(
+    html: str,
+    *,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
+) -> dict[str, Any]:
     """Canonicalize Page URLs before hashing or writing durable output."""
     soup = BeautifulSoup(f"<div data-danvas-root>{html}</div>", "html.parser")
     root = soup.find("div", attrs={"data-danvas-root": True})
@@ -146,7 +185,11 @@ def canonicalize_page_html(html: str, *, course_id: int | None = None) -> dict[s
                 continue
             if name not in {"href", "src", "data-api-endpoint", "data-download-url"}:
                 continue
-            canonical, unresolved = canonicalize_page_url(raw_value, course_id=course_id)
+            canonical, unresolved = canonicalize_page_url(
+                raw_value,
+                course_id=course_id,
+                canvas_origin=canvas_origin,
+            )
             if unresolved:
                 volatile_count += 1
             tag[name] = canonical
@@ -188,7 +231,13 @@ def is_canvas_readback_edge_decorator(tag: Tag) -> bool:
     return False
 
 
-def load_page_source(source: Path, *, apply_css: bool = True) -> PageSource:
+def load_page_source(
+    source: Path,
+    *,
+    apply_css: bool = True,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
+) -> PageSource:
     if not source.is_file():
         raise SystemExit(f"Page source not found: {source}")
     metadata, body = parse_frontmatter(source.read_text(encoding="utf-8"), source, "Page")
@@ -218,7 +267,11 @@ def load_page_source(source: Path, *, apply_css: bool = True) -> PageSource:
             raise SystemExit(format_css_errors(css_path, css_report))
         warnings.extend(css_report["warnings"])
         validate_fragment(html, source)
-    canonical = canonicalize_page_html(html)
+    canonical = canonicalize_page_html(
+        html,
+        course_id=course_id,
+        canvas_origin=canvas_origin,
+    )
     if canonical["body_hash_status"] != "available":
         raise SystemExit("Page source contains an unresolved volatile or signed URL.")
     html = canonical["html"]
@@ -561,10 +614,22 @@ def create_payload(local: PageSource) -> dict[str, Any]:
 
 
 def compare_page(
-    local: PageSource, canvas_page: dict[str, Any], *, course_id: int | None = None
+    local: PageSource,
+    canvas_page: dict[str, Any],
+    *,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
 ) -> dict[str, Any]:
-    expected = canonicalize_page_html(local.html, course_id=course_id)
-    actual = canonicalize_page_html(str(canvas_page.get("body") or ""), course_id=course_id)
+    expected = canonicalize_page_html(
+        local.html,
+        course_id=course_id,
+        canvas_origin=canvas_origin,
+    )
+    actual = canonicalize_page_html(
+        str(canvas_page.get("body") or ""),
+        course_id=course_id,
+        canvas_origin=canvas_origin,
+    )
     expected_body = expected["html"]
     actual_body = actual["html"]
     differences = []
@@ -638,7 +703,9 @@ def write_page_report(args: Any, command: str, payload: dict[str, Any], *, statu
     print(f"Report: {run.path}")
 
 
-def canvas_page_inventory(course: Any) -> list[dict[str, Any]]:
+def canvas_page_inventory(
+    course: Any, *, canvas_origin: str | None = None
+) -> list[dict[str, Any]]:
     course_id = int(getattr(course, "id", 0) or 0)
     records = []
     for summary in course.get_pages():
@@ -646,11 +713,17 @@ def canvas_page_inventory(course: Any) -> list[dict[str, Any]]:
         if record["url"]:
             record = page_record(course.get_page(record["url"]))
         record["html_url"], unsafe_html_url = canonicalize_page_url(
-            str(record.get("html_url") or ""), course_id=course_id
+            str(record.get("html_url") or ""),
+            course_id=course_id,
+            canvas_origin=canvas_origin,
         )
         if unsafe_html_url:
             record["html_url"] = ""
-        canonical = canonicalize_page_html(record.get("body") or "", course_id=course_id)
+        canonical = canonicalize_page_html(
+            record.get("body") or "",
+            course_id=course_id,
+            canvas_origin=canvas_origin,
+        )
         record.update(canonical)
         record["body"] = canonical["html"]
         records.append(record)
@@ -873,7 +946,9 @@ def command_pages_list(args: Any) -> None:
 
 def command_pages_export(args: Any) -> None:
     course = canvas_from_args(args).get_course(args.course_id)
-    records = canvas_page_inventory(course)
+    records = canvas_page_inventory(
+        course, canvas_origin=getattr(args, "api_url", None)
+    )
     selected = select_canvas_pages(
         records, page_id=getattr(args, "page_id", None), url=getattr(args, "url", None)
     )
@@ -905,7 +980,9 @@ def page_public_record(record: dict[str, Any], *, include_body: bool = False) ->
 def command_pages_sync(args: Any) -> None:
     root = Path(args.project_root).resolve()
     course = canvas_from_args(args).get_course(args.course_id)
-    inventory = canvas_page_inventory(course)
+    inventory = canvas_page_inventory(
+        course, canvas_origin=getattr(args, "api_url", None)
+    )
     selected = select_canvas_pages(
         inventory, page_id=getattr(args, "page_id", None), url=getattr(args, "url", None)
     )
@@ -916,6 +993,8 @@ def command_pages_sync(args: Any) -> None:
         fmt=args.format,
         project_root=root,
         dry_run=bool(args.dry_run),
+        course_id=args.course_id,
+        canvas_origin=getattr(args, "api_url", None),
     )
     if not args.dry_run:
         execute_pages_sync(plan, project_root=root, course_id=args.course_id)
@@ -934,18 +1013,31 @@ def build_pages_sync_plan(
     fmt: str,
     project_root: Path,
     dry_run: bool,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
 ) -> dict[str, Any]:
     from danvas.config import load_project_config
     from danvas.sources import scan_sources
 
     config = load_project_config(project_root)
     local_pages = [
-        row for row in scan_sources(project_root, source_config=config.get("sources") or {})
+        row
+        for row in scan_sources(
+            project_root,
+            source_config=config.get("sources") or {},
+            course_id=course_id,
+            canvas_origin=canvas_origin,
+        )
         if row["kind"] == "page"
     ]
     source_map = load_source_map(project_root)
     by_identity: dict[str, list[dict[str, Any]]] = {}
     unbound_by_title: dict[str, list[dict[str, Any]]] = {}
+    canvas_by_title: dict[str, list[dict[str, Any]]] = {}
+    for record in inventory:
+        canvas_by_title.setdefault(
+            normalize_text(str(record.get("title") or "")), []
+        ).append(record)
     for local in local_pages:
         entry = find_source_entry(source_map, kind="page", path=local["path"])
         canvas = entry.get("canvas") if isinstance(entry, dict) else {}
@@ -1007,8 +1099,10 @@ def build_pages_sync_plan(
             action["_recovery_source"] = str(project_root / local["path"])
             actions.append(action)
             continue
-        title_matches = unbound_by_title.get(normalize_text(str(record.get("title") or "")), [])
-        if len(title_matches) == 1:
+        normalized_title = normalize_text(str(record.get("title") or ""))
+        title_matches = unbound_by_title.get(normalized_title, [])
+        canvas_title_matches = canvas_by_title.get(normalized_title, [])
+        if len(title_matches) == 1 and len(canvas_title_matches) == 1:
             action = sync_action(
                 record,
                 Path(project_root / title_matches[0]["path"]),
@@ -1017,6 +1111,16 @@ def build_pages_sync_plan(
             )
             action["identity"] = "title_candidate"
             actions.append(action)
+            continue
+        if title_matches and len(canvas_title_matches) > 1:
+            actions.append(
+                sync_action(
+                    record,
+                    target,
+                    "conflict",
+                    "Multiple Canvas Pages share this title; the unbound local source is ambiguous.",
+                )
+            )
             continue
         if len(title_matches) > 1:
             actions.append(
@@ -1035,6 +1139,8 @@ def build_pages_sync_plan(
                 source_map=source_map,
                 project_root=project_root,
                 dry_run=dry_run,
+                course_id=course_id,
+                canvas_origin=canvas_origin,
             )
             actions.append(target_action)
             continue
@@ -1107,9 +1213,15 @@ def existing_target_action(
     source_map: dict[str, Any],
     project_root: Path,
     dry_run: bool,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
 ) -> dict[str, Any]:
     try:
-        local_source = load_page_source(target)
+        local_source = load_page_source(
+            target,
+            course_id=course_id,
+            canvas_origin=canvas_origin,
+        )
     except SystemExit:
         return sync_action(
             record, target, "skipped_exists", "Target exists and is not a matching Page source."
@@ -1120,6 +1232,26 @@ def existing_target_action(
         path=source_path_key(target, project_root),
     )
     if entry:
+        canvas = entry.get("canvas") if isinstance(entry, dict) else {}
+        if not isinstance(canvas, dict):
+            canvas = {}
+        entry_identities = {
+            str(value)
+            for value in (canvas.get("id"), canvas.get("url"))
+            if value not in (None, "")
+        }
+        record_identities = {
+            str(value)
+            for value in (record.get("page_id"), record.get("url"))
+            if value not in (None, "")
+        }
+        if not entry_identities.intersection(record_identities):
+            return sync_action(
+                record,
+                target,
+                "conflict",
+                "Target provenance belongs to a different Canvas Page.",
+            )
         return sync_action(
             record, target, "skipped_known_local", "Stable Page provenance already exists."
         )
@@ -1307,7 +1439,11 @@ def print_pages_sync_summary(plan: dict[str, Any]) -> None:
 
 
 def command_pages_render(args: Any) -> None:
-    local = load_page_source(Path(args.source))
+    local = load_page_source(
+        Path(args.source),
+        course_id=getattr(args, "course_id", None),
+        canvas_origin=getattr(args, "api_url", None),
+    )
     if local.unresolved_assets:
         raise SystemExit(f"Unresolved local Page assets: {', '.join(local.unresolved_assets)}")
     if str(args.output) == "-":
@@ -1322,7 +1458,12 @@ def command_pages_render(args: Any) -> None:
 def command_pages_css_check(args: Any) -> None:
     css_path = Path(args.css)
     if getattr(args, "source", None):
-        local = load_page_source(Path(args.source), apply_css=False)
+        local = load_page_source(
+            Path(args.source),
+            apply_css=False,
+            course_id=getattr(args, "course_id", None),
+            canvas_origin=getattr(args, "api_url", None),
+        )
         report, final_html = check_and_inline_css(css_path, local.html)
         report["final_body_sha256"] = sha256_text(normalize_html_fragment(final_html))
     else:
@@ -1335,7 +1476,11 @@ def command_pages_css_check(args: Any) -> None:
 
 
 def command_pages_create(args: Any) -> None:
-    local = load_page_source(Path(args.source))
+    local = load_page_source(
+        Path(args.source),
+        course_id=args.course_id,
+        canvas_origin=getattr(args, "api_url", None),
+    )
     plan = page_plan(local, action="create")
     if args.dry_run or plan["status"] == "blocked":
         print(json.dumps(plan, indent=2, ensure_ascii=False))
@@ -1348,7 +1493,12 @@ def command_pages_create(args: Any) -> None:
     created = course.create_page(create_payload(local))
     created_record = page_record(created)
     readback = page_record(course.get_page(created_record["url"]))
-    verification = compare_page(local, readback, course_id=args.course_id)
+    verification = compare_page(
+        local,
+        readback,
+        course_id=args.course_id,
+        canvas_origin=getattr(args, "api_url", None),
+    )
     result = {**plan, "status": verification["status"], "canvas": {key: readback.get(key) for key in ("page_id", "url", "title", "published", "front_page")}, "verification": verification}
     if verification["status"] == "matches":
         write_source_map_entry(
@@ -1364,7 +1514,11 @@ def command_pages_create(args: Any) -> None:
 
 
 def command_pages_update(args: Any) -> None:
-    local = load_page_source(Path(args.source))
+    local = load_page_source(
+        Path(args.source),
+        course_id=args.course_id,
+        canvas_origin=getattr(args, "api_url", None),
+    )
     resolved = resolve_page_identity(local, args)
     course = canvas_from_args(args).get_course(args.course_id)
     page = get_page(course, resolved["id"])
@@ -1385,7 +1539,12 @@ def command_pages_update(args: Any) -> None:
     print_mutation_banner("update Page body/publication", {"course": args.course_id, "page": before["page_id"], "title": before["title"], "published": local.metadata["published"], "source": local.source})
     page.edit(wiki_page={"body": local.html, "published": bool(local.metadata["published"]), "notify_of_update": bool(local.metadata["notify_of_update"])})
     readback = page_record(course.get_page(before["url"]))
-    verification = compare_page(local, readback, course_id=args.course_id)
+    verification = compare_page(
+        local,
+        readback,
+        course_id=args.course_id,
+        canvas_origin=getattr(args, "api_url", None),
+    )
     result = {**plan, "status": verification["status"], "verification": verification}
     if verification["status"] == "matches":
         write_source_map_entry(
@@ -1401,11 +1560,20 @@ def command_pages_update(args: Any) -> None:
 
 
 def command_pages_verify(args: Any) -> None:
-    local = load_page_source(Path(args.source))
+    local = load_page_source(
+        Path(args.source),
+        course_id=args.course_id,
+        canvas_origin=getattr(args, "api_url", None),
+    )
     resolved = resolve_page_identity(local, args)
     course = canvas_from_args(args).get_course(args.course_id)
     canvas_page = page_record(get_page(course, resolved["id"]))
-    verification = compare_page(local, canvas_page, course_id=args.course_id)
+    verification = compare_page(
+        local,
+        canvas_page,
+        course_id=args.course_id,
+        canvas_origin=getattr(args, "api_url", None),
+    )
     result = {"status": verification["status"], "source": str(local.source), "canvas_id": canvas_page["page_id"], "canvas_url": canvas_page["url"], "renderer_version": RENDERER_VERSION, "compatibility_profile": COMPATIBILITY_PROFILE, "verification": verification}
     write_page_report(args, "pages verify", result)
     print(json.dumps(result, indent=2, ensure_ascii=False))
