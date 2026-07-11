@@ -560,7 +560,6 @@ danvas grades post ... --dry-run
 danvas discussions score ... --dry-run
 danvas quiz import-qti ... --dry-run
 danvas files upload ... --dry-run
-danvas recordings panopto-captions ... --dry-run
 ```
 
 `grades post --dry-run` reads the current Canvas state and validates the full patch without writing. Use `--offline-preview` only when authentication is intentionally unavailable. Live posting writes private rollback JSON/CSV before the first mutation.
@@ -572,6 +571,10 @@ source-map provenance; it does not mutate Canvas and has no overwrite mode.
 `files download` treats Canvas folder and file names as untrusted input and
 confines every broad-download target to `--output-dir`; `--overwrite` never
 weakens that boundary.
+
+`recordings panopto-captions --dry-run` previews a local caption-download
+workflow and writes manifests without caption files. Live mode downloads
+captions locally; neither mode mutates Canvas.
 
 Live Canvas writes print a `== Canvas write: ... ==` banner showing the course, target, and write counts before any change is made.
 
