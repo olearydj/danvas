@@ -72,4 +72,4 @@ cosmetic documentation findings, and unrelated broad coverage work remain
 deferred unless a small extraction is necessary to make a remediation safely
 testable. A final audit-cleanup pass also added Panopto timestamp resilience,
 corrected documentation drift, and replaced brittle/implicit tests. Ruff, ty,
-and all 312 tests pass for the combined 0.7.1 candidate.
+and all 312 tests pass for the combined implementation released as `v0.7.1`.

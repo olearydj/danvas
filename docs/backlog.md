@@ -73,8 +73,9 @@ timestamp tolerance, corrects the remaining command/example documentation drift,
 adds direct front-matter tests, and removes brittle help-prose assertions. Ruff,
 ty, and all 312 tests pass locally.
 
-The six complexity-only refactors remain deferred. The 0.7.1 candidate is not
-yet committed, pushed, tagged, or installed globally.
+The six complexity-only refactors remain deferred. The combined implementation
+is published on `origin/main`, passes CI, and is released as `v0.7.1`; the global
+CLI is installed from the tagged release.
 
 ## Delivered Baseline
 

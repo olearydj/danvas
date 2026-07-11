@@ -60,14 +60,14 @@ their full text.
 `danvas.__version__` read installed package metadata. Bump the minor version for
 feature sprints or new commands, and the patch version for fixes.
 
-Current tagged release: 0.7.0. The annotated `v0.7.0` tag points to `5988c93`.
-The local 0.7.1 candidate implements Sprints 8 and 9: private report
+Current tagged release: 0.7.1. The annotated `v0.7.1` tag marks the verified
+Sprint 8/9 audit-remediation release. It implements private report
 permissions, Canvas Files download containment, diagnostic sanitization, Page
 diff/identity/update correctness, malformed-source isolation, and assignment
 audit edge-case fixes. A final audit-cleanup pass adds Panopto timestamp
 resilience, closes documentation drift, and replaces brittle/implicit tests.
-Ruff, ty, and all 312 tests pass locally; the candidate is not yet committed,
-pushed, tagged, or installed globally.
+Ruff, ty, and all 312 tests pass locally and in CI. The global CLI is installed
+from the tagged release.
 
 Recommended local checks:
 
