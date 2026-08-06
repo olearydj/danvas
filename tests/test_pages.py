@@ -6,9 +6,11 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from bs4 import BeautifulSoup
 
 from danvas.pages import (
     COMPATIBILITY_PROFILE,
+    RENDERER_VERSION,
     build_pages_sync_plan,
     canonicalize_page_html,
     check_and_inline_css,
@@ -122,6 +124,74 @@ def test_markdown_render_is_fragment_with_stable_anchors_and_matching_h1(tmp_pat
     assert '<h2 id="install_1">Install</h2>' in local.html
     assert local.matching_h1_removed is True
     assert local.local_links == ["install"]
+
+
+def test_markdown_tables_add_column_scope_without_inferring_row_headers(
+    tmp_path: Path,
+) -> None:
+    source = write_source(
+        tmp_path / "table.md",
+        "| Item | Value |\n| --- | ---: |\n| One | 1 |\n\n"
+        "Between tables.\n\n"
+        "| Name |\n| --- |\n| Two |",
+    )
+
+    local = load_page_source(source)
+    soup = BeautifulSoup(local.html, "html.parser")
+    headers = soup.select("thead th")
+
+    assert [header.get("scope") for header in headers] == ["col", "col", "col"]
+    assert not soup.select("tbody [scope]")
+    assert [cell.get_text(strip=True) for cell in soup.select("tbody td")] == [
+        "One",
+        "1",
+        "Two",
+    ]
+    assert page_plan(local, action="create")["renderer_version"] == "pages-markdown-v2"
+    assert RENDERER_VERSION == "pages-markdown-v2"
+
+
+@pytest.mark.parametrize("suffix", [".md", ".html"])
+def test_authored_html_tables_preserve_explicit_semantics_without_inference(
+    tmp_path: Path, suffix: str
+) -> None:
+    source = write_source(
+        tmp_path / f"authored{suffix}",
+        "<table><thead><tr><th>Plain</th>"
+        '<th scope="colgroup" colspan="2">Grouped</th></tr></thead>'
+        '<tbody><tr><th id="row-one" scope="row">One</th>'
+        '<td headers="row-one">Value</td></tr></tbody></table>',
+    )
+
+    local = load_page_source(source)
+    soup = BeautifulSoup(local.html, "html.parser")
+    headers = soup.select("thead th")
+    row_header = soup.select_one("tbody th")
+    data_cell = soup.select_one("tbody td")
+
+    assert headers[0].get("scope") is None
+    assert headers[1].get("scope") == "colgroup"
+    assert row_header is not None
+    assert row_header.get("scope") == "row"
+    assert data_cell is not None
+    assert data_cell.get("headers") == ["row-one"]
+
+
+def test_markdown_table_scope_survives_css_inlining(tmp_path: Path) -> None:
+    css = tmp_path / "table.canvas.css"
+    css.write_text("th { color: #123456; }\n", encoding="utf-8")
+    source = write_source(
+        tmp_path / "table.md",
+        "| Item |\n| --- |\n| One |",
+        extra="canvas_css: table.canvas.css\n",
+    )
+
+    local = load_page_source(source)
+    header = BeautifulSoup(local.html, "html.parser").select_one("thead th")
+
+    assert header is not None
+    assert header.get("scope") == "col"
+    assert header.get("style") == "color: #123456"
 
 
 def test_restricted_css_is_parsed_and_inlined_deterministically(tmp_path: Path) -> None:
@@ -282,6 +352,74 @@ def test_update_changes_only_body_and_publication_then_verifies(
     command_pages_verify(args(source, tmp_path, page_id="example-page"))
 
 
+def test_update_preserves_markdown_table_scope_on_readback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = write_source(
+        tmp_path / "page.md",
+        "| Item | Value |\n| --- | --- |\n| One | 1 |",
+    )
+    course = FakeCourse()
+    course.pages["example-page"] = FakePage(
+        course,
+        page_id=101,
+        url="example-page",
+        title="Example Page",
+        body="<p>Old body</p>",
+        published=False,
+        front_page=False,
+    )
+    monkeypatch.setattr("danvas.pages.canvas_from_args", lambda _args: FakeCanvas(course))
+
+    command_pages_update(args(source, tmp_path, page_id="example-page"))
+
+    assert 'scope="col"' in str(course.edits[0]["body"])
+    command_pages_verify(args(source, tmp_path, page_id="example-page"))
+
+
+def test_update_fails_when_canvas_readback_strips_markdown_table_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ScopeStrippingPage(FakePage):
+        def edit(self, **kwargs: object) -> FakePage:
+            payload = dict(cast(dict[str, Any], kwargs["wiki_page"]))
+            payload["body"] = str(payload["body"]).replace(' scope="col"', "")
+            return super().edit(wiki_page=payload)
+
+    source = write_source(
+        tmp_path / "page.md",
+        "| Item | Value |\n| --- | --- |\n| One | 1 |",
+    )
+    course = FakeCourse()
+    course.pages["example-page"] = ScopeStrippingPage(
+        course,
+        page_id=101,
+        url="example-page",
+        title="Example Page",
+        body="<p>Old body</p>",
+        published=False,
+        front_page=False,
+    )
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr("danvas.pages.canvas_from_args", lambda _args: FakeCanvas(course))
+
+    with pytest.raises(SystemExit) as excinfo:
+        command_pages_update(
+            args(
+                source,
+                tmp_path,
+                page_id="example-page",
+                no_report=False,
+                report_dir=str(report_dir),
+            )
+        )
+
+    assert excinfo.value.code == 1
+    assert json.loads((report_dir / "page.json").read_text())["status"] == "mismatch"
+    assert json.loads((report_dir / "manifest.json").read_text())["status"] == "failed"
+    assert not (tmp_path / ".danvas" / "source-map.json").exists()
+
+
 def test_update_applies_declared_editing_roles_and_publish_at(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -439,6 +577,12 @@ def test_synced_markdown_roundtrips_ids_links_lists_and_styles() -> None:
         "<tbody><tr><td>One</td></tr></tbody></table>"
     )
     assert render_synced_page_source(table, "markdown")["status"] == "ready"
+
+    scoped_table = canvas_record(
+        body='<table><thead><tr><th scope="col">Item</th></tr></thead>'
+        "<tbody><tr><td>One</td></tr></tbody></table>"
+    )
+    assert render_synced_page_source(scoped_table, "markdown")["status"] == "ready"
 
 
 def test_synced_source_blocks_unresolved_signed_urls() -> None:
