@@ -1233,6 +1233,88 @@ Recommended goals:
    - Keep Pages out of assignment/discussion comparisons even when a Page is
      linked from a module.
 
+### Accessibility Follow-On: Semantic Rendering And WCAG-Oriented Linting
+
+A July 2026 audit of representative course Pages found that the current
+renderer preserves the essential Markdown structure and can produce an
+accessible color palette, but it also exposed general opportunities to improve
+both the Canvas-bound HTML and the diagnostics authors receive. Treat this as a
+course-agnostic Pages feature, based on the final rendered fragment rather than
+on Markdown heuristics alone.
+
+1. Strengthen generated HTML semantics without inventing author intent.
+
+   - Preserve the existing heading, list, link, code, and table structure.
+   - Add `scope="col"` to generated column-header cells in simple Markdown
+     tables. Add row-header scope only when the authored structure identifies a
+     row header; do not infer it merely from the first cell in each row.
+   - Preserve authored table captions and accessible names when the selected
+     Markdown profile supports them. Do not manufacture captions from nearby
+     prose.
+   - Keep matching-title H1 removal deterministic so a Canvas Page has one
+     effective page title while the remaining heading hierarchy starts at the
+     correct level.
+
+2. Give preformatted content and tables a defined narrow-viewport behavior.
+
+   - Test representative Page fragments at 320 CSS pixels and at 400% zoom.
+     Avoid full-page horizontal scrolling caused by code blocks, tables, or
+     long unbroken tokens.
+   - Establish a Canvas-compatible policy for local scrolling or wrapping of
+     preformatted blocks. Candidates include allowing a verified
+     `overflow-x: auto` declaration, emitting a safe scrolling wrapper, or
+     using documented `white-space: pre-wrap` behavior where that does not
+     alter the meaning of the content.
+   - Verify the chosen markup and inline styles after Canvas readback rather
+     than assuming the editor preserves them.
+
+3. Extend `pages css-check` with reliable WCAG-oriented color diagnostics.
+
+   - Compute contrast when foreground and background colors are both
+     determinable, including inherited colors and nested combinations such as
+     linked inline code.
+   - Apply the WCAG 2.2 AA thresholds appropriate to ordinary text, large text,
+     and meaningful non-text graphics or boundaries. Do not treat decorative
+     borders as required contrast.
+   - Report inherited Canvas-shell colors, images, gradients, transparency, or
+     other unresolved combinations as indeterminate/manual review rather than
+     as automatic passes or failures.
+   - Keep CSS compatibility findings distinct from accessibility findings. CSS
+     validation is not a complete accessibility audit.
+
+4. Extend `sources lint` to inspect final Page HTML as well as source text.
+
+   - Check heading order, duplicate source-title H1s, table header
+     associations, preserved captions, and preformatted-content overflow risk.
+   - Warn about vague link labels when a label is difficult to understand even
+     in its programmatic context, but do not turn context-dependent labels into
+     unconditional errors.
+   - Flag missing document language only for standalone HTML documents. Canvas
+     Page fragments inherit language from the surrounding Canvas document.
+   - Surface which checks require live Canvas testing, including keyboard focus
+     visibility, focus not obscured, zoom/reflow in the Canvas shell, and other
+     behavior that a static fragment cannot establish.
+
+5. Add generic fixtures and preserve deterministic output.
+
+   - Cover Markdown and native-HTML tables, code blocks, long tokens,
+     matching-title H1s, contextual and non-contextual link labels, color
+     inheritance, and determinate versus indeterminate contrast pairs.
+   - Add Canvas readback fixtures for any new table attributes, wrappers, or
+     inline styles.
+   - Treat accessibility-affecting HTML normalization changes like other
+     renderer changes: make dry-run body diffs explicit and bump the relevant
+     renderer or compatibility-profile version when required.
+
+Definition of done:
+
+- `pages render` emits stronger table semantics and reflow-safe output for the
+  representative fixtures, and Canvas readback preserves the result.
+- `pages css-check` and `sources lint` report actionable, reproducible findings
+  without claiming that a passing static check establishes WCAG conformance.
+- Command help and Pages documentation explain the automated checks, their
+  limits, and the remaining manual Canvas checks.
+
 ### Future V3: Pandoc-Flavored Markdown Authoring Profile
 
 - Add an explicit extended Markdown profile for authors who need structural
