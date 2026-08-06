@@ -44,6 +44,8 @@ their full text.
   object operations.
 - `src/danvas/overrides.py`: redacted assignment override summaries and explicit
   private membership exports.
+- `src/danvas/override_sync.py`: dry-run-first private assignment override
+  reconciliation with guarded writes and readback verification.
 - `src/danvas/pages.py`: Page listing/export/sync, rendering, restricted CSS,
   create/update, readback, status normalization, and verification workflows.
 - `src/danvas/files.py`: Canvas Files inventory, targeted metadata compare,
@@ -73,7 +75,14 @@ invalid identity conflicts from reserving Canvas rows during status matching.
 The 0.7.3 patch aligns current Page update scope, report-producing Page commands,
 and semantic scheduling behavior across CLI help, durable repo docs, and the
 external teaching-danvas skill/reference. Ruff, ty, and all 320 tests pass
-locally and in CI. The global CLI is installed from the tagged release.
+locally and in CI for that release.
+
+Current development state (2026-08-06): `pyproject.toml` is at unreleased 0.8.0.
+The development line adds conservative assignment override synchronization and
+the `pages-markdown-v2` table-semantics renderer follow-on; Ruff, ty, and all 334
+tests pass locally at implementation/documentation commit `eda98d0`. CI, push,
+tag, and release verification remain pending. The user-level `danvas` command is
+installed as an editable uv tool from this checkout rather than from `v0.7.3`.
 
 Recommended local checks:
 
@@ -138,12 +147,19 @@ and the external Codex teaching skill docs:
   Absolute links are Canvas-relative only when scheme, host, and port match the
   configured Canvas origin. The current Page hash profile is `pages-html-v4`;
   status requires a matching snapshot normalizer and otherwise requests refresh.
+  The Markdown renderer is `pages-markdown-v2`: it adds explicit column scope
+  only to simple tables generated from Markdown and leaves native HTML and raw
+  HTML embedded in Markdown unchanged, preserving author intent and
+  Canvas-to-local round-trip fidelity.
   Title-only Page matches are provisional collision evidence, never provenance,
   and must be unique among both local sources and Canvas Pages. Occupied sync
   targets with provenance for another Page are conflicts.
 - Broad Canvas Files downloads treat Canvas path metadata as untrusted and
   enforce final resolved-path containment inside the selected output directory;
   overwrite permission never weakens containment.
+- The PyPI distribution name `danvas` is occupied by an unrelated project. Any
+  future PyPI publication needs a distinct distribution name; the Python import
+  package and installed `danvas` command may keep their existing names.
 
 ## Report Output Contract
 
