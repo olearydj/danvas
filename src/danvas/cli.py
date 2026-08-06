@@ -50,6 +50,7 @@ from danvas.grades import (
     command_grades_post,
     command_grades_verify,
 )
+from danvas.override_sync import command_assignments_overrides_sync
 from danvas.pages import (
     command_pages_create,
     command_pages_css_check,
@@ -85,6 +86,7 @@ AnnouncementExportFormat = Literal["auto", "json", "csv", "markdown"]
 AnnouncementLatestFormat = Literal["auto", "json", "markdown"]
 FileDuplicatePolicy = Literal["overwrite", "rename"]
 AssignmentUpsertConfirm = Literal["", "create", "update"]
+OverrideSyncConfirm = Literal["", "apply"]
 SubmissionLayout = Literal["flat", "assignment-subdir"]
 SourceKind = Literal["assignment", "announcement", "discussion", "page"]
 LintFormat = Literal["text", "json"]
@@ -758,6 +760,74 @@ def assignments_overrides(
             output=str(output),
             source=str(source) if source else "",
             overwrite=overwrite,
+            api_url=api_url,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
+
+
+@assignments_app.command(
+    "overrides-sync",
+    help="Reconcile a private referenced override file with Canvas; dry-run by default.",
+)
+def assignments_overrides_sync(
+    source: Annotated[
+        Path,
+        typer.Argument(
+            help="Assignment Markdown with availability_overrides_ref front matter."
+        ),
+    ],
+    course_id: CourseId = None,
+    assignment_id: Annotated[
+        int | None,
+        typer.Option("--assignment-id", help="Canvas assignment ID, overriding local provenance."),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run/--live",
+            help="Plan only (default), or explicitly enable live Canvas writes.",
+        ),
+    ] = True,
+    confirm: Annotated[
+        OverrideSyncConfirm,
+        typer.Option("--confirm", help="Live writes require the exact value 'apply'."),
+    ] = "",
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default private report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact private report directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
+    api_url: ApiUrl = None,
+    secret_provider: SecretProviderOption = "auto",
+    op_reference: OpReference = None,
+    api_key_env: ApiKeyEnv = None,
+) -> None:
+    run_command(
+        command_assignments_overrides_sync,
+        args_for(
+            course_id=course_id,
+            source=str(source),
+            assignment_id=assignment_id,
+            dry_run=dry_run,
+            confirm=confirm,
+            project_root=str(project_root),
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

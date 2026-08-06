@@ -52,6 +52,25 @@ Submit the report.
     assert "<h1>YAML Assignment</h1>" in payload["description"]
 
 
+def test_load_assignment_markdown_ignores_private_override_reference(tmp_path: Path) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        """---
+title: Test 2
+availability_overrides_ref: grading/25-26.Su/test2-overrides.yaml
+---
+
+Submit your work.
+""",
+        encoding="utf-8",
+    )
+
+    payload = load_assignment_markdown(source)
+
+    assert "availability_overrides_ref" not in payload
+    assert payload["name"] == "Test 2"
+
+
 def test_load_assignment_markdown_expands_date_only_fields_with_course_timezone(
     tmp_path: Path,
 ) -> None:

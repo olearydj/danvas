@@ -818,9 +818,10 @@ Recommended goals:
 
 2. Add assignment override member export.
 
-   Status: delivered for explicit private export. The example local override
-   file and dry-run sync/update workflow below remain possible future extensions,
-   not current command behavior.
+   Status: delivered for explicit private export and conservative private-file
+   synchronization. `assignments overrides-sync` is dry-run by default, creates
+   or updates referenced rows, requires `--live --confirm apply` for writes, and
+   preserves Canvas-only overrides rather than deleting them.
 
    ```bash
    danvas assignments overrides --assignment-id 19901488
@@ -863,9 +864,9 @@ Recommended goals:
    - Avoid student names in the override file by default; use Canvas user IDs
      or SIS IDs, and keep reports count-first unless member detail is explicitly
      requested.
-   - Add a dry-run-first sync/update workflow for assignment overrides. Live
-     writes should require explicit confirmation, especially for deleting
-     Canvas overrides or changing assignee membership.
+   - The dry-run-first sync/update workflow accepts the exported YAML/JSON
+     structure through `availability_overrides_ref`. Live writes require explicit
+     confirmation, and deletion remains intentionally unsupported.
 
 3. Make assignment status comparisons override-aware.
 

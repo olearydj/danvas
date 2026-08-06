@@ -71,6 +71,8 @@ ASSIGNMENT_METADATA_FIELDS = {
     "vericite_enabled",
 }
 
+ASSIGNMENT_LOCAL_FIELDS = {"availability_overrides_ref"}
+
 
 def command_assignments_verify(args: Any) -> None:
     source = Path(args.source)
@@ -494,10 +496,14 @@ def load_assignment_markdown(source: Path) -> dict[str, Any]:
     expand_date_only_metadata(metadata, source)
     if not str(metadata.get("name", "")).strip():
         raise SystemExit("Assignment metadata must include 'name' or 'title'.")
-    unknown = sorted(set(metadata) - ASSIGNMENT_METADATA_FIELDS)
+    unknown = sorted(set(metadata) - ASSIGNMENT_METADATA_FIELDS - ASSIGNMENT_LOCAL_FIELDS)
     if unknown:
         raise SystemExit(f"Unsupported assignment metadata field(s): {', '.join(unknown)}")
-    assignment = {key: normalize_canvas_value(value) for key, value in metadata.items()}
+    assignment = {
+        key: normalize_canvas_value(value)
+        for key, value in metadata.items()
+        if key not in ASSIGNMENT_LOCAL_FIELDS
+    }
     assignment.setdefault("published", False)
     assignment["description"] = markdown_to_html(body)
     return assignment
@@ -536,7 +542,14 @@ def assignment_payload_from_metadata(
     expand_date_only_metadata(metadata, source)
     if not str(metadata.get("name", "")).strip():
         raise SystemExit("Assignment metadata must include 'name' or 'title'.")
-    provenance_fields = {"assignment_id", "canvas_id", "id", "canvas_url", "html_url"}
+    provenance_fields = {
+        "assignment_id",
+        "canvas_id",
+        "id",
+        "canvas_url",
+        "html_url",
+        *ASSIGNMENT_LOCAL_FIELDS,
+    }
     unknown = sorted(set(metadata) - ASSIGNMENT_METADATA_FIELDS - provenance_fields)
     if unknown:
         raise SystemExit(f"Unsupported assignment metadata field(s): {', '.join(unknown)}")

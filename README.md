@@ -143,6 +143,7 @@ danvas
 ├── assignments
 │   ├── export
 │   ├── overrides
+│   ├── overrides-sync
 │   ├── create
 │   ├── verify
 │   ├── update
@@ -439,6 +440,9 @@ danvas assignments upsert --course-id 1706414 assignments/hw1.md --confirm updat
 danvas assignments audit assignments-full.json --course-yaml course.yaml
 danvas assignments overrides --course-id 1706414 --assignment-id 19413569 \
   --output .danvas/private/assignment-overrides.yaml
+danvas assignments overrides-sync --course-id 1706414 assignments/hw1.md
+danvas assignments overrides-sync --course-id 1706414 assignments/hw1.md \
+  --live --confirm apply
 
 # Submissions and feedback
 danvas submissions export --course-id 1706414 --assignment-id 19413569 \

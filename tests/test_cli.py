@@ -631,6 +631,42 @@ def test_assignments_upsert_cli_options_and_args(
     assert expected <= option_names("assignments", "upsert")
 
 
+def test_assignments_overrides_sync_is_dry_run_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        "---\ntitle: Test 2\navailability_overrides_ref: grading/test2.yaml\n---\n",
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "danvas.cli.command_assignments_overrides_sync",
+        lambda args: captured.update(vars(args)),
+    )
+
+    result = runner.invoke(
+        app,
+        ["assignments", "overrides-sync", str(source), "--course-id", "101"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["dry_run"] is True
+    assert captured["confirm"] == ""
+    expected = {
+        "--assignment-id",
+        "--dry-run",
+        "--live",
+        "--confirm",
+        "--project-root",
+        "--no-report",
+        "--report-root",
+        "--report-dir",
+        "--report-slug",
+    }
+    assert expected <= option_names("assignments", "overrides-sync")
+
+
 def test_announcements_verify_cli_options_and_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
