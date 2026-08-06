@@ -1,6 +1,6 @@
 # danvas Backlog
 
-Last consolidated: 2026-07-10.
+Last consolidated: 2026-07-27.
 
 This document is the planning backlog for `danvas`. It distinguishes the shipped
 0.7.0 surface from genuine follow-on work. The lightweight implementation specs
@@ -171,7 +171,7 @@ sprint sequence as canonical.
 | Sprint 3 stretch: human-readable operation reports | Partial | Delivered for several report-run commands; Candidate B keeps report consistency work alive for new commands. |
 | Sprint 3 beyond: rubric support | Deferred | Smaller Backlog Items; wait until update/upsert behavior is stable. |
 | Sprint 3 beyond: activity logging | Not recommended as a sprint | Not Recommended Or No Longer Relevant. |
-| Sprint 3 beyond: live Canvas gradebook export/download | Not recommended for current planning | Not Recommended Or No Longer Relevant. |
+| Sprint 3 beyond: live Canvas gradebook export/download | Open field-backed backlog item | Recent Field-Observed Workflow Gaps, item 7. |
 | Sprint 3 beyond: `gradebook.py` cleanup | Not a product backlog feature | Treat as opportunistic maintenance, not sprint scope. |
 
 ### Done From Sprint 2/3
@@ -1379,9 +1379,9 @@ Definition of done for the remaining candidate:
 
 ## Recent Field-Observed Workflow Gaps
 
-These items came from the INSY 7750 Unit 4 discussion workflow after the
-2026-06-24 backlog consolidation. Items 3 and 4 shipped in 0.6.0, and item 5 is
-now reflected in the external skill docs. Items 1 and 2 remain product work.
+These items came from field use after the 2026-06-24 backlog consolidation.
+Items 3 and 4 shipped in 0.6.0, and item 5 is now reflected in the external
+skill docs. Items 1, 2, 6, 7, 8, and 9 remain product work.
 
 1. Generalize seeded discussion creation beyond grouped cases.
 
@@ -1475,6 +1475,237 @@ now reflected in the external skill docs. Items 1 and 2 remain product work.
      waiting for user action before treating the behavior as a danvas defect.
    - Keep this in external skill docs, not as a `danvas` command feature, unless
      repeated evidence shows the CLI itself needs better timeout messaging.
+
+6. Fix exact grade-comment replacement and partial-write reporting.
+
+   Field evidence from a live one-row grade correction on 2026-07-19:
+
+   - A guarded `danvas grades post --dry-run` correctly planned a grade change
+     and `CommentAction=replace_exact` against an instructor-owned comment.
+   - The live command changed the grade, then failed while replacing the comment
+     with `AttributeError: 'dict' object has no attribute 'extend'`.
+   - `edit_submission_comment()` passes a dictionary as CanvasAPI request
+     `_kwargs`, but CanvasAPI's requester expects a list of parameter tuples and
+     calls `.extend()` on it.
+   - The current test double defines `edit_comment()`, which the production
+     CanvasAPI `Submission` object does not provide, so the broken requester
+     fallback is not exercised by the existing replacement test.
+   - The command reported `Posted: 0, Failed: 1` even though the grade write had
+     succeeded, leaving a partial grade/comment state that required immediate
+     readback and a two-step exact-delete-plus-append recovery.
+
+   Required fixes:
+
+   - Encode the comment-edit request with CanvasAPI's `combine_kwargs()` or an
+     equivalent list of `(key, value)` tuples rather than a dictionary.
+   - Add a regression test that exercises the production requester fallback on
+     an object without `edit_comment()`; do not rely only on the convenience
+     method supplied by `FakeSubmission`.
+   - After any per-row mutation exception, read the submission back and report
+     whether the grade, comment, both, or neither changed. Do not summarize a
+     partially applied row as though no write occurred.
+   - Add compensating rollback or a clearly bounded recovery artifact for
+     multi-step grade-plus-comment mutations. The command must either restore
+     the captured pre-write state or explicitly stop with exact partial-state
+     evidence and a safe next command.
+   - Cover grade-success/comment-failure and comment-success/grade-failure cases
+     with tests, including rollback evidence and final verification behavior.
+
+   Definition of done:
+
+   - `replace_exact` passes a live-equivalent requester test and a bounded Canvas
+     field acceptance check.
+   - A combined grade/comment failure cannot be reported as an all-or-nothing
+     failure when Canvas has already accepted one part of the mutation.
+   - Recovery preserves instructor-comment ownership checks, exact matching,
+     expected-current-grade guards, rollback evidence, and readback verification.
+
+7. Add an explicit live Canvas gradebook export/download command.
+
+   Field evidence from the INSY 6600 Test 1 posting workflow on 2026-07-19:
+
+   - `danvas grades post` and assignment-submission readback could verify a
+     targeted score column, but they could not verify the final course-facing
+     gradebook layout and weighted-group behavior.
+   - The existing `danvas gradebook check` and `gradebook audit` commands require
+     a manually exported Canvas gradebook CSV.
+   - After moving preserved quiz submissions into a 0%-weighted group and
+     posting consolidated scores to a new weighted assignment, the remaining
+     verification step required leaving danvas to download the gradebook.
+
+   Proposed command shape:
+
+   ```bash
+   danvas gradebook export --output grading/current-gradebook.csv
+   danvas gradebook check grading/current-gradebook.csv
+   ```
+
+   Desired behavior:
+
+   - Download the same instructor gradebook CSV represented by Canvas's Gradebook
+     export, using an authenticated supported Canvas endpoint rather than browser
+     automation when one is available.
+   - Require an explicit output path, refuse overwrite unless `--overwrite` is
+     supplied, and mark the file private (`0600`).
+   - Keep the command read-only and explicit-output; do not create a report run
+     by default.
+   - Preserve the raw Canvas export so it can be passed directly to `gradebook
+     check` or `gradebook audit` without schema conversion.
+   - Report the course ID, output path, file size, and SHA-256 after download,
+     while never persisting access tokens, verifier URLs, or temporary signed
+     download URLs.
+   - Define and test how active, inactive, concluded, and test-student enrollments
+     appear so audits can distinguish a missing grade from a roster-state filter.
+   - If Canvas requires asynchronous export generation, poll with a bounded
+     timeout and leave clear failure evidence without a partial file.
+
+   Definition of done:
+
+   - A live field test produces a CSV accepted unchanged by both existing
+     gradebook commands.
+   - Private permissions, no-clobber behavior, timeout handling, and secret/URL
+     redaction have automated coverage.
+   - README and the external teaching-danvas command reference document the new
+     explicit-output workflow.
+
+8. Harden assignment release, file-link verification, and report sanitization.
+
+   Field evidence from the INSY 6600 Case Study 3 release on 2026-07-23:
+
+   - `danvas files upload --dry-run` and the live upload both succeeded, but the
+     structured upload output exposed only `canvas_id` and `url_present: true`,
+     not a reusable stable Canvas course-file URL. The assignment wrapper had to
+     construct `https://.../courses/{course_id}/files/{file_id}?wrap=1`
+     manually.
+   - The upload dry-run reported only `status: dry-run`; it did not distinguish
+     whether each target would be created, overwritten, or renamed under the
+     selected duplicate policy.
+   - `danvas assignments verify` reported `matches`, but its comparison covered
+     only title, points, due/lock dates, published state, assignment-group name,
+     submission types, grading type, and normalized body text. It did not check
+     `unlock_at`, `allowed_extensions`, `group_category_id`, or the actual link
+     targets and Canvas file IDs embedded in the live HTML.
+   - Exact file-link and extension verification therefore required a full
+     assignment export and manual inspection, even though the normal verification
+     result appeared complete.
+   - The routine assignment-verification JSON report retained the raw Canvas
+     assignment description with verifier-bearing file URLs and a
+     `secure_params` value. This conflicts with the durable report contract that
+     ordinary reports remain free of verifier URLs and secure parameters.
+   - Generic date enrichment also produced nonsensical derived fields for numeric
+     data, including `assignment_group_id_date`, `enrollment_term_id_date`, and
+     `storage_quota_mb_date`. Only known timestamp fields should receive parsed
+     date companions.
+
+   Required fixes:
+
+   - Sanitize assignment verification and export report payloads before writing
+     them. Ordinary reports must omit raw `secure_params`, remove verifier and
+     signed URL parameters, and retain only stable Canvas URLs or extracted file
+     IDs. If an explicit raw mode is ever added, classify it as private output,
+     require an intentional opt-in, and use private permissions.
+   - Restrict date enrichment to an allowlist or reliably typed timestamp fields
+     such as `due_at`, `unlock_at`, `lock_at`, `created_at`, and `updated_at`.
+     Add regression tests proving IDs, counts, quotas, and other numeric fields
+     never gain synthetic `_date` values.
+   - Expand assignment verification to compare every supported stable field that
+     is declared locally, including `unlock_at`, `allowed_extensions`, and
+     `group_category_id`. Report `checked fields match` or an explicit partial
+     status when some fields are unsupported rather than implying a complete
+     match.
+   - Canonicalize local and live assignment links by removing volatile query
+     parameters, extract stable Canvas course/file IDs, and verify that every
+     required link targets an existing file in the current course. Link text
+     equality is not sufficient.
+   - Return a safe stable `canvas_url` for every successful file upload, alongside
+     the file ID and Canvas path, without retaining the raw verifier/download
+     URL. The output should be directly usable in assignment Markdown.
+   - Make upload dry-runs resolve duplicate behavior and report `would_create`,
+     `would_overwrite`, `would_rename`, or a bounded conflict with the existing
+     target ID when available.
+
+   Lower-priority follow-ons:
+
+   - Build the planned Markdown asset-rewriting work in Sprint Candidate D on
+     these hardened primitives so an assignment can declare local release files,
+     upload them, rewrite only Canvas-bound HTML, and verify the final targets
+     without mutating authored source unexpectedly.
+   - Decide whether `danvas status` should report local-only files for configured
+     release-source directories, or provide a narrower release-asset audit that
+     does so without turning status into whole-tree file synchronization.
+   - Reconcile the source-lint duplicate-title/H1 warning with established Canvas
+     assignment-wrapper conventions. Prefer source-kind-aware guidance or an
+     explicit suppression mechanism over weakening the rule globally.
+   - Consider minute-semantic assignment date comparison only for date-only
+     authored fields; preserve exact timestamp comparison for explicitly authored
+     datetimes.
+
+   Definition of done:
+
+   - The Case Study 3 release workflow can upload two files, obtain safe stable
+     links, create the assignment, and verify all declared metadata and exact file
+     IDs without constructing URLs manually or reading a raw full export.
+   - A successful verification cannot report a complete match while declared
+     supported fields or Canvas file targets remain unchecked.
+   - Verification/report fixtures prove that verifier parameters,
+     `secure_params`, access tokens, and signed URLs are absent from ordinary
+     JSON, Markdown, manifests, stdout, diagnostics, and source-map data.
+   - Date-normalization tests prove that only genuine timestamp fields receive
+     parsed date companions.
+   - Upload dry-run and live output have stable, documented action statuses and
+     safe URL fields, with README and external teaching-danvas command-reference
+     updates when the command surface changes.
+
+9. Make course snapshots resilient to endpoint-specific authorization gaps.
+
+   Field evidence from archiving the concluded Fall 2025 INSY 6500 course on
+   2026-07-27:
+
+   - `danvas init 1665637` successfully reached the course and ordinary course
+     metadata, but Canvas returned `403 Forbidden` while enumerating
+     `/api/v1/courses/1665637/group_categories`. Because snapshot collection
+     calls that endpoint unconditionally, the command did not create the normal
+     schema-v4 `.danvas/course.json`.
+   - Group-category collection was added to the expanded snapshot in commit
+     `4020c45` on 2026-06-12. Successful initialization before that commit did
+     not exercise this endpoint. Post-change snapshots for active courses have
+     succeeded, including a course with populated group categories, which argues
+     against a token-wide or general Canvas authorization failure.
+   - The available evidence cannot distinguish whether Canvas access changed
+     when course 1665637 concluded or whether this endpoint was always
+     inaccessible for that course. Treat this as a newly exposed,
+     course/endpoint-specific permission edge case rather than a confirmed
+     general permissions change.
+
+   Investigation and proposed behavior:
+
+   - Reproduce the exact read-only group-categories request against concluded
+     and active courses with the same instructor credentials. Record sanitized
+     HTTP status and relevant course/enrollment state without persisting tokens,
+     signed URLs, or student data.
+   - Determine which snapshot collections are required for a usable course
+     snapshot and which are optional enrichments. A 401/403 on an optional
+     collection should produce an explicit warning and availability marker
+     while allowing `init` or `refresh` to complete; it must not silently become
+     an empty list.
+   - Preserve the distinction between `available and empty`, `unavailable due
+     to authorization`, and `collection failed`. Ensure `refresh --diff` and
+     `status` do not report removals merely because a section was unavailable
+     during the latest refresh.
+   - Add regression coverage for a group-categories 403, including any nested
+     per-category group lookup, while preserving current active-course snapshot
+     behavior. Consider whether the same policy should apply to other optional
+     snapshot endpoints only after their required/optional status is explicit.
+
+   Definition of done:
+
+   - `danvas init` and `danvas refresh` can produce an explicitly partial but
+     structurally valid snapshot for a historical course when an optional
+     endpoint is forbidden.
+   - The CLI reports the inaccessible section and HTTP status clearly, without
+     misrepresenting it as empty or exposing sensitive response data.
+   - Snapshot diff/status behavior and automated tests distinguish unavailable
+     metadata from actual Canvas-side deletion.
 
 ## Smaller Backlog Items
 
@@ -1595,9 +1826,6 @@ design direction.
 - Do not schedule comprehensive activity logging as a near-term sprint. If durable
   operational evidence is needed, prefer report runs, manifests, and explicit
   command outputs that solve a concrete workflow.
-- Do not prioritize live Canvas gradebook export/download as current sprint work.
-  The existing gradebook commands are local-file-first; add live export only when
-  a course workflow needs it enough to justify the Canvas API and privacy surface.
 - Do not treat `gradebook.py` cleanup as a product feature. It can be done
   opportunistically when changing gradebook behavior, but it should not drive
   sprint planning by itself.
