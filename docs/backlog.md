@@ -1244,10 +1244,16 @@ on Markdown heuristics alone.
 
 1. Strengthen generated HTML semantics without inventing author intent.
 
+   Status: explicit column scope for simple Markdown-generated tables is
+   delivered by renderer `pages-markdown-v2`. Native HTML and raw HTML embedded
+   in Markdown remain unchanged. Caption support and broader rendered-fragment
+   diagnostics remain follow-on work.
+
    - Preserve the existing heading, list, link, code, and table structure.
    - Add `scope="col"` to generated column-header cells in simple Markdown
-     tables. Add row-header scope only when the authored structure identifies a
-     row header; do not infer it merely from the first cell in each row.
+     tables. Delivered. Add row-header scope only when the authored structure
+     identifies a row header; do not infer it merely from the first cell in each
+     row.
    - Preserve authored table captions and accessible names when the selected
      Markdown profile supports them. Do not manufacture captions from nearby
      prose.

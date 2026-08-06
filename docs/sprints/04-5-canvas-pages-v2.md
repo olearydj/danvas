@@ -4,6 +4,13 @@ Status: implemented and verified, including the explicitly approved live INSY
 7970 draft creation, visual review, publication update, and final verification,
 on 2026-07-10.
 
+Renderer follow-on (2026-08-06): `pages-markdown-v2` adds explicit column-header
+semantics to simple tables generated from Markdown. Native HTML sources and raw
+HTML embedded in Markdown remain unchanged so danvas does not infer author intent
+or break Canvas-to-local round-trip fidelity. Automated tests cover generated
+tables, authored HTML preservation, CSS inlining, verified readback, rejected
+readback when Canvas removes the attribute, and synchronized Canvas tables.
+
 ## Objective
 
 Extend Pages V1 into a bounded general workflow: render Markdown deterministically,
@@ -39,6 +46,8 @@ changes, deletion, or resolution that would create a new Page.
   headings. Duplicate headings receive stable suffixes.
 - Preserve same-page links such as `#installation` and verify that every local
   fragment target survives rendering and Canvas readback.
+- Add explicit column scope to header cells generated from simple Markdown
+  tables. Do not infer row headers or rewrite native/raw authored HTML tables.
 - If the first body H1 matches the normalized front-matter title, omit that H1
   from the Canvas-bound fragment without changing the Markdown source. Report the
   action in render output. A nonmatching H1 is preserved but warned about.

@@ -60,6 +60,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 
 - manage Canvas Pages
   - deterministic Markdown or native-HTML fragment rendering with stable heading anchors
+  - accessible column-header semantics for simple Markdown-generated tables while preserving authored HTML tables unchanged
   - restricted `.canvas.css` validation and deterministic style inlining under a versioned compatibility profile
   - list/export, draft creation, bounded body/publication/roles/scheduling update, source-map provenance, and readback verification
   - schema-v4 snapshot summaries and local-source status comparison without storing full Page bodies
