@@ -11,7 +11,13 @@ from typer.testing import CliRunner
 
 from danvas.cli import app
 from danvas.pages import BODY_NORMALIZER_VERSION, load_page_source
-from danvas.status import build_status, command_status
+from danvas.snapshot_collections import COLLECTION_NAMES
+from danvas.status import (
+    build_status,
+    command_status,
+    render_status_lines,
+    render_status_markdown,
+)
 
 runner = CliRunner()
 
@@ -123,6 +129,20 @@ def build_snapshot() -> dict[str, Any]:
     }
 
 
+def as_schema_five(snapshot: dict[str, Any]) -> dict[str, Any]:
+    snapshot["schema_version"] = 5
+    snapshot["snapshot_status"] = "complete"
+    snapshot["collections"] = {
+        name: {
+            "status": "available",
+            "authoritative": True,
+            "item_count": len(snapshot.get(name) or []),
+        }
+        for name in COLLECTION_NAMES
+    }
+    return snapshot
+
+
 def write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -211,6 +231,85 @@ def test_build_status_excludes_discussion_backed_assignments(tmp_path: Path) -> 
 
     titles = [item["title"] for item in payload["sections"]["assignments"]]
     assert "Case Discussion" not in titles
+
+
+def test_build_status_skips_unavailable_section_without_false_local_only_claims(
+    tmp_path: Path,
+) -> None:
+    build_workspace(tmp_path)
+    snapshot = as_schema_five(build_snapshot())
+    snapshot["snapshot_status"] = "partial"
+    snapshot["assignments"] = []
+    snapshot["collections"]["assignments"] = {
+        "status": "unavailable",
+        "authoritative": False,
+        "item_count": 0,
+        "reason": "forbidden",
+        "error_type": "Forbidden",
+    }
+
+    payload = build_status(snapshot, tmp_path, now=NOW)
+
+    assert payload["snapshot"]["status"] == "partial"
+    assert payload["sections"]["assignments"] == []
+    assert payload["section_availability"]["assignments"]["reason"] == "forbidden"
+    assert "local-only" not in payload["summary"]
+    terminal = "\n".join(render_status_lines(payload))
+    assert "Assignments: unavailable (forbidden)" in terminal
+    markdown = render_status_markdown(payload)
+    assert "## Assignments" in markdown
+    assert "Unavailable from this snapshot (`forbidden`)." in markdown
+
+
+def test_build_status_does_not_scan_local_files_when_files_are_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot = as_schema_five(build_snapshot())
+    snapshot["snapshot_status"] = "partial"
+    snapshot["files"] = []
+    snapshot["collections"]["files"] = {
+        "status": "failed",
+        "authoritative": False,
+        "item_count": 0,
+        "reason": "network_error",
+        "error_type": "RequestException",
+    }
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("local file comparison should be skipped")
+
+    monkeypatch.setattr("danvas.status.compare_files", fail_if_called)
+
+    payload = build_status(snapshot, tmp_path, now=NOW)
+
+    assert payload["sections"]["files"] == []
+    assert payload["section_availability"]["files"]["status"] == "failed"
+
+
+def test_group_category_status_distinguishes_unavailable_from_available_empty(
+    tmp_path: Path,
+) -> None:
+    unavailable = as_schema_five(build_snapshot())
+    unavailable["snapshot_status"] = "partial"
+    unavailable["group_categories"] = []
+    unavailable["collections"]["group_categories"] = {
+        "status": "unavailable",
+        "authoritative": False,
+        "item_count": 0,
+        "reason": "forbidden",
+        "error_type": "Forbidden",
+    }
+    empty = as_schema_five(build_snapshot())
+    empty["group_categories"] = []
+    empty["collections"]["group_categories"]["item_count"] = 0
+
+    unavailable_payload = build_status(unavailable, tmp_path, now=NOW)
+    empty_payload = build_status(empty, tmp_path, now=NOW)
+
+    unavailable_lines = "\n".join(render_status_lines(unavailable_payload))
+    empty_lines = "\n".join(render_status_lines(empty_payload))
+    assert "Group categories: unavailable (forbidden)" in unavailable_lines
+    assert "Group categories: none" in empty_lines
 
 
 def test_build_status_compares_bound_pages_and_keeps_title_matches_unbound(

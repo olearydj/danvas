@@ -489,7 +489,10 @@ def auth_doctor(
 
 @app.command(
     "refresh",
-    help="Refresh .danvas/course.json from Canvas using --course-id or .danvas/config.toml.",
+    help=(
+        "Refresh .danvas/course.json from Canvas using --course-id or .danvas/config.toml. "
+        "Optional endpoint failures produce an explicit partial snapshot."
+    ),
 )
 def refresh_project(
     course_id: CourseId = None,

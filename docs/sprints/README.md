@@ -86,8 +86,11 @@ reporting with authoritative readback classification, adds bounded private
 recovery evidence, and records a conservative targeted-student release-state
 conclusion in private post/clear/verify receipts. It deliberately excludes
 grade-posting-policy mutations and live gradebook export. Ruff, ty, and all 360
-tests pass locally; its bounded live Canvas field acceptance remains pending
-explicit authorization.
+tests pass locally. A 2026-08-11 acceptance attempt stopped safely because the
+sandbox contained only a real participant and no Test Student could be
+provisioned in the unavailable browser session; no grade or comment state was
+changed. Its bounded live Canvas field acceptance remains pending explicit
+authorization of a disposable enrollment.
 
 ## 0.9.0 Assignment Release Follow-On
 
@@ -102,6 +105,26 @@ status semantics, and safe assignment report/export projections. The design
 recognizes that `unlock_at` and `group_category_id` verification already ship
 and treats the previously observed numeric date enrichment as a regression
 invariant because that behavior is not present in the current source.
-It is locally verified with Ruff, ty, and all 381 tests. Bounded live Canvas
-field acceptance and release close-out remain pending, as does reconciliation of
-the earlier 0.8.0 release gate.
+It is locally verified with Ruff, ty, and all 381 tests. Its bounded live Canvas
+field case passed on 2026-08-11, including create/overwrite/rename planning,
+stable upload evidence, positive and negative exact-file verification, artifact
+scanning, and cleanup. Release close-out and reconciliation of the earlier 0.8.0
+release gate remain pending.
+
+## 0.10.0 Authorization-Resilient Snapshot Follow-On
+
+The implemented next feature slice is:
+
+- Sprint 12: [Authorization-Resilient Partial Snapshots](12-authorization-resilient-snapshots.md)
+
+Sprint 12 addresses field-observed backlog item 9. A same-credential read-only
+check on 2026-08-11 confirmed that group-category enumeration is forbidden for
+one historical course while remaining available and empty in the sandbox
+course. The implementation introduces schema-v5 collection authority metadata so
+`init`, `refresh --diff`, and `status` can distinguish a genuinely empty
+collection from an unavailable, failed, or partially collected one. Design is
+implemented and locally verified with Ruff, ty, and all 395 tests. Its bounded
+read-only Canvas field case passed on 2026-08-11: the historical course produced
+an explicit partial/forbidden group-category state with no diff removal claims,
+while the sandbox produced an authoritative empty state. Release close-out
+remains pending.

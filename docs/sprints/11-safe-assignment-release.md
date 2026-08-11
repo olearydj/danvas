@@ -1,7 +1,8 @@
 # Sprint 11: Safe Assignment Release Evidence
 
-Status: implemented and locally verified on 2026-08-11; bounded live Canvas
-field acceptance and release close-out remain pending. Target release: 0.9.0.
+Status: implemented, locally verified, and accepted in a bounded live Canvas
+field case on 2026-08-11; release close-out remains pending. Target release:
+0.9.0.
 
 ## Objective
 
@@ -375,6 +376,30 @@ safe course:
    used in fixtures and confirm none are present.
 8. Restore or remove temporary draft content and uploaded files under the same
    explicit authorization, then record cleanup evidence.
+
+### Field Acceptance Result
+
+Passed on 2026-08-11 in sandbox course 1576638:
+
+- upload dry-runs distinguished `would_create`, `would_overwrite`, and
+  `would_rename` without predicting Canvas's renamed filename
+- live overwrite and create uploads returned stable course-file URLs and safe
+  identity/path evidence
+- a disposable unpublished assignment declared `allowed_extensions` and linked
+  to both exact uploaded file IDs
+- positive verification returned `matches` with all seven declared fields and
+  both course-scoped file reads confirmed
+- changing one expected file ID to a nonexistent ID produced a non-mutating
+  `mismatch` and `not_found` file evidence
+- retained acceptance artifacts contained no verifier, `secure_params`, access
+  token, or signed-storage query values
+- the disposable assignment and uploaded files were removed by exact ID, and a
+  final inventory confirmed the sandbox had returned to its original three
+  assignments and zero files
+
+This completes the bounded live field gate. Release close-out still requires
+reconciling the pending Sprint 10 gate and publishing the intended 0.9.0 release
+state.
 
 ## Exclusions
 

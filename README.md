@@ -67,7 +67,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - accessible column-header semantics for simple Markdown-generated tables while preserving authored HTML tables unchanged
   - restricted `.canvas.css` validation and deterministic style inlining under a versioned compatibility profile
   - list/export, draft creation, bounded body/publication/roles/scheduling update, source-map provenance, and readback verification
-  - schema-v4 snapshot summaries and local-source status comparison without storing full Page bodies
+  - schema-v5 authority-aware snapshot summaries and local-source status comparison without storing full Page bodies
   - canonicalizes stable links only on the configured Canvas origin and blocks unresolved signed/verifier URLs before hashing
   - safely syncs missing Canvas Pages to Markdown or native HTML without overwriting authored sources
   - targeted HTML/Markdown export with normalized-body and anchor round-trip checks
@@ -276,8 +276,13 @@ assignment group name-to-ID mappings. `course.json` is a generated Canvas
 metadata snapshot for local lookup and comparison; it covers assignments,
 assignment groups, files, announcements, discussions, quiz shells, and
 group-category summaries, plus Page metadata and normalized body hashes. Snapshot
-schema version 4 never stores Page bodies, download verifier URLs, or student
-data. Page hashing also ignores non-authorable account stylesheet/script
+schema version 5 records whether each collection is authoritative, unavailable,
+failed, or partial. Optional endpoint failures leave an explicitly partial but
+usable snapshot; `refresh --diff` and `status` do not claim removals or
+local/Canvas drift from non-authoritative collections. Required assignment and
+assignment-group reads still fail without replacing the previous snapshot.
+Snapshots never store Page bodies, download verifier URLs, raw Canvas error
+responses, or student data. Page hashing also ignores non-authorable account stylesheet/script
 decorators that Canvas injects around API readback while continuing to reject
 those elements in authored Page sources. Absolute links become Canvas-relative
 only when their origin matches the configured Canvas origin. Status requests a
@@ -292,6 +297,11 @@ danvas refresh
 danvas refresh --diff
 danvas refresh --diff --report-root .danvas/reports
 ```
+
+The first refresh from schema 4 to schema 5 reports a schema change instead of
+making cross-schema change claims. Later schema-v5 diffs compare authoritative
+sections independently and label unavailable or newly restored sections without
+inventing additions or removals.
 
 After initialization, Canvas-backed commands can omit `--course-id`; an explicit
 `--course-id` still wins over the project config. Assignment Markdown can also

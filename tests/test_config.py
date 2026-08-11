@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from canvasapi.exceptions import Forbidden, RateLimitExceeded
 
 from danvas import config
 from danvas.assignments import command_assignments_create
@@ -256,6 +257,178 @@ def test_build_course_snapshot_contains_no_secrets_or_member_lists() -> None:
     assert "student_ids" not in json.dumps(snapshot["assignments"][0])
 
 
+def test_build_course_snapshot_marks_optional_forbidden_collection_unavailable() -> None:
+    class ForbiddenCategoriesCourse(FakeCourse):
+        def get_group_categories(self):
+            raise Forbidden("secret response https://canvas.test/?verifier=sentinel")
+
+    snapshot = config.build_course_snapshot(
+        ForbiddenCategoriesCourse(), canvas_origin="https://canvas.test/"
+    )
+
+    assert snapshot["schema_version"] == 5
+    assert snapshot["snapshot_status"] == "partial"
+    assert snapshot["assignments"]
+    assert snapshot["group_categories"] == []
+    assert snapshot["collections"]["group_categories"] == {
+        "status": "unavailable",
+        "authoritative": False,
+        "item_count": 0,
+        "reason": "forbidden",
+        "error_type": "Forbidden",
+    }
+    serialized = json.dumps(snapshot)
+    assert "sentinel" not in serialized
+    assert "verifier" not in serialized
+
+
+def test_build_course_snapshot_retains_nested_group_category_partial_state() -> None:
+    class NestedForbiddenCourse(FakeCourse):
+        def get_group_categories(self):
+            category = SimpleNamespace(id=700, name="Case 1 Groups", self_signup=None)
+
+            def forbidden_groups():
+                raise Forbidden("private nested response")
+
+            category.get_groups = forbidden_groups
+            return [category]
+
+    snapshot = config.build_course_snapshot(NestedForbiddenCourse())
+
+    metadata = snapshot["collections"]["group_categories"]
+    assert metadata["status"] == "partial"
+    assert metadata["authoritative"] is False
+    assert metadata["reason"] == "nested_collection_unavailable"
+    category = snapshot["group_categories"][0]
+    assert category["groups_status"] == "unavailable"
+    assert category["groups_reason"] == "forbidden"
+    assert category["group_count"] is None
+    assert category["member_count"] is None
+    assert category["groups"] == []
+
+
+def test_build_course_snapshot_distinguishes_available_empty_group_categories() -> None:
+    class EmptyCategoriesCourse(FakeCourse):
+        def get_group_categories(self):
+            return []
+
+    snapshot = config.build_course_snapshot(EmptyCategoriesCourse())
+
+    assert snapshot["group_categories"] == []
+    assert snapshot["collections"]["group_categories"] == {
+        "status": "available",
+        "authoritative": True,
+        "item_count": 0,
+    }
+    assert snapshot["snapshot_status"] == "complete"
+
+
+def test_build_course_snapshot_classifies_rate_limit_before_forbidden() -> None:
+    class RateLimitedCategoriesCourse(FakeCourse):
+        def get_group_categories(self):
+            raise RateLimitExceeded("secret rate-limit response")
+
+    snapshot = config.build_course_snapshot(RateLimitedCategoriesCourse())
+
+    metadata = snapshot["collections"]["group_categories"]
+    assert metadata["status"] == "failed"
+    assert metadata["reason"] == "rate_limited"
+    assert metadata["error_type"] == "RateLimitExceeded"
+
+
+def test_folder_failure_blocks_files_without_calling_file_endpoint() -> None:
+    class ForbiddenFoldersCourse(FakeCourse):
+        files_called = False
+
+        def get_folders(self):
+            raise Forbidden("private folder response")
+
+        def get_files(self):
+            self.files_called = True
+            return super().get_files()
+
+    course = ForbiddenFoldersCourse()
+    snapshot = config.build_course_snapshot(course)
+
+    assert course.files_called is False
+    assert snapshot["collections"]["folders"]["status"] == "unavailable"
+    assert snapshot["collections"]["files"] == {
+        "status": "unavailable",
+        "authoritative": False,
+        "item_count": 0,
+        "reason": "dependency_unavailable",
+        "error_type": "Forbidden",
+        "dependency": "folders",
+    }
+
+
+def test_required_collection_failure_is_bounded_and_not_swallowed() -> None:
+    class ForbiddenAssignmentsCourse(FakeCourse):
+        def get_assignments(self, include=None):
+            raise Forbidden("secret response body")
+
+    with pytest.raises(SystemExit, match="assignments.*unavailable.*forbidden") as exc_info:
+        config.build_course_snapshot(ForbiddenAssignmentsCourse())
+
+    assert "secret response body" not in str(exc_info.value)
+
+
+def test_required_collection_failure_leaves_previous_snapshot_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+    snapshot_path = tmp_path / ".danvas" / "course.json"
+    previous = b'{"sentinel": "previous snapshot"}\n'
+    snapshot_path.write_bytes(previous)
+
+    class ForbiddenAssignmentsCourse(FakeCourse):
+        def get_assignments(self, include=None):
+            raise Forbidden("secret response body")
+
+    class FakeCanvas:
+        def get_course(self, course_id: int):
+            return ForbiddenAssignmentsCourse()
+
+    monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(project_root=str(tmp_path), course_id=1742717, diff=False)
+
+    with pytest.raises(SystemExit, match="assignments.*unavailable"):
+        config.command_refresh(args)
+
+    assert snapshot_path.read_bytes() == previous
+
+
+def test_command_refresh_writes_partial_snapshot_with_bounded_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+
+    class ForbiddenCategoriesCourse(FakeCourse):
+        def get_group_categories(self):
+            raise Forbidden("secret response https://canvas.test/?verifier=sentinel")
+
+    class FakeCanvas:
+        def get_course(self, course_id: int):
+            return ForbiddenCategoriesCourse()
+
+    monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(project_root=str(tmp_path), course_id=1742717, diff=False)
+
+    config.command_refresh(args)
+
+    output = capsys.readouterr().out
+    assert "group_categories is unavailable (forbidden)" in output
+    assert "sentinel" not in output
+    assert "verifier" not in output
+    snapshot = json.loads(
+        (tmp_path / ".danvas" / "course.json").read_text(encoding="utf-8")
+    )
+    assert snapshot["snapshot_status"] == "partial"
+    assert snapshot["collections"]["group_categories"]["authoritative"] is False
+
+
 def test_diff_snapshots_reports_added_removed_changed() -> None:
     old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
     new = json.loads(json.dumps(old))
@@ -273,6 +446,86 @@ def test_diff_snapshots_reports_added_removed_changed() -> None:
     assert changed[0]["label"] == "Case Study 1"
     assert changed[0]["changes"] == ["points_possible: 100 -> 50"]
     assert "announcements" not in sections
+
+
+def test_diff_snapshots_skips_non_authoritative_section_without_false_removals() -> None:
+    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    new = json.loads(json.dumps(old))
+    new["snapshot_status"] = "partial"
+    new["group_categories"] = []
+    new["collections"]["group_categories"] = {
+        "status": "unavailable",
+        "authoritative": False,
+        "item_count": 0,
+        "reason": "forbidden",
+        "error_type": "Forbidden",
+    }
+    new["assignments"][0]["points_possible"] = 50
+
+    report = config.diff_snapshots(old, new)
+
+    assert report is not None
+    assert report["comparison_status"] == "partial"
+    categories = report["sections"]["group_categories"]
+    assert categories["comparison_status"] == "unavailable"
+    assert categories["old_status"] == "available"
+    assert categories["new_status"] == "unavailable"
+    assert categories["new_reason"] == "forbidden"
+    assert categories["added"] == []
+    assert categories["removed"] == []
+    assert categories["changed"] == []
+    assert report["sections"]["assignments"]["changed"]
+
+
+def test_diff_snapshots_marks_restored_section_without_historical_change_claims() -> None:
+    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    old = json.loads(json.dumps(new))
+    old["snapshot_status"] = "partial"
+    old["group_categories"] = []
+    old["collections"]["group_categories"] = {
+        "status": "failed",
+        "authoritative": False,
+        "item_count": 0,
+        "reason": "rate_limited",
+        "error_type": "RateLimitExceeded",
+    }
+
+    report = config.diff_snapshots(old, new)
+
+    assert report is not None
+    categories = report["sections"]["group_categories"]
+    assert categories["comparison_status"] == "restored"
+    assert categories["added"] == []
+    assert categories["removed"] == []
+    assert categories["changed"] == []
+    rendered = "\n".join(config.render_snapshot_diff(report))
+    assert "comparison restored" in rendered
+    assert "no change claims" in rendered
+
+
+def test_refresh_diff_report_is_partial_when_a_section_is_not_authoritative(
+    tmp_path: Path,
+) -> None:
+    old = config.build_course_snapshot(FakeCourse())
+    new = json.loads(json.dumps(old))
+    new["snapshot_status"] = "partial"
+    new["collections"]["group_categories"] = {
+        "status": "unavailable",
+        "authoritative": False,
+        "item_count": 0,
+        "reason": "forbidden",
+        "error_type": "Forbidden",
+    }
+
+    report = config.build_refresh_diff_report(
+        old, new, tmp_path / ".danvas" / "course.json"
+    )
+
+    assert report["status"] == "partial"
+    assert "not compared" in report["message"]
+    markdown = config.render_refresh_diff_markdown(report)
+    assert "Comparison: `unavailable`" in markdown
+    assert "New collection: `unavailable` (`forbidden`)" in markdown
 
 
 def test_diff_snapshots_tracks_pages_by_page_id() -> None:

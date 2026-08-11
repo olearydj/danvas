@@ -239,6 +239,18 @@ target:
 Do not induce a live partial failure merely to test recovery; automated
 live-equivalent requester and state-machine tests own that case.
 
+### Field Acceptance Attempt
+
+On 2026-08-11, sandbox course 1576638 was confirmed reachable and suitable for
+disposable assignment/file work, but its only student enrollment was a real
+participant rather than Canvas's Test Student. The in-app browser needed to
+enter Student View and provision a Test Student was unavailable in the session.
+No grade, submission comment, or enrollment state was mutated.
+
+The field gate therefore remains pending. Resume only after a Test Student or
+another explicitly authorized disposable enrollment is available; do not infer
+permission to use a real participant from the course's sandbox label.
+
 ## Definition Of Done
 
 - Exact comment replacement works through the production CanvasAPI request path.

@@ -21,6 +21,10 @@ from danvas.overrides import (
 )
 from danvas.pages import BODY_NORMALIZER_VERSION
 from danvas.reports import create_report_run
+from danvas.snapshot_collections import (
+    COLLECTION_NAMES,
+    snapshot_collection_metadata,
+)
 from danvas.source_map import find_source_entry, load_source_map
 from danvas.sources import scan_sources
 from danvas.utils import write_json
@@ -128,15 +132,52 @@ def build_status(
         by_kind[record["kind"]].append(record)
 
     snapshot_version = int(snapshot.get("schema_version") or 1)
-    pages_available = snapshot_version >= 4
+    collection_metadata = {
+        name: snapshot_collection_metadata(snapshot, name) for name in COLLECTION_NAMES
+    }
+    snapshot_status = (
+        "partial"
+        if any(not metadata["authoritative"] for metadata in collection_metadata.values())
+        else "complete"
+    )
+    section_availability = {
+        name: collection_metadata[name]
+        for name in (
+            "assignments",
+            "announcements",
+            "discussions",
+            "quizzes",
+            "files",
+            "pages",
+        )
+    }
+    pages_available = bool(collection_metadata["pages"]["authoritative"])
     sections = {
-        "assignments": compare_assignments(by_kind["assignment"], snapshot, root),
-        "announcements": compare_titled(
-            by_kind["announcement"], snapshot.get("announcements") or []
+        "assignments": (
+            compare_assignments(by_kind["assignment"], snapshot, root)
+            if section_availability["assignments"]["authoritative"]
+            else []
         ),
-        "discussions": compare_discussions(by_kind["discussion"], snapshot),
-        "quizzes": compare_quizzes(by_kind["quiz"], snapshot.get("quizzes") or []),
-        "files": compare_files(snapshot.get("files") or [], root),
+        "announcements": (
+            compare_titled(by_kind["announcement"], snapshot.get("announcements") or [])
+            if section_availability["announcements"]["authoritative"]
+            else []
+        ),
+        "discussions": (
+            compare_discussions(by_kind["discussion"], snapshot)
+            if section_availability["discussions"]["authoritative"]
+            else []
+        ),
+        "quizzes": (
+            compare_quizzes(by_kind["quiz"], snapshot.get("quizzes") or [])
+            if section_availability["quizzes"]["authoritative"]
+            else []
+        ),
+        "files": (
+            compare_files(snapshot.get("files") or [], root)
+            if section_availability["files"]["authoritative"]
+            else []
+        ),
         "pages": (
             compare_pages(by_kind["page"], snapshot.get("pages") or [], root)
             if pages_available
@@ -153,6 +194,7 @@ def build_status(
     if stale:
         summary["snapshot stale"] = 1
 
+    categories_metadata = collection_metadata["group_categories"]
     categories = snapshot.get("group_categories") or []
     course = snapshot.get("course") or {}
     return {
@@ -160,6 +202,8 @@ def build_status(
         "snapshot": {
             "generated_at": snapshot.get("generated_at"),
             "schema_version": snapshot.get("schema_version"),
+            "status": snapshot_status,
+            "collections": collection_metadata,
             "age_hours": round(age_hours, 1) if age_hours is not None else None,
             "max_age_hours": max_age_hours,
             "stale": stale,
@@ -167,6 +211,8 @@ def build_status(
         },
         "summary": dict(summary),
         "sections": sections,
+        "section_availability": section_availability,
+        "group_categories_availability": categories_metadata,
         "group_categories": [
             {
                 "name": category.get("name") or "",
@@ -181,8 +227,16 @@ def build_status(
             "Local files not present in Canvas are not reported.",
         ]
         + (
+            [
+                "Snapshot is partial; non-authoritative collections are not compared "
+                "and produce no local-only, Canvas-only, or removal claims."
+            ]
+            if snapshot_status == "partial"
+            else []
+        )
+        + (
             []
-            if pages_available
+            if snapshot_version >= 4
             else ["Pages unavailable from this schema-3 snapshot. Run `danvas refresh`."]
         ),
     }
@@ -651,6 +705,8 @@ def render_status_lines(payload: dict[str, Any]) -> list[str]:
         f"Snapshot generated {snapshot['generated_at']}"
         + (f" ({age}h old)" if age is not None else "")
     )
+    if snapshot.get("status") == "partial":
+        lines.append("WARNING: snapshot is partial; unavailable sections are not compared.")
     if snapshot["stale"]:
         lines.append(
             f"WARNING: snapshot is older than {snapshot['max_age_hours']}h. "
@@ -662,8 +718,10 @@ def render_status_lines(payload: dict[str, Any]) -> list[str]:
             "Summary: " + ", ".join(f"{name}: {count}" for name, count in sorted(summary.items()))
         )
     for section, items in payload["sections"].items():
-        if section == "pages" and not snapshot.get("pages_available", True):
-            lines.append("Pages: unavailable (run `danvas refresh` for schema-v4 Page data)")
+        availability = payload.get("section_availability", {}).get(section, {})
+        if availability and not availability.get("authoritative", True):
+            reason = availability.get("reason") or availability.get("status") or "unknown"
+            lines.append(f"{section.capitalize()}: unavailable ({reason})")
             continue
         counts = Counter(item["classification"] for item in items)
         count_text = ", ".join(f"{name}: {count}" for name, count in sorted(counts.items()))
@@ -676,13 +734,23 @@ def render_status_lines(payload: dict[str, Any]) -> list[str]:
             if item.get("next_action"):
                 lines.append(f"    Next action: {item['next_action']}")
     categories = payload["group_categories"]
-    if categories:
+    category_availability = payload.get("group_categories_availability", {})
+    if category_availability and not category_availability.get("authoritative", True):
+        reason = (
+            category_availability.get("reason")
+            or category_availability.get("status")
+            or "unknown"
+        )
+        lines.append(f"Group categories: unavailable ({reason})")
+    elif categories:
         parts = [
             f"{category['name']}: {category['group_count']} groups, "
             f"{category['member_count']} members"
             for category in categories
         ]
         lines.append(f"Group categories: {len(categories)} ({'; '.join(parts)})")
+    else:
+        lines.append("Group categories: none")
     for note in payload["notes"]:
         lines.append(f"Note: {note}")
     return lines
@@ -696,6 +764,7 @@ def render_status_markdown(payload: dict[str, Any]) -> str:
         "",
         f"- Course: {course['name']} ({course['id']})",
         f"- Snapshot generated: {snapshot['generated_at']}",
+        f"- Snapshot status: `{snapshot.get('status', 'complete')}`",
         f"- Snapshot age (hours): {snapshot['age_hours']}",
         f"- Snapshot stale: {'yes' if snapshot['stale'] else 'no'}",
         "",
@@ -706,8 +775,10 @@ def render_status_markdown(payload: dict[str, Any]) -> str:
         lines.append(f"- {name}: {count}")
     for section, items in payload["sections"].items():
         lines.extend(["", f"## {section.capitalize()}", ""])
-        if section == "pages" and not snapshot.get("pages_available", True):
-            lines.append("Unavailable from this snapshot. Run `danvas refresh`.")
+        availability = payload.get("section_availability", {}).get(section, {})
+        if availability and not availability.get("authoritative", True):
+            reason = availability.get("reason") or availability.get("status") or "unknown"
+            lines.append(f"Unavailable from this snapshot (`{reason}`).")
             continue
         if not items:
             lines.append("None.")
@@ -720,7 +791,15 @@ def render_status_markdown(payload: dict[str, Any]) -> str:
                 lines.append(f"  Next action: {item['next_action']}")
     categories = payload["group_categories"]
     lines.extend(["", "## Group Categories", ""])
-    if categories:
+    category_availability = payload.get("group_categories_availability", {})
+    if category_availability and not category_availability.get("authoritative", True):
+        reason = (
+            category_availability.get("reason")
+            or category_availability.get("status")
+            or "unknown"
+        )
+        lines.append(f"Unavailable from this snapshot (`{reason}`).")
+    elif categories:
         for category in categories:
             lines.append(
                 f"- {category['name']}: {category['group_count']} groups, "

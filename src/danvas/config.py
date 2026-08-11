@@ -10,21 +10,20 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from danvas.auth import canvas_from_args
-from danvas.files import canvas_file_record
-from danvas.overrides import redacted_assignment_overrides
-from danvas.pages import (
-    BODY_NORMALIZER_VERSION,
-    canonicalize_page_html,
-    canonicalize_page_url,
-    page_record,
-)
+from danvas.pages import BODY_NORMALIZER_VERSION
 from danvas.reports import create_report_run
-from danvas.utils import canvas_object_to_dict, html_to_text
+from danvas.snapshot_collections import (
+    collect_snapshot_collections,
+    snapshot_collection_metadata,
+    snapshot_collection_warnings,
+    snapshot_is_complete,
+)
+from danvas.utils import canvas_object_to_dict, write_json_atomic
 
 CONFIG_DIR_NAME = ".danvas"
 CONFIG_FILE_NAME = "config.toml"
 COURSE_SNAPSHOT_NAME = "course.json"
-SNAPSHOT_SCHEMA_VERSION = 4
+SNAPSHOT_SCHEMA_VERSION = 5
 
 
 def project_dir(root: Path | None = None) -> Path:
@@ -95,6 +94,13 @@ def resolve_assignment_group_id(
         snapshot_path = config_dir / COURSE_SNAPSHOT_NAME
         if snapshot_path.is_file():
             snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            metadata = snapshot_collection_metadata(snapshot, "assignment_groups")
+            if not metadata["authoritative"]:
+                raise SystemExit(
+                    "Assignment groups are unavailable in the course snapshot "
+                    f"({metadata['reason'] or metadata['status']}). Run `danvas refresh` "
+                    "and resolve the collection warning before planning this mutation."
+                )
             matches = [
                 group
                 for group in snapshot.get("assignment_groups", [])
@@ -134,6 +140,8 @@ def command_init(args: Any) -> None:
     payload = build_course_snapshot(
         course, canvas_origin=getattr(args, "api_url", None)
     )
+    for warning in snapshot_collection_warnings(payload):
+        print(warning)
     write_project_config(
         config,
         course_snapshot=payload,
@@ -163,6 +171,8 @@ def command_refresh(args: Any) -> None:
     payload = build_course_snapshot(
         course, canvas_origin=getattr(args, "api_url", None)
     )
+    for warning in snapshot_collection_warnings(payload):
+        print(warning)
     snapshot = course_snapshot_path(root)
     diff_report = None
     if getattr(args, "diff", False):
@@ -211,183 +221,21 @@ def build_course_snapshot(
         value = getattr(course, key, None)
         if value is not None and course_payload.get(key) is None:
             course_payload[key] = value
-    groups = [
-        canvas_object_to_dict(group)
-        for group in sorted(
-            course.get_assignment_groups(), key=lambda group: str(getattr(group, "name", ""))
-        )
-    ]
-    groups_by_id = {int(group["id"]): group for group in groups if group.get("id") is not None}
-    assignments = []
-    for assignment in course.get_assignments(include=["all_dates", "overrides"]):
-        group = groups_by_id.get(int(getattr(assignment, "assignment_group_id", 0) or 0), {})
-        row = {
-            "id": getattr(assignment, "id", ""),
-            "name": getattr(assignment, "name", ""),
-            "assignment_group_id": getattr(assignment, "assignment_group_id", ""),
-            "assignment_group_name": group.get("name", ""),
-            "points_possible": getattr(assignment, "points_possible", ""),
-            "due_at": getattr(assignment, "due_at", ""),
-            "unlock_at": getattr(assignment, "unlock_at", ""),
-            "lock_at": getattr(assignment, "lock_at", ""),
-            "published": getattr(assignment, "published", ""),
-            "html_url": getattr(assignment, "html_url", ""),
-            "submission_types": getattr(assignment, "submission_types", []) or [],
-            "description_text": html_to_text(getattr(assignment, "description", "")),
-        }
-        row.update(redacted_assignment_overrides(assignment))
-        assignments.append(row)
-    assignments.sort(key=lambda row: (str(row["due_at"] or ""), str(row["name"] or "")))
-    folder_objs = list(course.get_folders())
-    folders = [
-        canvas_object_to_dict(folder)
-        for folder in sorted(folder_objs, key=lambda folder: str(getattr(folder, "full_name", "")))
-    ]
+    if course_payload.get("id") is None:
+        raise SystemExit("Required course metadata unavailable: course id is missing.")
+    collections, collection_metadata = collect_snapshot_collections(
+        course, canvas_origin=canvas_origin
+    )
     return {
         "schema_version": SNAPSHOT_SCHEMA_VERSION,
         "generated_at": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
+        "snapshot_status": (
+            "complete" if snapshot_is_complete(collection_metadata) else "partial"
+        ),
         "course": course_payload,
-        "assignment_groups": groups,
-        "assignments": assignments,
-        "folders": folders,
-        "files": snapshot_files(course, folder_objs),
-        "discussions": snapshot_discussions(course),
-        "announcements": snapshot_announcements(course),
-        "quizzes": snapshot_quizzes(course),
-        "pages": snapshot_pages(course, canvas_origin=canvas_origin),
-        "group_categories": snapshot_group_categories(course),
+        **collections,
+        "collections": collection_metadata,
     }
-
-
-def snapshot_files(course: Any, folder_objs: list[Any]) -> list[dict[str, Any]]:
-    folders_by_id = {
-        int(folder.id): folder for folder in folder_objs if getattr(folder, "id", None)
-    }
-    rows = [canvas_file_record(file_obj, folders_by_id) for file_obj in course.get_files()]
-    rows.sort(key=lambda row: (str(row["folder_full_name"]), str(row["display_name"])))
-    return rows
-
-
-def snapshot_pages(
-    course: Any, *, canvas_origin: str | None = None
-) -> list[dict[str, Any]]:
-    rows = []
-    course_id = int(getattr(course, "id", 0) or 0)
-    for summary in course.get_pages():
-        record = page_record(summary)
-        if not record["body"] and record["url"]:
-            record = page_record(course.get_page(record["url"]))
-        canonical = canonicalize_page_html(
-            record.pop("body", ""),
-            course_id=course_id,
-            canvas_origin=canvas_origin,
-        )
-        record["html_url"], unsafe_html_url = canonicalize_page_url(
-            str(record.get("html_url") or ""),
-            course_id=course_id,
-            canvas_origin=canvas_origin,
-        )
-        if unsafe_html_url:
-            record["html_url"] = ""
-        rows.append(
-            {
-                **record,
-                "body_sha256": canonical["body_sha256"],
-                "body_hash_status": canonical["body_hash_status"],
-                "volatile_url_count": canonical["volatile_url_count"],
-                "body_normalizer": BODY_NORMALIZER_VERSION,
-            }
-        )
-    rows.sort(
-        key=lambda row: (
-            " ".join(str(row.get("title") or "").casefold().split()),
-            str(row.get("page_id") or row.get("url") or ""),
-        )
-    )
-    return rows
-
-
-def snapshot_discussions(course: Any) -> list[dict[str, Any]]:
-    rows = [discussion_record(topic) for topic in course.get_discussion_topics()]
-    rows.sort(key=lambda row: str(row["title"]))
-    return rows
-
-
-def snapshot_announcements(course: Any) -> list[dict[str, Any]]:
-    rows = [
-        discussion_record(topic)
-        for topic in course.get_discussion_topics(only_announcements=True)
-    ]
-    rows.sort(key=lambda row: (str(row["posted_at"]), str(row["title"])))
-    return rows
-
-
-def discussion_record(topic: Any) -> dict[str, Any]:
-    return {
-        "id": getattr(topic, "id", None),
-        "title": getattr(topic, "title", "") or "",
-        "html_url": getattr(topic, "html_url", "") or "",
-        "assignment_id": getattr(topic, "assignment_id", None),
-        "published": getattr(topic, "published", None),
-        "locked": getattr(topic, "locked", None),
-        "posted_at": getattr(topic, "posted_at", "") or "",
-        "delayed_post_at": getattr(topic, "delayed_post_at", "") or "",
-        "message_text": html_to_text(getattr(topic, "message", "") or ""),
-    }
-
-
-def snapshot_quizzes(course: Any) -> list[dict[str, Any]]:
-    rows = []
-    for quiz in course.get_quizzes():
-        rows.append(
-            {
-                "id": getattr(quiz, "id", None),
-                "assignment_id": getattr(quiz, "assignment_id", None),
-                "title": getattr(quiz, "title", "") or "",
-                "description_text": html_to_text(getattr(quiz, "description", "") or ""),
-                "quiz_type": getattr(quiz, "quiz_type", "") or "",
-                "points_possible": getattr(quiz, "points_possible", None),
-                "question_count": getattr(quiz, "question_count", None),
-                "due_at": getattr(quiz, "due_at", "") or "",
-                "unlock_at": getattr(quiz, "unlock_at", "") or "",
-                "lock_at": getattr(quiz, "lock_at", "") or "",
-                "published": getattr(quiz, "published", None),
-                "time_limit": getattr(quiz, "time_limit", None),
-                "allowed_attempts": getattr(quiz, "allowed_attempts", None),
-                "html_url": getattr(quiz, "html_url", "") or "",
-            }
-        )
-    rows.sort(key=lambda row: str(row["title"]))
-    return rows
-
-
-def snapshot_group_categories(course: Any) -> list[dict[str, Any]]:
-    rows = []
-    for category in course.get_group_categories():
-        groups = sorted(
-            category.get_groups(), key=lambda group: str(getattr(group, "name", ""))
-        )
-        rows.append(
-            {
-                "id": getattr(category, "id", None),
-                "name": getattr(category, "name", "") or "",
-                "self_signup": getattr(category, "self_signup", None),
-                "group_count": len(groups),
-                "member_count": sum(
-                    int(getattr(group, "members_count", 0) or 0) for group in groups
-                ),
-                "groups": [
-                    {
-                        "id": getattr(group, "id", None),
-                        "name": getattr(group, "name", "") or "",
-                        "members_count": getattr(group, "members_count", None),
-                    }
-                    for group in groups
-                ],
-            }
-        )
-    rows.sort(key=lambda row: str(row["name"]))
-    return rows
 
 
 DIFF_SECTIONS: list[tuple[str, str, list[str]]] = [
@@ -430,7 +278,28 @@ def diff_snapshots(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any] |
     if old_version != new_version:
         return None
     sections: dict[str, dict[str, Any]] = {}
+    comparison_status = "success"
     for section, label_key, fields in DIFF_SECTIONS:
+        old_metadata = snapshot_collection_metadata(old, section)
+        new_metadata = snapshot_collection_metadata(new, section)
+        old_authoritative = old_metadata["authoritative"]
+        new_authoritative = new_metadata["authoritative"]
+        if not (old_authoritative and new_authoritative):
+            section_status = (
+                "restored" if not old_authoritative and new_authoritative else "unavailable"
+            )
+            sections[section] = {
+                "comparison_status": section_status,
+                "old_status": old_metadata["status"],
+                "new_status": new_metadata["status"],
+                "old_reason": old_metadata.get("reason") or "",
+                "new_reason": new_metadata.get("reason") or "",
+                "added": [],
+                "removed": [],
+                "changed": [],
+            }
+            comparison_status = "partial"
+            continue
         identity_key = "page_id" if section == "pages" else "id"
         old_rows = rows_by_id(old.get(section) or [], identity_key=identity_key)
         new_rows = rows_by_id(new.get(section) or [], identity_key=identity_key)
@@ -468,10 +337,20 @@ def diff_snapshots(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any] |
                     }
                 )
         if added or removed or changed:
-            sections[section] = {"added": added, "removed": removed, "changed": changed}
+            sections[section] = {
+                "comparison_status": "compared",
+                "old_status": old_metadata["status"],
+                "new_status": new_metadata["status"],
+                "old_reason": old_metadata.get("reason") or "",
+                "new_reason": new_metadata.get("reason") or "",
+                "added": added,
+                "removed": removed,
+                "changed": changed,
+            }
     return {
         "old_generated_at": old.get("generated_at"),
         "new_generated_at": new.get("generated_at"),
+        "comparison_status": comparison_status,
         "sections": sections,
     }
 
@@ -506,9 +385,14 @@ def build_refresh_diff_report(
             "schema_compatible": False,
             "sections": {},
         }
+    status = str(diff.get("comparison_status") or "success")
     return {
-        "status": "success",
-        "message": "",
+        "status": status,
+        "message": (
+            "Some snapshot sections were not compared because one side was not authoritative."
+            if status == "partial"
+            else ""
+        ),
         "snapshot_path": str(snapshot_path),
         "old_schema_version": old_version,
         "new_schema_version": new_version,
@@ -554,6 +438,25 @@ def render_refresh_diff_markdown(report: dict[str, Any]) -> str:
     lines.extend(["## Changes", ""])
     for section, data in report["sections"].items():
         lines.extend([f"### {section}", ""])
+        comparison_status = data.get("comparison_status", "compared")
+        if comparison_status != "compared":
+            lines.append(f"- Comparison: `{comparison_status}`")
+            lines.append(
+                f"- Previous collection: `{data.get('old_status')}`"
+                + (
+                    f" (`{data.get('old_reason')}`)"
+                    if data.get("old_reason")
+                    else ""
+                )
+            )
+            lines.append(
+                f"- New collection: `{data.get('new_status')}`"
+                + (
+                    f" (`{data.get('new_reason')}`)"
+                    if data.get("new_reason")
+                    else ""
+                )
+            )
         for label in data["added"]:
             lines.append(f"- Added: {label}")
         for label in data["removed"]:
@@ -586,6 +489,18 @@ def render_snapshot_diff(report: dict[str, Any] | None) -> list[str]:
         lines.append("  No changes detected in tracked sections.")
     for section, data in report["sections"].items():
         lines.append(f"  {section}:")
+        comparison_status = data.get("comparison_status", "compared")
+        if comparison_status != "compared":
+            old_detail = data.get("old_status") or "unknown"
+            new_detail = data.get("new_status") or "unknown"
+            if data.get("old_reason"):
+                old_detail += f"/{data['old_reason']}"
+            if data.get("new_reason"):
+                new_detail += f"/{data['new_reason']}"
+            lines.append(
+                f"    comparison {comparison_status}: {old_detail} -> {new_detail}; "
+                "no change claims"
+            )
         for label in data["added"]:
             lines.append(f"    added: {label}")
         for label in data["removed"]:
@@ -596,8 +511,7 @@ def render_snapshot_diff(report: dict[str, Any] | None) -> list[str]:
 
 
 def write_course_snapshot(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_json_atomic(path, payload)
 
 
 def write_project_config(
