@@ -686,7 +686,7 @@ def roster(
 
 
 @assignments_app.command(
-    "export", help="Export assignment details as JSON, CSV, or a Markdown directory."
+    "export", help="Export sanitized assignment evidence as JSON, CSV, or Markdown."
 )
 def assignments_export(
     course_id: CourseId = None,
@@ -704,7 +704,7 @@ def assignments_export(
     ] = "auto",
     full: Annotated[
         bool,
-        typer.Option("--full", help="Include raw Canvas assignment/group payloads in JSON output."),
+        typer.Option("--full", help="Include extended sanitized assignment/group metadata."),
     ] = False,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
@@ -872,7 +872,7 @@ def assignments_create(
 
 @assignments_app.command(
     "verify",
-    help="Read-only verification of one local assignment Markdown source against Canvas by ID.",
+    help="Verify declared assignment fields and exact current-course Canvas file targets.",
 )
 def assignments_verify(
     source: Annotated[
@@ -2718,7 +2718,7 @@ def files_compare(
 
 @files_app.command(
     "upload",
-    help="Upload one or more local files to an existing Canvas Files folder.",
+    help="Plan or upload files with duplicate-action and stable-link evidence.",
 )
 def files_upload(
     files: Annotated[
@@ -2749,7 +2749,10 @@ def files_upload(
     ] = "overwrite",
     dry_run: Annotated[
         bool,
-        typer.Option("--dry-run", help="Resolve the upload plan without uploading files."),
+        typer.Option(
+            "--dry-run",
+            help="Inspect the destination and classify create/overwrite/rename without uploading.",
+        ),
     ] = False,
     output: Annotated[
         Path | None,

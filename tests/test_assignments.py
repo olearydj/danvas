@@ -4,15 +4,24 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.assignments import (
     command_assignments_create,
+    command_assignments_export,
     command_assignments_update,
     command_assignments_upsert,
     command_assignments_verify,
+    comparable_field_value,
     load_assignment_markdown,
     resolve_format,
 )
+
+
+def test_allowed_extension_comparison_normalizes_empty_and_case() -> None:
+    assert comparable_field_value("allowed_extensions", None) == []
+    assert comparable_field_value("allowed_extensions", []) == []
+    assert comparable_field_value("allowed_extensions", [".PDF", "docx"]) == ["docx", "pdf"]
 
 
 def write_config(root: Path, timezone: str = "America/Chicago") -> None:
@@ -204,6 +213,32 @@ def test_command_assignments_create_dry_run_does_not_write_source_map(
     assert not (tmp_path / ".danvas" / "source-map.json").exists()
 
 
+def test_command_assignments_create_dry_run_sanitizes_link_payload(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        "---\ntitle: Case 1\n---\n\n"
+        "[Case file](/courses/101/files/44/download?verifier=secret-value)\n",
+        encoding="utf-8",
+    )
+
+    command_assignments_create(
+        SimpleNamespace(
+            source=str(source),
+            course_id=101,
+            dry_run=True,
+            api_url="https://canvas.example/",
+        )
+    )
+
+    output = capsys.readouterr().out
+    assert "https://canvas.example/courses/101/files/44?wrap=1" in output
+    assert "secret-value" not in output
+    assert "verifier" not in output
+    assert '"description"' not in output
+
+
 def test_command_assignments_create_live_reads_back_and_writes_source_map(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -252,7 +287,14 @@ Submit the case memo.
         lambda args: SimpleNamespace(get_course=lambda course_id: FakeCourse()),
     )
 
-    command_assignments_create(SimpleNamespace(source=str(source), course_id=101, dry_run=False))
+    command_assignments_create(
+        SimpleNamespace(
+            source=str(source),
+            course_id=101,
+            dry_run=False,
+            api_url="https://canvas.example/",
+        )
+    )
 
     source_map = json.loads((tmp_path / ".danvas" / "source-map.json").read_text("utf-8"))
     entry = source_map["sources"][0]
@@ -489,6 +531,329 @@ def test_command_assignments_verify_requires_assignment_id(
         )
 
 
+def linked_assignment_course(*, live_file_id: int = 44) -> object:
+    class LinkedCourse:
+        id = 101
+        name = "Course"
+
+        def get_assignment(self, assignment_id: int) -> SimpleNamespace:
+            return SimpleNamespace(
+                id=assignment_id,
+                name="Case 1",
+                allowed_extensions=["PDF", ".docx"],
+                description=(
+                    f'<p><a href="/courses/101/files/{live_file_id}/download?verifier=secret-value" '
+                    f'data-api-endpoint="/api/v1/courses/101/files/{live_file_id}" '
+                    'data-api-returntype="File">Case file</a></p>'
+                ),
+                html_url="https://canvas.example/courses/101/assignments/10?token=secret-value",
+                secure_params="secret-value",
+            )
+
+        def get_assignment_groups(self) -> list[SimpleNamespace]:
+            return []
+
+        def get_file(self, file_id: int) -> SimpleNamespace:
+            if file_id != 44:
+                raise ResourceDoesNotExist("missing?verifier=secret-value")
+            return SimpleNamespace(
+                id=file_id,
+                folder_id=7,
+                display_name="case.pdf",
+                url="https://canvas.example/files/44/download?verifier=secret-value",
+            )
+
+        def get_folders(self) -> list[SimpleNamespace]:
+            return [SimpleNamespace(id=7, full_name="course files/cases")]
+
+    return LinkedCourse()
+
+
+def test_command_assignments_verify_checks_file_ids_and_allowed_extensions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        """---
+assignment_id: 10
+title: Case 1
+allowed_extensions:
+  - pdf
+  - docx
+---
+
+[Case file](/courses/101/files/44?wrap=1)
+""",
+        encoding="utf-8",
+    )
+    course = linked_assignment_course()
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+    report_dir = tmp_path / "report"
+
+    command_assignments_verify(
+        SimpleNamespace(
+            source=str(source),
+            course_id=101,
+            assignment_id=None,
+            project_root=str(tmp_path),
+            no_report=False,
+            report_root=None,
+            report_dir=str(report_dir),
+            report_slug=None,
+            api_url="https://canvas.example/",
+        )
+    )
+
+    report_text = (report_dir / "assignments-verify.json").read_text(encoding="utf-8")
+    report = json.loads(report_text)
+    assert report["status"] == "matches"
+    assert report["file_links"]["local_file_id_counts"] == {"44": 1}
+    assert report["file_links"]["files"][0]["canvas_path"] == "course files/cases/case.pdf"
+    assert report["file_links"]["files"][0]["canvas_url"] == (
+        "https://canvas.example/courses/101/files/44?wrap=1"
+    )
+    assert next(check for check in report["checks"] if check["field"] == "allowed_extensions")[
+        "matches"
+    ]
+    assert "secret-value" not in report_text
+    assert "secure_params" not in report_text
+    assert "verifier" not in report_text
+
+
+def test_assignment_verify_file_id_drift_is_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        "---\nassignment_id: 10\ntitle: Case 1\n---\n\n"
+        "[Case file](/courses/101/files/44?wrap=1)\n",
+        encoding="utf-8",
+    )
+    course = linked_assignment_course(live_file_id=45)
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    with pytest.raises(SystemExit):
+        command_assignments_verify(
+            SimpleNamespace(
+                source=str(source),
+                course_id=101,
+                assignment_id=None,
+                project_root=str(tmp_path),
+                no_report=False,
+                report_root=None,
+                report_dir=str(tmp_path / "report"),
+                report_slug=None,
+                api_url="https://canvas.example/",
+            )
+        )
+
+    report = json.loads((tmp_path / "report" / "assignments-verify.json").read_text("utf-8"))
+    assert report["status"] == "mismatch"
+    assert report["file_links"]["canvas_file_id_counts"] == {"45": 1}
+
+
+def test_assignment_verify_file_lookup_failure_is_sanitized_partial(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        "---\nassignment_id: 10\ntitle: Case 1\n---\n\n"
+        "[Case file](/courses/101/files/44?wrap=1)\n",
+        encoding="utf-8",
+    )
+    course = linked_assignment_course()
+
+    def fail_file_lookup(file_id: int) -> None:
+        raise RuntimeError(
+            "GET https://canvas.example/files/44?verifier=secret-value failed"
+        )
+
+    monkeypatch.setattr(course, "get_file", fail_file_lookup)
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    with pytest.raises(SystemExit):
+        command_assignments_verify(
+            SimpleNamespace(
+                source=str(source),
+                course_id=101,
+                assignment_id=None,
+                project_root=str(tmp_path),
+                no_report=False,
+                report_root=None,
+                report_dir=str(tmp_path / "report"),
+                report_slug=None,
+                api_url="https://canvas.example/",
+            )
+        )
+
+    text = (tmp_path / "report" / "assignments-verify.json").read_text("utf-8")
+    report = json.loads(text)
+    assert report["status"] == "partial"
+    assert report["file_links"]["files"][0]["reason"] == "file_lookup_failed"
+    assert "secret-value" not in text
+    assert "verifier" not in text
+
+
+def test_assignment_verify_relative_asset_and_unsupported_field_are_partial(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        """---
+assignment_id: 10
+title: Case 1
+omit_from_final_grade: true
+---
+
+[Case file](case.pdf)
+""",
+        encoding="utf-8",
+    )
+
+    class PartialCourse:
+        id = 101
+        name = "Course"
+
+        def get_assignment(self, assignment_id: int) -> SimpleNamespace:
+            return SimpleNamespace(
+                id=assignment_id,
+                name="Case 1",
+                description='<p><a href="case.pdf">Case file</a></p>',
+            )
+
+        def get_assignment_groups(self) -> list[SimpleNamespace]:
+            return []
+
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: PartialCourse()),
+    )
+
+    with pytest.raises(SystemExit):
+        command_assignments_verify(
+            SimpleNamespace(
+                source=str(source),
+                course_id=101,
+                assignment_id=None,
+                project_root=str(tmp_path),
+                no_report=False,
+                report_root=None,
+                report_dir=str(tmp_path / "report"),
+                report_slug=None,
+                api_url="https://canvas.example/",
+            )
+        )
+
+    report = json.loads((tmp_path / "report" / "assignments-verify.json").read_text("utf-8"))
+    assert report["status"] == "partial"
+    assert report["file_links"]["status"] == "partial"
+    assert any(check["status"] == "unsupported" for check in report["checks"])
+
+
+def test_assignments_full_export_is_sanitized_projection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assignment = SimpleNamespace(
+        id=10,
+        name="Case 1",
+        assignment_group_id=7,
+        points_possible=100,
+        due_at="",
+        unlock_at="",
+        lock_at="",
+        published=True,
+        html_url="https://canvas.example/courses/101/assignments/10?token=secret-value",
+        submission_types=["online_upload"],
+        grading_type="points",
+        group_category_id=9,
+        allowed_extensions=["pdf"],
+        description=(
+            '<p><a href="/courses/101/files/44/download?verifier=secret-value">Download</a></p>'
+        ),
+        secure_params="secret-value",
+        storage_quota_mb=500,
+        assignment_group_id_date="nonsense",
+    )
+
+    class ExportCourse:
+        id = 101
+        name = "Course"
+
+        def get_assignment_groups(self) -> list[SimpleNamespace]:
+            return [SimpleNamespace(id=7, name="Cases")]
+
+        def get_assignments(self, **kwargs: object) -> list[SimpleNamespace]:
+            return [assignment]
+
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: ExportCourse()),
+    )
+    output = tmp_path / "assignments.json"
+
+    command_assignments_export(
+        SimpleNamespace(
+            course_id=101,
+            output=str(output),
+            format="json",
+            full=True,
+            api_url="https://canvas.example/",
+        )
+    )
+
+    text = output.read_text(encoding="utf-8")
+    row = json.loads(text)[0]
+    assert row["file_ids"] == "44"
+    assert row["file_urls"] == "https://canvas.example/courses/101/files/44?wrap=1"
+    assert row["extended"]["allowed_extensions"] == ["pdf"]
+    assert "secret-value" not in text
+    assert "secure_params" not in text
+    assert "verifier" not in text
+    assert "storage_quota_mb_date" not in text
+    assert "assignment_group_id_date" not in text
+
+    csv_output = tmp_path / "assignments.csv"
+    command_assignments_export(
+        SimpleNamespace(
+            course_id=101,
+            output=str(csv_output),
+            format="csv",
+            full=True,
+            api_url="https://canvas.example/",
+        )
+    )
+    csv_text = csv_output.read_text(encoding="utf-8")
+    assert "file_ids" in csv_text
+    assert "44" in csv_text
+    assert "secret-value" not in csv_text
+    assert "verifier" not in csv_text
+
+    markdown_output = tmp_path / "assignments-md"
+    command_assignments_export(
+        SimpleNamespace(
+            course_id=101,
+            output=str(markdown_output),
+            format="markdown",
+            full=True,
+            api_url="https://canvas.example/",
+        )
+    )
+    markdown_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in markdown_output.iterdir()
+    )
+    assert "secret-value" not in markdown_text
+    assert "verifier" not in markdown_text
+
+
 def update_args(source: Path, report_dir: Path, **overrides: object) -> SimpleNamespace:
     defaults: dict[str, object] = {
         "source": str(source),
@@ -503,6 +868,7 @@ def update_args(source: Path, report_dir: Path, **overrides: object) -> SimpleNa
         "report_root": None,
         "report_dir": str(report_dir),
         "report_slug": None,
+        "api_url": "https://canvas.example/",
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)

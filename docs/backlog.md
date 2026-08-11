@@ -114,6 +114,7 @@ closed.
 | Override-aware assignment status | schema-v3 snapshot, `danvas assignments overrides` | Snapshots remain redacted; membership exports are explicit private artifacts. |
 | Submission evidence exports | `danvas submissions export/grades/media` | Local replacement provenance remains optional future work. |
 | Transaction-safe grade patches | `danvas grades post/clear/comments/verify` | Truthful row outcomes, private receipts/recovery, and targeted release evidence are locally verified; bounded live acceptance remains. |
+| Assignment release evidence | `danvas assignments verify/export`, `danvas files upload` | Stable upload links, duplicate-action plans, exact file-ID verification, and safe projections are locally verified; bounded live acceptance remains. |
 | Canvas Pages bounded workflow | `danvas pages list/export/sync/render/css-check/create/update/verify`, schema-v4 status | Assets, rename/delete, broad upsert, and broader compatibility profiles remain deferred. |
 | Canvas-facing source lint | `danvas sources lint` | External HTTP checking and automatic rewriting remain deferred. |
 | Read-only Canvas/local status | `danvas status` | Continue refining next-action hints as new source workflows land. |
@@ -1389,7 +1390,8 @@ These items came from field use after the 2026-06-24 backlog consolidation.
 Items 3 and 4 shipped in 0.6.0, and item 5 is now reflected in the external
 skill docs. A CASS transcript review covering the preceding 100 days on
 2026-08-09 confirmed the relevance of items 1, 2, and 6 through 9, and added
-items 10 and 11 below. Items 1, 2, and 6 through 11 remain product work.
+items 10 and 11 below. Items 6, 8, and 10 are implemented with bounded live
+acceptance pending; items 1, 2, 7, 9, and 11 remain unimplemented product work.
 
 ### Current Priority Order
 
@@ -1398,7 +1400,8 @@ families:
 
 1. Complete the bounded live Canvas acceptance and release close-out for
    `docs/sprints/10-truthful-grade-posting.md`, which combines items 6 and 10.
-2. Item 8: assignment release, file-link verification, and report sanitization.
+2. Complete the bounded live Canvas acceptance and release close-out for
+   `docs/sprints/11-safe-assignment-release.md`, which implements item 8.
 3. Item 7: explicit live Canvas gradebook export.
 4. Item 9: authorization-resilient partial snapshots.
 5. Item 11: installed CLI health checks for the supported release workflow.
@@ -1412,6 +1415,14 @@ durable receipts that the previous terminal-only commands lacked, and does not
 broaden into grade-posting-policy mutation or gradebook export. It is now
 implemented and locally verified with Ruff, ty, and all 360 tests; its bounded
 live Canvas acceptance remains pending explicit authorization.
+
+Sprint 11 is implemented in `docs/sprints/11-safe-assignment-release.md` on the
+0.9.0 development line. It adds stable upload URLs, duplicate-action preflight,
+`allowed_extensions` and exact file-target verification, explicit
+partial/indeterminate conclusions, and safe assignment output projections.
+Existing `unlock_at` and `group_category_id` comparisons were preserved rather
+than reimplemented. Ruff, ty, and all 381 tests pass locally; bounded live
+Canvas acceptance and release-gate reconciliation remain pending.
 
 Office package-part comparison, transcript filing, and other smaller workflow
 enhancements remain deferred unless a concrete course workflow changes this
@@ -1608,6 +1619,14 @@ ordering.
      explicit-output workflow.
 
 8. Harden assignment release, file-link verification, and report sanitization.
+
+   Status: implemented on the 0.9.0 development line through
+   `docs/sprints/11-safe-assignment-release.md`. Ruff, ty, and all 381 tests pass
+   locally; bounded live Canvas acceptance remains pending. A 2026-08-11 source
+   audit confirmed that `unlock_at` and `group_category_id` verification already
+   existed and did not find the previously observed generic numeric date
+   enrichment. Those behaviors now have regression coverage alongside the new
+   upload-link, declared-field, file-identity, status, and output-safety work.
 
    Field evidence from the INSY 6600 Case Study 3 release on 2026-07-23:
 

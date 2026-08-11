@@ -71,7 +71,10 @@ class FakeCanvas:
 
 class FakeUploadFolder(SimpleNamespace):
     def __init__(self, **kwargs: object) -> None:
-        super().__init__(uploads=[], **kwargs)
+        super().__init__(uploads=[], files=[], **kwargs)
+
+    def get_files(self) -> list[object]:
+        return list(self.files)
 
     def upload(self, source: str, *, on_duplicate: str, content_type: str):
         self.uploads.append(
@@ -693,9 +696,94 @@ def test_command_files_upload_dry_run_resolves_folder_without_uploading(
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["dry_run"] is True
     assert report["folder_full_name"] == "course files/slides"
-    assert report["files"][0]["status"] == "dry-run"
+    assert report["files"][0]["status"] == "would_create"
     assert "verifier" not in output.read_text(encoding="utf-8")
     assert "Dry run - no files uploaded." in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("policy", "expected_status"),
+    [("overwrite", "would_overwrite"), ("rename", "would_rename")],
+)
+def test_command_files_upload_dry_run_classifies_existing_destination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    policy: str,
+    expected_status: str,
+) -> None:
+    source = tmp_path / "case.pdf"
+    source.write_bytes(b"case")
+    course = FakeUploadCourse()
+    course.slides.files = [SimpleNamespace(id=77, display_name="case.pdf")]
+    output = tmp_path / f"{policy}.json"
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(course)
+    )
+
+    command_files_upload(
+        SimpleNamespace(
+            course_id=101,
+            files=[str(source)],
+            folder="course files/slides",
+            folder_id=None,
+            on_duplicate=policy,
+            dry_run=True,
+            output=str(output),
+        )
+    )
+
+    row = json.loads(output.read_text(encoding="utf-8"))["files"][0]
+    assert row["status"] == expected_status
+    assert row["existing_canvas_ids"] == [77]
+
+
+def test_command_files_upload_dry_run_listing_failure_is_sanitized_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "case.pdf"
+    source.write_bytes(b"case")
+
+    class FailingListingFolder(FakeUploadFolder):
+        def get_files(self) -> list[object]:
+            raise RuntimeError(
+                "GET https://canvas.example/files?verifier=secret-value failed"
+            )
+
+    class FailingListingCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.slides = FailingListingFolder(id=20, full_name="course files/slides")
+
+    output = tmp_path / "plan.json"
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args",
+        lambda args: FakeUploadCanvas(FailingListingCourse()),
+    )
+
+    with pytest.raises(SystemExit):
+        command_files_upload(
+            SimpleNamespace(
+                course_id=101,
+                files=[str(source)],
+                folder="course files/slides",
+                folder_id=None,
+                on_duplicate="overwrite",
+                dry_run=True,
+                output=str(output),
+                project_root=None,
+                no_report=False,
+                report_root=None,
+                report_dir=str(tmp_path / "report"),
+                report_slug=None,
+            )
+        )
+
+    text = output.read_text(encoding="utf-8")
+    assert json.loads(text)["files"][0]["status"] == "conflict"
+    assert "secret-value" not in text
+    assert "canvas.example" not in text
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text("utf-8"))
+    assert manifest["status"] == "failed"
 
 
 def test_command_files_upload_dry_run_writes_report_dir(
@@ -725,7 +813,7 @@ def test_command_files_upload_dry_run_writes_report_dir(
     report = json.loads((tmp_path / "report" / "files-upload.json").read_text(encoding="utf-8"))
     manifest = json.loads((tmp_path / "report" / "manifest.json").read_text(encoding="utf-8"))
     assert report["dry_run"] is True
-    assert report["files"][0]["status"] == "dry-run"
+    assert report["files"][0]["status"] == "would_create"
     assert manifest["command"] == "files upload"
     assert manifest["status"] == "success"
     assert manifest["may_contain_private_student_data"] is False
@@ -983,6 +1071,7 @@ def test_command_files_upload_live_uploads_and_writes_safe_report(
         folder_id=None,
         on_duplicate="rename",
         dry_run=False,
+        api_url="https://canvas.example/",
         output=str(output),
     )
 
@@ -998,7 +1087,12 @@ def test_command_files_upload_live_uploads_and_writes_safe_report(
     report_text = output.read_text(encoding="utf-8")
     report = json.loads(report_text)
     assert report["files"][0]["status"] == "uploaded"
-    assert report["files"][0]["url_present"] is True
+    assert report["files"][0]["canvas_url"] == (
+        "https://canvas.example/courses/101/files/1001?wrap=1"
+    )
+    assert report["files"][0]["canvas_path"] == (
+        "course files/slides/Lecture 14 - Sheets.xlsx"
+    )
     assert "verifier" not in report_text
     captured = capsys.readouterr().out
     assert "== Canvas write: upload 1 file(s) ==" in captured
@@ -1020,6 +1114,7 @@ def test_command_files_upload_live_writes_legacy_and_report_outputs(
         folder_id=None,
         on_duplicate="rename",
         dry_run=False,
+        api_url="https://canvas.example/",
         output=str(output),
         project_root=None,
         no_report=False,
@@ -1075,6 +1170,7 @@ def test_command_files_upload_partial_failure_exits_nonzero(
         folder_id=None,
         on_duplicate="overwrite",
         dry_run=False,
+        api_url="https://canvas.example/",
         output=None,
     )
 
@@ -1118,6 +1214,7 @@ def test_command_files_upload_partial_failure_writes_failed_manifest(
         folder_id=None,
         on_duplicate="overwrite",
         dry_run=False,
+        api_url="https://canvas.example/",
         output=None,
         project_root=None,
         no_report=False,
@@ -1164,6 +1261,7 @@ def test_command_files_upload_failure_payload_does_not_leak_urls(
         folder_id=None,
         on_duplicate="overwrite",
         dry_run=False,
+        api_url="https://canvas.example/",
         output=str(output),
     )
 
@@ -1204,6 +1302,7 @@ def test_command_files_upload_empty_failure_payload_gets_generic_error(
         folder_id=None,
         on_duplicate="overwrite",
         dry_run=False,
+        api_url="https://canvas.example/",
         output=str(output),
     )
 
@@ -1242,6 +1341,7 @@ def test_command_files_upload_exception_text_is_redacted(
         folder_id=None,
         on_duplicate="overwrite",
         dry_run=False,
+        api_url="https://canvas.example/",
         output=str(output),
     )
 

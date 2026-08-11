@@ -88,3 +88,20 @@ conclusion in private post/clear/verify receipts. It deliberately excludes
 grade-posting-policy mutations and live gradebook export. Ruff, ty, and all 360
 tests pass locally; its bounded live Canvas field acceptance remains pending
 explicit authorization.
+
+## 0.9.0 Assignment Release Follow-On
+
+The implemented next feature slice is:
+
+- Sprint 11: [Safe Assignment Release Evidence](11-safe-assignment-release.md)
+
+Sprint 11 refines field-observed backlog item 8 around the gaps still present in
+the current tree: stable file-upload links, duplicate-action dry-run evidence,
+`allowed_extensions` and exact file-ID verification, complete-versus-partial
+status semantics, and safe assignment report/export projections. The design
+recognizes that `unlock_at` and `group_category_id` verification already ship
+and treats the previously observed numeric date enrichment as a regression
+invariant because that behavior is not present in the current source.
+It is locally verified with Ruff, ty, and all 381 tests. Bounded live Canvas
+field acceptance and release close-out remain pending, as does reconciliation of
+the earlier 0.8.0 release gate.

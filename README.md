@@ -23,8 +23,8 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 
 - export assignments from Canvas by course
   - JSON, CSV, Markdown directory formats
-  - full or concise payloads
-  - includes assignment groups, points, dates, publication state, submission types, URLs, and descriptions
+  - concise or extended sanitized (`--full`) projections; raw Canvas payloads are never retained
+  - includes assignment groups, points, dates, publication state, submission types, stable URLs, visible description text, and safe file-link evidence
   - exports private assignment-override membership separately while snapshots retain only redacted override summaries
 
 - audit Canvas assignment setup
@@ -37,7 +37,8 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - Markdown body with YAML (`---`) or TOML (`+++`) front matter
   - supports Canvas assignment metadata fields
   - dry-run mode to inspect payload before creating
-  - verify one local assignment source against Canvas by stable ID
+  - verify every declared supported field, exact embedded Canvas file IDs, and current-course file existence
+  - distinguish complete matches from mismatches, partial coverage, and indeterminate reads
 
 - download submissions
   - assignment attachments
@@ -107,7 +108,8 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - compares one Canvas file's metadata to one local file by file ID or exact Canvas path
   - can compare SHA-256 checksums against a supplied downloaded Canvas file
   - downloads exactly one Canvas file to an explicit output path
-  - uploads one or more local files to an existing Canvas Files folder with dry-run support and report-run support
+  - upload dry-runs classify `would_create`, `would_overwrite`, `would_rename`, or conflict from one destination listing
+  - live uploads return the final Canvas ID/path and a generated stable course-file URL without retaining download/verifier URLs
   - downloads Canvas Files into a local folder tree with a manifest
 
 - download Panopto captions
@@ -434,6 +436,7 @@ danvas roster --course-id 1706414 --output roster.csv
 
 # Assignments
 danvas assignments export --course-id 1706414 --output assignments.json
+danvas assignments export --course-id 1706414 --output assignments-full.json --full
 danvas assignments export --course-id 1706414 --output assignments.csv
 danvas assignments export --course-id 1706414 --output assignments-md --format markdown
 danvas assignments create --course-id 1706414 assignments/hw1.md --dry-run
@@ -535,6 +538,24 @@ danvas recordings panopto-captions --course-id 1742717 \
 danvas recordings panopto-captions --course-id 1742717 \
   --folder-id b4e2a2bc-0b9f-439e-9095-b44e00f269c4 --output-dir panopto-captions
 ```
+
+`assignments export --full` is an extended safe projection, not a raw Canvas
+object dump. Assignment create/update/upsert/verify evidence omits raw
+description HTML and unsafe nested Canvas payloads; stable link identity is
+recorded as Canvas course/file IDs and generated course-file URLs.
+
+`assignments verify` returns success only for `matches`. It returns nonzero for
+`mismatch`, `partial`, or `indeterminate`, and its report states declared-field
+coverage plus the local/live Canvas file-ID counts and course-scoped file reads.
+`allowed_extensions` comparisons are case-insensitive and ignore a leading dot.
+Relative local assets remain partial until a later asset-upload/rewriting
+workflow resolves them.
+
+`files upload --dry-run` reads the resolved folder and records whether each file
+would be created, overwritten, or renamed. This is point-in-time evidence;
+Canvas's live result remains authoritative. Successful live rows provide
+`canvas_id`, `canvas_path`, and a reusable `canvas_url` such as
+`https://canvas.example/courses/101/files/44?wrap=1`.
 
 ## CSV Formats
 

@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from danvas.auth import canvas_from_args
+from danvas.canvas_links import stable_course_file_url
 from danvas.reports import ReportRun, create_report_run, find_config_dir, should_write_report_run
 from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_json, write_rows
 
@@ -284,23 +285,31 @@ def command_files_upload(args: Any) -> None:
     folder_id = getattr(folder, "id", None)
     folder_full_name = str(getattr(folder, "full_name", "") or "")
     report = {
+        "evidence_schema": "file-upload-v2",
         "course_id": getattr(course, "id", args.course_id),
         "course_name": str(getattr(course, "name", "") or ""),
         "folder_id": folder_id,
         "folder_full_name": folder_full_name,
         "on_duplicate": args.on_duplicate,
         "dry_run": bool(args.dry_run),
+        "planning_limit": (
+            "Point-in-time destination evidence; the live Canvas result remains authoritative."
+            if args.dry_run
+            else ""
+        ),
         "files": [],
     }
     report_run = make_files_upload_report_run(args, report, local_rows)
     if args.dry_run:
-        report["files"] = [{**row, "status": "dry-run"} for row in local_rows]
+        report["files"] = plan_upload_rows(local_rows, folder, on_duplicate=args.on_duplicate)
         print("Dry run - no files uploaded.")
         print(json.dumps(report, indent=2, ensure_ascii=False))
         if args.output:
             write_json(Path(args.output), report)
             print(f"Wrote {args.output}")
         write_files_upload_report_run(report_run, report)
+        if any(row["status"] == "conflict" for row in report["files"]):
+            raise SystemExit(1)
         return
 
     print_mutation_banner(
@@ -323,7 +332,14 @@ def command_files_upload(args: Any) -> None:
         except Exception as exc:  # noqa: BLE001 - sanitize per-file Canvas failures.
             ok = False
             response = {"error": safe_upload_error_text(f"{type(exc).__name__}: {exc}")}
-        result = upload_result_row(row, ok=bool(ok), response=response, folder=folder)
+        result = upload_result_row(
+            row,
+            ok=bool(ok),
+            response=response,
+            folder=folder,
+            course_id=int(report["course_id"]),
+            canvas_origin=str(getattr(args, "api_url", "") or ""),
+        )
         results.append(result)
         report["files"] = results
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
@@ -372,10 +388,16 @@ def write_files_upload_report_run(report_run: ReportRun | None, report: dict[str
         return
     try:
         json_path = report_run.write_json("files-upload.json", report)
+        successful_statuses = {
+            "uploaded",
+            "would_create",
+            "would_overwrite",
+            "would_rename",
+        }
         status = (
-            "failed"
-            if any(row.get("status") == "failed" for row in report["files"])
-            else "success"
+            "success"
+            if all(row.get("status") in successful_statuses for row in report["files"])
+            else "failed"
         )
         manifest_path = report_run.finish(status)
         print(f"Wrote {json_path}")
@@ -835,31 +857,100 @@ def content_type_for(path: Path) -> str:
     return guessed or "application/octet-stream"
 
 
+def plan_upload_rows(
+    local_rows: list[dict[str, Any]], folder: Any, *, on_duplicate: str
+) -> list[dict[str, Any]]:
+    """Classify a point-in-time upload plan from one destination-folder listing."""
+    try:
+        existing = [canvas_object_to_dict(item) for item in folder.get_files()]
+    except Exception as exc:  # noqa: BLE001 - dry-run evidence must stay sanitized.
+        error = safe_upload_error_text(f"{type(exc).__name__}: {exc}")
+        return [
+            {
+                **row,
+                "status": "conflict",
+                "reason": "destination_listing_failed",
+                "error": error,
+                "existing_canvas_ids": [],
+            }
+            for row in local_rows
+        ]
+    by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in existing:
+        name = str(item.get("display_name") or item.get("filename") or "")
+        by_name[name].append(item)
+    planned = []
+    for row in local_rows:
+        matches = by_name.get(str(row["name"]), [])
+        existing_ids = sorted(
+            int(file_id)
+            for item in matches
+            if (file_id := item.get("id")) is not None
+        )
+        if not matches:
+            status = "would_create"
+            reason = "destination_name_available"
+        elif on_duplicate == "rename":
+            status = "would_rename"
+            reason = "destination_name_exists"
+        elif len(matches) == 1 and existing_ids:
+            status = "would_overwrite"
+            reason = "one_existing_destination_match"
+        else:
+            status = "conflict"
+            reason = "ambiguous_existing_destination_matches"
+        planned.append(
+            {
+                **row,
+                "status": status,
+                "reason": reason,
+                "existing_canvas_ids": existing_ids,
+            }
+        )
+    return planned
+
+
 def upload_result_row(
     local_row: dict[str, Any],
     *,
     ok: bool,
     response: Any,
     folder: Any,
+    course_id: int,
+    canvas_origin: str,
 ) -> dict[str, Any]:
     payload = canvas_object_to_dict(response)
     content_type = payload.get("content-type") or payload.get("content_type") or local_row[
         "content_type"
     ]
+    canvas_id = payload.get("id")
+    display_name = payload.get("display_name") or payload.get("filename") or local_row["name"]
+    folder_name = str(getattr(folder, "full_name", "") or "").rstrip("/")
+    canvas_path = f"{folder_name}/{display_name}" if folder_name else str(display_name)
+    stable_url = ""
+    if ok and canvas_id is not None:
+        try:
+            stable_url = stable_course_file_url(canvas_origin, course_id, int(canvas_id))
+        except (TypeError, ValueError):
+            stable_url = ""
+    status = "uploaded" if ok and canvas_id is not None and stable_url else "failed"
     row = {
         **local_row,
-        "status": "uploaded" if ok else "failed",
-        "canvas_id": payload.get("id"),
-        "display_name": payload.get("display_name") or payload.get("filename") or local_row["name"],
+        "status": status,
+        "canvas_id": canvas_id,
+        "display_name": display_name,
         "filename": payload.get("filename") or local_row["name"],
         "folder_id": payload.get("folder_id") or getattr(folder, "id", None),
+        "canvas_path": canvas_path,
+        "canvas_url": stable_url,
         "content_type": content_type,
-        "url_present": bool(payload.get("url") or payload.get("download_url")),
     }
     if payload.get("size") is not None:
         row["size"] = payload.get("size")
     if not ok:
         row["error"] = safe_upload_error(payload)
+    elif status != "uploaded":
+        row["error"] = "Canvas reported upload success without safe file identity evidence."
     return row
 
 
@@ -895,7 +986,7 @@ def is_sensitive_upload_key(key: str) -> bool:
 def safe_upload_error_text(value: Any) -> str:
     text = str(value)
     text = URLISH_RE.sub("[redacted-url]", text)
-    text = VERIFIER_RE.sub(r"\1=[redacted]", text)
+    text = VERIFIER_RE.sub("[redacted-sensitive-value]", text)
     return text
 
 

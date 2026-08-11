@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections import Counter
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
@@ -13,10 +14,15 @@ import yaml
 from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.auth import canvas_from_args
+from danvas.canvas_links import (
+    canonical_canvas_object_url,
+    extract_canvas_file_references,
+    stable_course_file_url,
+)
 from danvas.config import resolve_assignment_group_id, resolve_course_timezone
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
 from danvas.overrides import private_assignment_overrides
-from danvas.reports import ReportRun, create_report_run, should_write_report_run
+from danvas.reports import ReportRun, create_report_run, safe_error, should_write_report_run
 from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
 from danvas.utils import (
     canvas_object_to_dict,
@@ -73,27 +79,72 @@ ASSIGNMENT_METADATA_FIELDS = {
 
 ASSIGNMENT_LOCAL_FIELDS = {"availability_overrides_ref"}
 
+DECLARED_FIELD_ALIASES = {
+    "name": "title",
+    "due_date": "due_at",
+    "unlock_date": "unlock_at",
+    "lock_date": "lock_at",
+    "assignment_group": "assignment_group_name",
+}
+ASSIGNMENT_VERIFY_SUPPORTED_FIELDS = {
+    "title",
+    "canvas_url",
+    "points_possible",
+    "due_at",
+    "unlock_at",
+    "lock_at",
+    "published",
+    "assignment_group_id",
+    "assignment_group_name",
+    "submission_types",
+    "grading_type",
+    "group_category_id",
+    "allowed_extensions",
+    "body_text",
+}
+ASSIGNMENT_PROVENANCE_FIELDS = {"assignment_id", "canvas_id", "id"}
+SENSITIVE_ASSIGNMENT_TEXT_RE = re.compile(
+    r"(?i)\b(?:secure_params|verifier|access_token|api_key|authorization|bearer|"
+    r"signature|policy|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+)\b"
+    r"(?:\s*[=:]\s*[^\s&\"']+)?"
+)
+
 
 def command_assignments_verify(args: Any) -> None:
     source = Path(args.source)
     if not source.is_file():
         raise SystemExit(f"Assignment Markdown source not found: {source}")
-    local = assignment_verify_local_source(source, getattr(args, "assignment_id", None))
+    canvas_origin = str(getattr(args, "api_url", "") or "")
+    local = assignment_verify_local_source(
+        source,
+        getattr(args, "assignment_id", None),
+        course_id=int(args.course_id),
+        canvas_origin=canvas_origin,
+    )
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     canvas_record: dict[str, Any] | None = None
     fetch_error = ""
+    fetch_status = "ok"
     try:
         assignment = course.get_assignment(local["assignment_id"])
-        canvas_record = assignment_verify_canvas_record(course, assignment)
-    except ResourceDoesNotExist as exc:
-        fetch_error = str(exc)
+        canvas_record = assignment_verify_canvas_record(
+            course, assignment, canvas_origin=canvas_origin
+        )
+    except ResourceDoesNotExist:
+        fetch_status = "not_found"
+        fetch_error = "assignment_not_found"
+    except Exception as exc:  # noqa: BLE001 - verification retains sanitized evidence.
+        fetch_status = "indeterminate"
+        fetch_error = safe_assignment_lookup_reason(exc)
     report = build_assignment_verify_report(
         course=course,
         source=source,
         local=local,
         canvas_record=canvas_record,
         fetch_error=fetch_error,
+        fetch_status=fetch_status,
+        canvas_origin=canvas_origin,
     )
     write_assignment_verify_report_run(make_assignment_verify_report_run(args, report), report)
     print_assignment_verify_summary(report)
@@ -104,17 +155,26 @@ def command_assignments_verify(args: Any) -> None:
 def command_assignments_export(args: Any) -> None:
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
-    course_payload = canvas_object_to_dict(course)
+    course_payload = safe_course_record(course)
     groups = {
-        int(group.id): canvas_object_to_dict(group) for group in course.get_assignment_groups()
+        int(group.id): safe_assignment_group_record(group)
+        for group in course.get_assignment_groups()
     }
     rows = []
     for assignment in course.get_assignments(include=["all_dates", "overrides"]):
         payload = canvas_object_to_dict(assignment)
         group = groups.get(int(getattr(assignment, "assignment_group_id", 0) or 0), {})
+        description = str(getattr(assignment, "description", "") or "")
+        raw_file_links = extract_canvas_file_references(
+            description,
+            current_course_id=int(getattr(course, "id", args.course_id)),
+            canvas_origin=str(getattr(args, "api_url", "") or ""),
+        )
+        valid_links = [link for link in raw_file_links if link.get("status") == "valid"]
+        file_links = [safe_file_link(link) for link in raw_file_links]
         row = {
             "id": getattr(assignment, "id", ""),
-            "name": getattr(assignment, "name", ""),
+            "name": safe_assignment_text(getattr(assignment, "name", "")),
             "assignment_group_id": getattr(assignment, "assignment_group_id", ""),
             "assignment_group_name": group.get("name", ""),
             "points_possible": getattr(assignment, "points_possible", ""),
@@ -122,37 +182,44 @@ def command_assignments_export(args: Any) -> None:
             "unlock_at": getattr(assignment, "unlock_at", ""),
             "lock_at": getattr(assignment, "lock_at", ""),
             "published": getattr(assignment, "published", ""),
-            "html_url": getattr(assignment, "html_url", ""),
+            "html_url": canonical_canvas_object_url(
+                getattr(assignment, "html_url", ""),
+                canvas_origin=str(getattr(args, "api_url", "") or ""),
+            ),
             "submission_types": ",".join(getattr(assignment, "submission_types", []) or []),
-            "description_text": html_to_text(getattr(assignment, "description", "")),
-            "description_html": getattr(assignment, "description", "") or "",
+            "description_text": safe_assignment_text(html_to_text(description)),
+            "file_ids": ",".join(str(link["file_id"]) for link in valid_links),
+            "file_urls": ",".join(str(link.get("canvas_url") or "") for link in valid_links),
+            "file_links": file_links,
         }
         if args.full:
-            row["assignment"] = payload
+            row["extended"] = safe_assignment_export_extended(payload)
             row["assignment_group"] = group
         rows.append(row)
     rows.sort(key=lambda row: (str(row["due_at"] or ""), str(row["name"] or "")))
     output = Path(args.output)
     fmt = resolve_format(output, args.format)
     if fmt == "csv":
+        fields = [
+            "id",
+            "name",
+            "assignment_group_id",
+            "assignment_group_name",
+            "points_possible",
+            "due_at",
+            "unlock_at",
+            "lock_at",
+            "published",
+            "html_url",
+            "submission_types",
+            "description_text",
+            "file_ids",
+            "file_urls",
+        ]
         write_rows(
             output,
-            rows,
-            [
-                "id",
-                "name",
-                "assignment_group_id",
-                "assignment_group_name",
-                "points_possible",
-                "due_at",
-                "unlock_at",
-                "lock_at",
-                "published",
-                "html_url",
-                "submission_types",
-                "description_text",
-                "description_html",
-            ],
+            [{key: row.get(key, "") for key in fields} for row in rows],
+            fields,
         )
     elif fmt == "markdown":
         write_assignments_markdown(output, course_payload, groups, rows)
@@ -217,11 +284,9 @@ def write_assignments_markdown(
     for index, row in enumerate(rows, start=1):
         slug = slugify(str(row["name"]), f"assignment-{row['id']}")
         path = output / f"{index:03d}-{slug}-{row['id']}.md"
-        metadata = {
-            key: row[key] for key in row if key not in {"description_html", "description_text"}
-        }
+        metadata = {key: row[key] for key in row if key != "description_text"}
         text = "---\n" + json.dumps(metadata, indent=2, ensure_ascii=False) + "\n---\n\n"
-        text += row["description_text"] or row["description_html"] or ""
+        text += row["description_text"] or ""
         path.write_text(text, encoding="utf-8")
 
 
@@ -242,9 +307,28 @@ def command_assignments_create(args: Any) -> None:
         )
     if args.dry_run:
         print("Dry run - no assignment created.")
-        print(json.dumps(assignment, indent=2, ensure_ascii=False))
+        print(
+            json.dumps(
+                safe_assignment_mutation_projection(
+                    assignment,
+                    course_id=int(args.course_id),
+                    canvas_origin=str(getattr(args, "api_url", "") or ""),
+                ),
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
         return
-    create_assignment_from_loaded_source(args, source, assignment_update_local_source(source), assignment)
+    create_assignment_from_loaded_source(
+        args,
+        source,
+        assignment_update_local_source(
+            source,
+            course_id=int(args.course_id),
+            canvas_origin=str(getattr(args, "api_url", "") or ""),
+        ),
+        assignment,
+    )
 
 
 def create_assignment_from_loaded_source(
@@ -259,7 +343,7 @@ def create_assignment_from_loaded_source(
         "create assignment",
         {
             "course": args.course_id,
-            "name": assignment.get("name", ""),
+            "name": safe_assignment_text(assignment.get("name", "")),
             "published": assignment.get("published", False),
             "source": source,
         },
@@ -270,10 +354,18 @@ def create_assignment_from_loaded_source(
     created = course.create_assignment(assignment)
     created_id = int(first_value(created, canvas_object_to_dict(created), "id"))
     readback = course.get_assignment(created_id)
-    canvas_record = assignment_verify_canvas_record(course, readback)
-    print(f"Created assignment: {created.name} (ID {created.id})")
-    if getattr(created, "html_url", None):
-        print(f"URL: {created.html_url}")
+    canvas_record = assignment_verify_canvas_record(
+        course,
+        readback,
+        canvas_origin=str(getattr(args, "api_url", "") or ""),
+    )
+    print(f"Created assignment: {safe_assignment_text(created.name)} (ID {created.id})")
+    created_url = canonical_canvas_object_url(
+        getattr(created, "html_url", ""),
+        canvas_origin=str(getattr(args, "api_url", "") or ""),
+    )
+    if created_url:
+        print(f"URL: {created_url}")
     source_map_path = write_assignment_source_map_entry(
         source=source,
         course_id=getattr(args, "course_id", None),
@@ -290,7 +382,11 @@ def command_assignments_update(args: Any) -> None:
     if not source.is_file():
         raise SystemExit(f"Assignment Markdown source not found: {source}")
     project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
-    local = assignment_update_local_source(source)
+    local = assignment_update_local_source(
+        source,
+        course_id=int(args.course_id),
+        canvas_origin=str(getattr(args, "api_url", "") or ""),
+    )
     resolved = resolve_source_canvas_id(
         kind="assignment",
         source=source,
@@ -303,7 +399,15 @@ def command_assignments_update(args: Any) -> None:
     assignment, lookup = resolve_assignment_for_update(
         course, local, resolved, bool(args.match_title)
     )
-    canvas_before = assignment_verify_canvas_record(course, assignment) if assignment else None
+    canvas_before = (
+        assignment_verify_canvas_record(
+            course,
+            assignment,
+            canvas_origin=str(getattr(args, "api_url", "") or ""),
+        )
+        if assignment
+        else None
+    )
     if assignment is None:
         report = build_assignment_update_report(
             course=course,
@@ -389,7 +493,9 @@ def update_assignment_from_loaded_source(
         {
             "course": args.course_id,
             "assignment_id": planned_report["assignment_id"],
-            "name": update_payload.get("name", canvas_before.get("title") if canvas_before else ""),
+            "name": safe_assignment_text(
+                update_payload.get("name", canvas_before.get("title") if canvas_before else "")
+            ),
             "source": source,
         },
     )
@@ -399,7 +505,11 @@ def update_assignment_from_loaded_source(
         or planned_report["assignment_id"]
     )
     readback = course.get_assignment(updated_id)
-    canvas_after = assignment_verify_canvas_record(course, readback)
+    canvas_after = assignment_verify_canvas_record(
+        course,
+        readback,
+        canvas_origin=str(getattr(args, "api_url", "") or ""),
+    )
     report = build_assignment_update_report(
         course=course,
         source=source,
@@ -435,7 +545,11 @@ def command_assignments_upsert(args: Any) -> None:
     if not args.dry_run and confirm not in {"create", "update"}:
         raise SystemExit("Live assignments upsert requires --confirm create or --confirm update.")
     project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
-    local = assignment_update_local_source(source)
+    local = assignment_update_local_source(
+        source,
+        course_id=int(args.course_id),
+        canvas_origin=str(getattr(args, "api_url", "") or ""),
+    )
     resolved = resolve_source_canvas_id(
         kind="assignment",
         source=source,
@@ -448,7 +562,15 @@ def command_assignments_upsert(args: Any) -> None:
     assignment, lookup = resolve_assignment_for_upsert(
         course, local, resolved, bool(args.match_title)
     )
-    canvas_before = assignment_verify_canvas_record(course, assignment) if assignment else None
+    canvas_before = (
+        assignment_verify_canvas_record(
+            course,
+            assignment,
+            canvas_origin=str(getattr(args, "api_url", "") or ""),
+        )
+        if assignment
+        else None
+    )
     report = build_assignment_upsert_report(
         course=course,
         source=source,
@@ -509,9 +631,15 @@ def load_assignment_markdown(source: Path) -> dict[str, Any]:
     return assignment
 
 
-def assignment_update_local_source(source: Path) -> dict[str, Any]:
+def assignment_update_local_source(
+    source: Path,
+    *,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
+) -> dict[str, Any]:
     text = source.read_text(encoding="utf-8-sig")
     metadata, body = parse_frontmatter(text, source, "Assignment")
+    declared_fields = normalized_declared_assignment_fields(set(metadata))
     if "title" in metadata:
         if "name" in metadata:
             raise SystemExit("Use either 'name' or 'title', not both.")
@@ -533,6 +661,17 @@ def assignment_update_local_source(source: Path) -> dict[str, Any]:
         "assignment": assignment,
         "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
         "body_text": normalized_text(html_to_text(assignment.get("description") or "")),
+        "rendered_html": str(assignment.get("description") or ""),
+        "declared_fields": sorted(declared_fields | {"title", "body_text"}),
+        "file_links": (
+            extract_canvas_file_references(
+                str(assignment.get("description") or ""),
+                current_course_id=course_id,
+                canvas_origin=canvas_origin,
+            )
+            if course_id is not None
+            else []
+        ),
     }
 
 
@@ -573,9 +712,22 @@ def assignment_update_payload(assignment: dict[str, Any]) -> dict[str, Any]:
 
 
 def assignment_verify_local_source(
-    source: Path, assignment_id: int | None = None
+    source: Path,
+    assignment_id: int | None = None,
+    *,
+    course_id: int | None = None,
+    canvas_origin: str | None = None,
 ) -> dict[str, Any]:
     metadata, body = parse_frontmatter(source.read_text(encoding="utf-8-sig"), source, "Assignment")
+    unknown = sorted(
+        set(metadata)
+        - ASSIGNMENT_METADATA_FIELDS
+        - ASSIGNMENT_LOCAL_FIELDS
+        - {"title", "assignment_id", "canvas_id", "id", "canvas_url", "html_url"}
+    )
+    if unknown:
+        raise SystemExit(f"Unsupported assignment metadata field(s): {', '.join(unknown)}")
+    declared_fields = normalized_declared_assignment_fields(set(metadata))
     expand_date_only_metadata(metadata, source)
     canvas_id = assignment_id
     if canvas_id is None:
@@ -585,9 +737,13 @@ def assignment_verify_local_source(
             "Assignment verification requires --assignment-id or assignment_id front matter."
         )
     title = metadata.get("title", metadata.get("name", ""))
+    rendered_html = markdown_to_html(body)
     return {
         "assignment_id": int(canvas_id),
-        "canvas_url": str(metadata.get("canvas_url", metadata.get("html_url", "")) or ""),
+        "canvas_url": canonical_canvas_object_url(
+            metadata.get("canvas_url", metadata.get("html_url", "")),
+            canvas_origin=canvas_origin,
+        ),
         "title": str(title or ""),
         "points_possible": metadata.get("points_possible"),
         "due_at": metadata_text(metadata.get("due_at")),
@@ -601,18 +757,36 @@ def assignment_verify_local_source(
         "submission_types": metadata.get("submission_types"),
         "grading_type": str(metadata.get("grading_type") or ""),
         "group_category_id": metadata.get("group_category_id"),
-        "body_text": normalized_text(html_to_text(markdown_to_html(body))),
+        "allowed_extensions": metadata.get("allowed_extensions"),
+        "body_text": normalized_text(html_to_text(rendered_html)),
+        "rendered_html": rendered_html,
+        "declared_fields": sorted(declared_fields | {"title", "body_text"}),
+        "file_links": (
+            extract_canvas_file_references(
+                rendered_html,
+                current_course_id=course_id,
+                canvas_origin=canvas_origin,
+            )
+            if course_id is not None
+            else []
+        ),
     }
 
 
-def assignment_verify_canvas_record(course: Any, assignment: Any) -> dict[str, Any]:
+def assignment_verify_canvas_record(
+    course: Any, assignment: Any, *, canvas_origin: str | None = None
+) -> dict[str, Any]:
     payload = canvas_object_to_dict(assignment)
     group_id = first_value(assignment, payload, "assignment_group_id")
     group_name = assignment_group_name(course, group_id)
+    description = str(first_value(assignment, payload, "description") or "")
+    course_id = int(getattr(course, "id", 0) or payload.get("course_id") or 0)
     return {
         "id": first_value(assignment, payload, "id"),
         "title": first_value(assignment, payload, "name", "title"),
-        "canvas_url": first_value(assignment, payload, "html_url"),
+        "canvas_url": canonical_canvas_object_url(
+            first_value(assignment, payload, "html_url"), canvas_origin=canvas_origin
+        ),
         "points_possible": first_value(assignment, payload, "points_possible"),
         "due_at": first_value(assignment, payload, "due_at"),
         "unlock_at": first_value(assignment, payload, "unlock_at"),
@@ -623,11 +797,187 @@ def assignment_verify_canvas_record(course: Any, assignment: Any) -> dict[str, A
         "submission_types": first_value(assignment, payload, "submission_types"),
         "grading_type": first_value(assignment, payload, "grading_type"),
         "group_category_id": first_value(assignment, payload, "group_category_id"),
-        "body_text": normalized_text(
-            html_to_text(first_value(assignment, payload, "description") or "")
+        "allowed_extensions": first_value(assignment, payload, "allowed_extensions"),
+        "body_text": normalized_text(html_to_text(description)),
+        "description_html": description,
+        "file_links": (
+            extract_canvas_file_references(
+                description,
+                current_course_id=course_id,
+                canvas_origin=canvas_origin,
+            )
+            if course_id
+            else []
         ),
-        "assignment": payload,
+        "updated_at": first_value(assignment, payload, "updated_at"),
     }
+
+
+def normalized_declared_assignment_fields(fields: set[str]) -> set[str]:
+    return {
+        DECLARED_FIELD_ALIASES.get(field, "canvas_url" if field == "html_url" else field)
+        for field in fields
+        if field not in ASSIGNMENT_PROVENANCE_FIELDS and field not in ASSIGNMENT_LOCAL_FIELDS
+    }
+
+
+def safe_course_record(course: Any) -> dict[str, Any]:
+    payload = canvas_object_to_dict(course)
+    return safe_assignment_value({
+        key: payload.get(key, getattr(course, key, None))
+        for key in ("id", "name", "course_code")
+        if payload.get(key, getattr(course, key, None)) not in {None, ""}
+    })
+
+
+def safe_assignment_group_record(group: Any) -> dict[str, Any]:
+    payload = canvas_object_to_dict(group)
+    return safe_assignment_value({
+        key: payload.get(key, getattr(group, key, None))
+        for key in ("id", "name", "position", "group_weight")
+        if payload.get(key, getattr(group, key, None)) not in {None, ""}
+    })
+
+
+def safe_file_link(link: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "status",
+        "reason",
+        "course_id",
+        "file_id",
+        "canvas_url",
+        "tag",
+        "attributes",
+        "occurrence",
+        "conflicting_identities",
+        "value_sha256",
+        "volatile_query_present",
+    }
+    return {key: link[key] for key in allowed if key in link}
+
+
+def safe_assignment_record(record: dict[str, Any] | None) -> dict[str, Any]:
+    if not record:
+        return {}
+    allowed = ASSIGNMENT_VERIFY_SUPPORTED_FIELDS | {"id", "updated_at", "file_links"}
+    result = {
+        key: (
+            record.get(key)
+            if key in {"canvas_url", "file_links"}
+            else safe_assignment_value(record.get(key))
+        )
+        for key in allowed
+        if key in record
+    }
+    result["file_links"] = [safe_file_link(link) for link in record.get("file_links") or []]
+    return result
+
+
+def safe_local_assignment_record(local: dict[str, Any]) -> dict[str, Any]:
+    allowed = ASSIGNMENT_VERIFY_SUPPORTED_FIELDS | {
+        "assignment_id",
+        "declared_fields",
+        "file_links",
+    }
+    result = {
+        key: (
+            local.get(key)
+            if key in {"canvas_url", "file_links"}
+            else safe_assignment_value(local.get(key))
+        )
+        for key in allowed
+        if key in local
+    }
+    result["file_links"] = [safe_file_link(link) for link in local.get("file_links") or []]
+    return result
+
+
+def safe_assignment_export_extended(payload: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "allowed_attempts",
+        "allowed_extensions",
+        "anonymous_grading",
+        "assignment_group_id",
+        "automatic_peer_reviews",
+        "created_at",
+        "due_at",
+        "grade_group_students_individually",
+        "grading_type",
+        "group_category_id",
+        "hide_in_gradebook",
+        "id",
+        "lock_at",
+        "moderated_grading",
+        "name",
+        "omit_from_final_grade",
+        "only_visible_to_overrides",
+        "peer_reviews",
+        "points_possible",
+        "position",
+        "published",
+        "submission_types",
+        "unlock_at",
+        "updated_at",
+    }
+    return safe_assignment_value({key: payload.get(key) for key in allowed if key in payload})
+
+
+def safe_assignment_text(value: Any) -> str:
+    return SENSITIVE_ASSIGNMENT_TEXT_RE.sub(
+        "[redacted-sensitive-value]", safe_error(str(value or ""))
+    )
+
+
+def safe_assignment_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): safe_assignment_value(item)
+            for key, item in value.items()
+            if not SENSITIVE_ASSIGNMENT_TEXT_RE.search(str(key))
+        }
+    if isinstance(value, list):
+        return [safe_assignment_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [safe_assignment_value(item) for item in value]
+    if isinstance(value, str):
+        return safe_assignment_text(value)
+    return value
+
+
+def safe_assignment_mutation_projection(
+    assignment: dict[str, Any], *, course_id: int, canvas_origin: str | None
+) -> dict[str, Any]:
+    if not assignment:
+        return {}
+    result = safe_assignment_value({
+        key: assignment.get(key)
+        for key in ASSIGNMENT_VERIFY_SUPPORTED_FIELDS - {"title", "body_text", "canvas_url"}
+        if key in assignment
+    })
+    if "name" in assignment:
+        result["name"] = safe_assignment_value(assignment.get("name"))
+    description = str(assignment.get("description") or "")
+    result["body_text"] = safe_assignment_text(normalized_text(html_to_text(description)))
+    result["body_sha256"] = hashlib.sha256(description.encode("utf-8")).hexdigest()
+    result["file_links"] = [
+        safe_file_link(link)
+        for link in extract_canvas_file_references(
+            description,
+            current_course_id=course_id,
+            canvas_origin=canvas_origin,
+        )
+    ]
+    omitted = sorted(
+        set(assignment)
+        - {
+            "name",
+            "description",
+            *(ASSIGNMENT_VERIFY_SUPPORTED_FIELDS - {"title", "body_text", "canvas_url"}),
+        }
+    )
+    if omitted:
+        result["omitted_unsafe_or_unverified_fields"] = safe_assignment_value(omitted)
+    return result
 
 
 def resolve_assignment_for_update(
@@ -798,24 +1148,189 @@ def build_assignment_verify_report(
     local: dict[str, Any],
     canvas_record: dict[str, Any] | None,
     fetch_error: str = "",
+    fetch_status: str = "ok",
+    canvas_origin: str | None = None,
 ) -> dict[str, Any]:
-    checks = []
+    checks: list[dict[str, Any]] = []
+    file_links = empty_assignment_file_link_report()
     if canvas_record is None:
-        status = "not_found"
+        status = "mismatch" if fetch_status == "not_found" else "indeterminate"
     else:
-        checks = assignment_verify_checks(local, canvas_record)
-        status = "matches" if all(check["matches"] for check in checks) else "mismatch"
+        checks = assignment_verify_checks(local, canvas_record, include_unsupported=True)
+        file_links = verify_assignment_file_links(
+            course,
+            local.get("file_links") or [],
+            canvas_record.get("file_links") or [],
+            canvas_origin=canvas_origin,
+        )
+        if any(check["status"] == "mismatch" for check in checks) or file_links[
+            "status"
+        ] == "mismatch":
+            status = "mismatch"
+        elif any(check["status"] == "unsupported" for check in checks) or file_links[
+            "status"
+        ] == "partial":
+            status = "partial"
+        else:
+            status = "matches"
+    coverage = {
+        "declared": len(local.get("declared_fields") or []),
+        "checked": sum(check["status"] in {"matches", "mismatch"} for check in checks),
+        "unsupported": sum(check["status"] == "unsupported" for check in checks),
+        "file_targets": len(local.get("file_links") or []),
+    }
     return {
-        "course": canvas_object_to_dict(course),
+        "evidence_schema": "assignment-release-v1",
+        "course": safe_course_record(course),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "source": str(source),
         "assignment_id": local["assignment_id"],
         "status": status,
         "fetch_error": fetch_error,
-        "local": local,
-        "canvas": canvas_record or {},
+        "fetch_status": fetch_status,
+        "local": safe_local_assignment_record(local),
+        "canvas": safe_assignment_record(canvas_record),
         "checks": checks,
+        "file_links": file_links,
+        "coverage": coverage,
     }
+
+
+def empty_assignment_file_link_report() -> dict[str, Any]:
+    return {
+        "status": "not_checked",
+        "local": [],
+        "canvas": [],
+        "local_file_id_counts": {},
+        "canvas_file_id_counts": {},
+        "files": [],
+    }
+
+
+def verify_assignment_file_links(
+    course: Any,
+    local_links: list[dict[str, Any]],
+    canvas_links: list[dict[str, Any]],
+    *,
+    canvas_origin: str | None,
+) -> dict[str, Any]:
+    safe_local = [safe_file_link(link) for link in local_links]
+    safe_canvas = [safe_file_link(link) for link in canvas_links]
+    local_counts = Counter(
+        int(link["file_id"])
+        for link in local_links
+        if link.get("status") == "valid" and link.get("file_id") is not None
+    )
+    canvas_counts = Counter(
+        int(link["file_id"])
+        for link in canvas_links
+        if link.get("status") == "valid" and link.get("file_id") is not None
+    )
+    mismatch = local_counts != canvas_counts
+    partial = False
+    for link in [*local_links, *canvas_links]:
+        link_status = link.get("status")
+        if link_status == "relative_asset":
+            partial = True
+        elif link_status != "valid":
+            mismatch = True
+
+    folders_by_id: dict[int, str] | None = None
+    files = []
+    for file_id in sorted(local_counts):
+        if not hasattr(course, "get_file"):
+            files.append(
+                {"file_id": file_id, "status": "indeterminate", "reason": "file_lookup_unavailable"}
+            )
+            partial = True
+            continue
+        try:
+            file_obj = course.get_file(file_id)
+        except ResourceDoesNotExist:
+            files.append({"file_id": file_id, "status": "not_found"})
+            mismatch = True
+            continue
+        except Exception as exc:  # noqa: BLE001 - retain only bounded failure classification.
+            files.append(
+                {
+                    "file_id": file_id,
+                    "status": "indeterminate",
+                    "reason": safe_assignment_exception_reason(exc),
+                }
+            )
+            partial = True
+            continue
+        payload = canvas_object_to_dict(file_obj)
+        folder_id = first_value(file_obj, payload, "folder_id")
+        display_name = str(
+            first_value(file_obj, payload, "display_name", "filename") or f"file-{file_id}"
+        )
+        if folders_by_id is None:
+            folders_by_id = safe_course_folder_names(course)
+        folder_name = folders_by_id.get(int(folder_id), "") if folder_id is not None else ""
+        canvas_path = f"{folder_name.rstrip('/')}/{display_name}" if folder_name else display_name
+        stable_url = ""
+        if canvas_origin:
+            try:
+                stable_url = stable_course_file_url(
+                    canvas_origin, int(getattr(course, "id", 0)), file_id
+                )
+            except ValueError:
+                partial = True
+        files.append(
+            {
+                "file_id": file_id,
+                "status": "exists" if stable_url else "indeterminate",
+                "folder_id": folder_id,
+                "display_name": display_name,
+                "canvas_path": canvas_path,
+                "canvas_url": stable_url,
+            }
+        )
+        if not stable_url:
+            partial = True
+    status = "mismatch" if mismatch else "partial" if partial else "matches"
+    return {
+        "status": status,
+        "local": safe_local,
+        "canvas": safe_canvas,
+        "local_file_id_counts": {str(key): value for key, value in sorted(local_counts.items())},
+        "canvas_file_id_counts": {str(key): value for key, value in sorted(canvas_counts.items())},
+        "files": files,
+    }
+
+
+def safe_course_folder_names(course: Any) -> dict[int, str]:
+    if not hasattr(course, "get_folders"):
+        return {}
+    try:
+        folders = course.get_folders()
+    except Exception:  # noqa: BLE001 - file existence remains authoritative without a path label.
+        return {}
+    return {
+        int(folder_id): str(first_value(folder, payload, "full_name") or "")
+        for folder in folders
+        if (payload := canvas_object_to_dict(folder))
+        and (folder_id := first_value(folder, payload, "id")) is not None
+    }
+
+
+def safe_assignment_exception_reason(exc: Exception) -> str:
+    name = type(exc).__name__.casefold()
+    if "unauthorized" in name or "forbidden" in name or "access" in name:
+        return "file_lookup_unauthorized"
+    if "rate" in name or "throttle" in name:
+        return "file_lookup_rate_limited"
+    return "file_lookup_failed"
+
+
+def safe_assignment_lookup_reason(exc: Exception) -> str:
+    name = type(exc).__name__.casefold()
+    if "unauthorized" in name or "forbidden" in name or "access" in name:
+        return "assignment_lookup_unauthorized"
+    if "rate" in name or "throttle" in name:
+        return "assignment_lookup_rate_limited"
+    return "assignment_lookup_failed"
 
 
 def build_assignment_update_report(
@@ -847,22 +1362,27 @@ def build_assignment_update_report(
     else:
         status = "no_change" if not mismatches else "planned"
     return {
-        "course": canvas_object_to_dict(course),
+        "evidence_schema": "assignment-release-v1",
+        "course": safe_course_record(course),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "source": str(source),
         "dry_run": dry_run,
         "status": status,
         "assignment_id": resolved.get("id") or first_value_from_record(canvas_before, "id"),
-        "id_resolution": {
+        "id_resolution": safe_assignment_value({
             "source": resolved.get("source"),
             "path": resolved.get("path"),
             "id": resolved.get("id"),
-        },
-        "lookup": lookup,
-        "local": local_record,
-        "canvas_before": canvas_before or {},
-        "canvas_after": canvas_after or {},
-        "update_payload": update_payload,
+        }),
+        "lookup": safe_assignment_value(lookup),
+        "local": safe_local_assignment_record(local_record),
+        "canvas_before": safe_assignment_record(canvas_before),
+        "canvas_after": safe_assignment_record(canvas_after),
+        "update_payload": safe_assignment_mutation_projection(
+            update_payload,
+            course_id=int(getattr(course, "id", 0)),
+            canvas_origin=None,
+        ),
         "diff": before_checks,
         "readback": {
             "status": readback_status,
@@ -892,23 +1412,40 @@ def build_assignment_upsert_report(
         action = "none"
         status = "error"
     return {
-        "course": canvas_object_to_dict(course),
+        "evidence_schema": "assignment-release-v1",
+        "course": safe_course_record(course),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "source": str(source),
         "dry_run": True,
         "status": status,
         "planned_action": action,
         "assignment_id": resolved.get("id") or first_value_from_record(canvas_before, "id"),
-        "id_resolution": {
+        "id_resolution": safe_assignment_value({
             "source": resolved.get("source"),
             "path": resolved.get("path"),
             "id": resolved.get("id"),
-        },
-        "lookup": lookup,
-        "local": local_record,
-        "canvas_before": canvas_before or {},
-        "create_payload": local["assignment"] if action == "create" else {},
-        "update_payload": assignment_update_payload(local["assignment"]) if action == "update" else {},
+        }),
+        "lookup": safe_assignment_value(lookup),
+        "local": safe_local_assignment_record(local_record),
+        "canvas_before": safe_assignment_record(canvas_before),
+        "create_payload": (
+            safe_assignment_mutation_projection(
+                local["assignment"],
+                course_id=int(getattr(course, "id", 0)),
+                canvas_origin=None,
+            )
+            if action == "create"
+            else {}
+        ),
+        "update_payload": (
+            safe_assignment_mutation_projection(
+                assignment_update_payload(local["assignment"]),
+                course_id=int(getattr(course, "id", 0)),
+                canvas_origin=None,
+            )
+            if action == "update"
+            else {}
+        ),
         "diff": diff,
     }
 
@@ -926,16 +1463,19 @@ def assignment_update_local_compare_record(local: dict[str, Any]) -> dict[str, A
         "submission_types": assignment.get("submission_types"),
         "grading_type": assignment.get("grading_type"),
         "group_category_id": assignment.get("group_category_id"),
+        "allowed_extensions": assignment.get("allowed_extensions"),
         "body_text": local["body_text"],
+        "declared_fields": local.get("declared_fields") or [],
+        "file_links": local.get("file_links") or [],
     }
 
 
 def assignment_source_map_fields(local: dict[str, Any]) -> dict[str, Any]:
-    return {
+    return safe_assignment_value({
         key: value
         for key, value in assignment_update_local_compare_record(local).items()
-        if value is not None and value != ""
-    }
+        if key in ASSIGNMENT_VERIFY_SUPPORTED_FIELDS and value is not None and value != ""
+    })
 
 
 def write_assignment_source_map_entry(
@@ -954,7 +1494,7 @@ def write_assignment_source_map_entry(
         canvas={
             "id": canvas_record.get("id"),
             "url": canvas_record.get("canvas_url") or "",
-            "updated_at": canvas_record.get("assignment", {}).get("updated_at") or "",
+            "updated_at": canvas_record.get("updated_at") or "",
         },
         command=command,
         fields=assignment_source_map_fields(local),
@@ -970,53 +1510,64 @@ def first_value_from_record(record: dict[str, Any] | None, key: str) -> Any:
 
 
 def assignment_verify_checks(
-    local: dict[str, Any], canvas_record: dict[str, Any]
+    local: dict[str, Any],
+    canvas_record: dict[str, Any],
+    *,
+    include_unsupported: bool = False,
 ) -> list[dict[str, Any]]:
-    checks = [
-        verify_check("title", local.get("title"), canvas_record.get("title")),
-        verify_check("canvas_url", local.get("canvas_url"), canvas_record.get("canvas_url")),
-        verify_check(
-            "points_possible", local.get("points_possible"), canvas_record.get("points_possible")
-        ),
-        verify_check("due_at", local.get("due_at"), canvas_record.get("due_at")),
-        verify_check("unlock_at", local.get("unlock_at"), canvas_record.get("unlock_at")),
-        verify_check("lock_at", local.get("lock_at"), canvas_record.get("lock_at")),
-        verify_check("published", local.get("published"), canvas_record.get("published")),
-        verify_check(
-            "assignment_group_id",
-            local.get("assignment_group_id"),
-            canvas_record.get("assignment_group_id"),
-        ),
-        verify_check(
-            "assignment_group_name",
-            local.get("assignment_group_name"),
-            canvas_record.get("assignment_group_name"),
-        ),
-        verify_check(
-            "submission_types",
-            local.get("submission_types"),
-            canvas_record.get("submission_types"),
-        ),
-        verify_check("grading_type", local.get("grading_type"), canvas_record.get("grading_type")),
-        verify_check(
-            "group_category_id",
-            local.get("group_category_id"),
-            canvas_record.get("group_category_id"),
-        ),
-        verify_check("body_text", local.get("body_text"), canvas_record.get("body_text")),
-    ]
-    return [check for check in checks if has_local_expectation(check)]
+    declared = set(local.get("declared_fields") or [])
+    values = {
+        field: (local.get(field), canvas_record.get(field))
+        for field in ASSIGNMENT_VERIFY_SUPPORTED_FIELDS
+    }
+    checks = []
+    for field in sorted(values):
+        local_value, canvas_value = values[field]
+        if declared:
+            if field not in declared:
+                continue
+        elif local_value is None or local_value == "":
+            continue
+        checks.append(verify_check(field, local_value, canvas_value))
+    if include_unsupported:
+        for field in sorted(
+            declared - ASSIGNMENT_VERIFY_SUPPORTED_FIELDS - ASSIGNMENT_PROVENANCE_FIELDS
+        ):
+            checks.append(
+                {
+                    "field": field,
+                    "status": "unsupported",
+                    "matches": False,
+                    "local": None,
+                    "canvas": None,
+                    "reason": "declared_field_not_verified",
+                }
+            )
+    return checks
 
 
 def verify_check(field: str, local_value: Any, canvas_value: Any) -> dict[str, Any]:
-    local = comparable_value(local_value)
-    canvas = comparable_value(canvas_value)
+    local = comparable_field_value(field, local_value)
+    canvas = comparable_field_value(field, canvas_value)
+    matches = local == canvas
     return {
         "field": field,
-        "matches": local == canvas,
-        "local": local,
-        "canvas": canvas,
+        "status": "matches" if matches else "mismatch",
+        "matches": matches,
+        "local": safe_assignment_value(local),
+        "canvas": safe_assignment_value(canvas),
     }
+
+
+def comparable_field_value(field: str, value: Any) -> Any:
+    if field == "allowed_extensions":
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            value = [item for item in value.split(",") if item.strip()]
+        if isinstance(value, (list, tuple)):
+            return sorted({str(item).strip().removeprefix(".").casefold() for item in value})
+    return comparable_value(value)
 
 
 def comparable_value(value: Any) -> Any:
@@ -1042,10 +1593,6 @@ def comparable_value(value: Any) -> Any:
 
 def normalized_text(value: str) -> str:
     return " ".join(value.split())
-
-
-def has_local_expectation(check: dict[str, Any]) -> bool:
-    return check["local"] is not None and check["local"] != ""
 
 
 def make_assignment_verify_report_run(args: Any, report: dict[str, Any]) -> ReportRun | None:
@@ -1203,11 +1750,21 @@ def render_assignment_verify_markdown(report: dict[str, Any]) -> str:
         "| --- | --- | --- | --- |",
     ]
     for check in report["checks"]:
-        status = "matches" if check["matches"] else "mismatch"
+        status = check.get("status") or ("matches" if check["matches"] else "mismatch")
         lines.append(
             f"| {check['field']} | `{check['local']}` | `{check['canvas']}` | `{status}` |"
         )
-    if report["status"] == "not_found":
+    lines.extend(
+        [
+            "",
+            "## Canvas File Targets",
+            "",
+            f"- Status: `{report['file_links']['status']}`",
+            f"- Local targets: `{sum(report['file_links']['local_file_id_counts'].values())}`",
+            f"- Canvas targets: `{sum(report['file_links']['canvas_file_id_counts'].values())}`",
+        ]
+    )
+    if report.get("fetch_status") == "not_found":
         lines.extend(["", "Canvas assignment was not found by ID."])
     if report.get("fetch_error"):
         lines.extend(["", f"Fetch error: `{report['fetch_error']}`"])
@@ -1312,8 +1869,9 @@ def render_assignment_upsert_markdown(report: dict[str, Any]) -> str:
 def print_assignment_verify_summary(report: dict[str, Any]) -> None:
     print(f"Assignment verify: {report['status']}")
     for check in report["checks"]:
-        marker = "OK" if check["matches"] else "MISMATCH"
+        marker = str(check.get("status") or ("matches" if check["matches"] else "mismatch")).upper()
         print(f"  {check['field']}: {marker}")
+    print(f"  file targets: {report['file_links']['status'].upper()}")
 
 
 def print_assignment_update_summary(report: dict[str, Any]) -> None:
