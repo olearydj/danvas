@@ -1402,8 +1402,8 @@ Items 3 and 4 shipped in 0.6.0, and item 5 is now reflected in the external
 skill docs. A CASS transcript review covering the preceding 100 days on
 2026-08-09 confirmed the relevance of items 1, 2, and 6 through 9, and added
 items 10 and 11 below. Items 6, 8, 9, and 10 are implemented and have passed
-their bounded live or read-only field cases. Items 1, 2, and 11 remain
-unimplemented product work.
+their bounded live or read-only field cases. Items 1 and 2 remain unimplemented
+product work; item 11 is designed as the next release-engineering sprint.
 Item 7 is explicitly deferred because Canvas does not expose a supported API for
 initiating its native instructor gradebook CSV export.
 
@@ -1412,7 +1412,8 @@ initiating its native instructor gradebook CSV export.
 Prioritize correctness and trustworthy release evidence before new command
 families:
 
-1. Item 11: installed CLI health checks for the supported release workflow.
+1. Complete Sprint 13's main/tag CI and 0.10.1 release close-out. The installed
+   CLI health implementation and full local smoke already pass.
 2. Items 1 and 2: seeded discussion creation, then discussion verify/update.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
@@ -1863,6 +1864,12 @@ ordering.
      state representations without overstating what Canvas reports.
 
 11. Add installed-CLI health coverage to the release workflow.
+
+   Status: implemented and locally verified as Sprint 13 on 2026-08-11,
+   targeting the 0.10.1 maintenance release. Main/tag CI and exact-tag global
+   installation remain release gates. See
+   `docs/sprints/13-installed-cli-release-health.md` for the bounded script,
+   CI, version-matching, documentation, and acceptance contract.
 
    Field evidence from a course status workflow on 2026-06-25:
 

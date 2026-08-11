@@ -1,6 +1,6 @@
 [project]
 name = "danvas"
-version = "0.10.0"
+version = "0.10.1"
 description = "Unified operational Canvas CLI"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -38,7 +38,7 @@ secretpath = "2026-06-25T00:00:00Z"
 danvas = "danvas.cli:main"
 
 [build-system]
-requires = ["uv_build>=0.11.0,<0.12.0"]
+requires = ["uv_build>=0.12.0,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]

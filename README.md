@@ -208,21 +208,60 @@ danvas
 
 ## Installation
 
+For editable development from a trusted checkout:
+
 ```bash
-uv tool install -e .
+uv tool install --force --editable .
 ```
 
-For development inside the repository:
+For repository-local development without changing the installed tool:
 
 ```bash
 uv run danvas --help
 ```
 
-Check the installed version:
+Before a release, build and verify separate editable and wheel installations in
+temporary uv tool directories:
 
 ```bash
-danvas --version
+scripts/release-smoke.sh
+scripts/release-smoke.sh --expected-version 0.10.1
 ```
+
+The smoke script honors normal uv configuration and freshness rules, never
+contacts Canvas, and never changes the global danvas installation.
+
+Install an exact tagged release:
+
+```bash
+uv tool install --force \
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.10.1"
+```
+
+Verify the installed environment outside the checkout:
+
+```bash
+uv tool list
+danvas --version
+danvas --help
+danvas auth doctor
+```
+
+If danvas fails before command parsing, `auth doctor` cannot start either. Use
+`uv tool list` to inspect the installed version/source, then force an exact-tag
+reinstall and repeat all startup checks. If a machine-wide uv `exclude-newer`
+cutoff predates a required release artifact, keep the global policy unchanged
+and use an explicitly audited cutoff for this install command only:
+
+```bash
+uv tool install --force \
+  --exclude-newer YYYY-MM-DDTHH:MM:SSZ \
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.10.1"
+```
+
+Do not remove or loosen the global cutoff merely to make resolution succeed.
+Confirm that the selected cutoff includes the tagged release and its required
+dependencies.
 
 ## Authentication
 

@@ -133,3 +133,19 @@ an explicit partial/forbidden group-category state with no diff removal claims,
 while the sandbox produced an authoritative empty state. Release close-out
 completed in `v0.10.0`: the exact commit passed CI, the tag is published, and an
 isolated tagged installation passed version, help, and local auth diagnostics.
+
+## 0.10.1 Installed CLI Health Follow-On
+
+The implemented maintenance slice is:
+
+- Sprint 13: [Installed CLI And Release Health](13-installed-cli-release-health.md)
+
+Sprint 13 turns the manual `v0.10.0` build, isolated-wheel install, tagged
+install, and startup checks into a reusable local script and CI contract. It
+also aligns the uv build-backend range, upgrades the workflow to Node.js 24
+action generations, validates package/tag version equality, and documents
+editable versus exact-tag installation and scoped uv recovery. It adds no
+Canvas command or Python package module. Target release: 0.10.1.
+Frozen sync, Ruff, ty, all 400 tests, and the complete local editable/wheel
+smoke passed on 2026-08-11. Main/tag CI and tagged global-install acceptance
+remain release gates.
