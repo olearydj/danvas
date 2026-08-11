@@ -13,15 +13,17 @@ EOF
 }
 
 EXPECTED_VERSION=""
+EXPECTED_VERSION_PROVIDED=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --expected-version)
             shift
-            if [ "$#" -eq 0 ]; then
-                echo "release smoke: --expected-version requires a value" >&2
+            if [ "$#" -eq 0 ] || [ -z "$1" ]; then
+                echo "release smoke: --expected-version requires a non-empty value" >&2
                 exit 2
             fi
             EXPECTED_VERSION=$1
+            EXPECTED_VERSION_PROVIDED=1
             ;;
         --help|-h)
             usage
@@ -64,7 +66,7 @@ if [ -z "$PROJECT_VERSION" ]; then
     exit 1
 fi
 
-if [ -z "$EXPECTED_VERSION" ]; then
+if [ "$EXPECTED_VERSION_PROVIDED" -eq 0 ]; then
     EXPECTED_VERSION=$PROJECT_VERSION
 fi
 

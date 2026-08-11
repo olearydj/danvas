@@ -113,6 +113,31 @@ Actions for commit `92dc888`, which is published on `origin/main` and tagged
 `danvas 0.10.0`; `danvas --help` and the local `auth doctor` diagnostic also
 pass outside the repository environment.
 
+## 0.10.2 Assignment Release Maintenance Candidate
+
+The public Sprint 13 commit consumed version 0.10.1 without creating a tag, so
+the reviewed maintenance release advances to 0.10.2. It retains the installed-
+CLI health work and repairs evidence-integrity defects found after the 0.10.0
+release:
+
+- `assignments update` and update-mode `assignments upsert` now preserve and
+  compare declared `assignment_group`/`assignment_group_name` aliases and
+  `canvas_url`/`html_url` values through no-change planning and live readback
+- assignment mutation projections use the configured Canvas origin, keeping
+  same-origin file-link classifications consistent with the local comparison
+- successful file uploads remain classified as successful when Canvas returns
+  a file ID but local stable-URL construction is incomplete; mutation and
+  evidence statuses are recorded separately with an explicit do-not-retry
+  warning
+- release smoke rejects an explicitly empty expected version before build or
+  installation begins
+
+Focused regression tests cover alias no-change behavior, successful update
+readback and provenance, same-origin report projection, partial upload evidence,
+and indeterminate upload identity. Release close-out requires the full frozen
+suite, Ruff, ty, the isolated editable/wheel smoke, main CI, tag CI, and an exact-
+tag installed-CLI check. No new Canvas command or live field mutation is needed.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as

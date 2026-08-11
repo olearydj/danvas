@@ -1028,6 +1028,148 @@ Submit the revised case memo.
     assert source_map["sources"][0]["last_posted"]["command"] == "assignments update"
 
 
+def test_command_assignments_update_aliases_round_trip_without_phantom_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_dir = tmp_path / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n'
+        '\n[assignment_groups]\nAssignments = 42\n',
+        encoding="utf-8",
+    )
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text(
+        """---
+assignment_id: 10
+title: Case 1
+assignment_group: Assignments
+canvas_url: https://canvas.example/courses/101/assignments/10
+---
+
+Submit the case memo.
+""",
+        encoding="utf-8",
+    )
+    assignment = FakeAssignment(
+        id=10,
+        name="Case 1",
+        assignment_group_id=42,
+        description="<p>Submit the case memo.</p>",
+        html_url="https://canvas.example/courses/101/assignments/10",
+    )
+
+    class GroupCourse(FakeUpdateCourse):
+        def get_assignment_groups(self) -> list[SimpleNamespace]:
+            return [SimpleNamespace(id=42, name="Assignments")]
+
+    course = GroupCourse([assignment])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_update(update_args(source, tmp_path / "report"))
+
+    assert assignment.edits == []
+    report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
+    assert report["status"] == "no_change"
+    checks = {check["field"]: check for check in report["diff"]}
+    assert checks["assignment_group_name"]["matches"] is True
+    assert checks["canvas_url"]["matches"] is True
+    assert report["local"]["assignment_group_name"] == "Assignments"
+    assert report["local"]["canvas_url"].endswith("/courses/101/assignments/10")
+
+
+def test_command_assignments_update_aliases_survive_live_readback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_dir = tmp_path / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n'
+        '\n[assignment_groups]\nAssignments = 42\n',
+        encoding="utf-8",
+    )
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text(
+        """---
+assignment_id: 10
+title: Case 1
+points_possible: 100
+assignment_group_name: Assignments
+html_url: https://canvas.example/courses/101/assignments/10
+---
+
+Submit the case memo.
+""",
+        encoding="utf-8",
+    )
+    assignment = FakeAssignment(
+        id=10,
+        name="Case 1",
+        points_possible=90,
+        assignment_group_id=42,
+        description="<p>Submit the case memo.</p>",
+        html_url="https://canvas.example/courses/101/assignments/10",
+        updated_at="2026-08-11T12:00:00Z",
+    )
+
+    class GroupCourse(FakeUpdateCourse):
+        def get_assignment_groups(self) -> list[SimpleNamespace]:
+            return [SimpleNamespace(id=42, name="Assignments")]
+
+    course = GroupCourse([assignment])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_update(
+        update_args(source, tmp_path / "report", dry_run=False, project_root=str(tmp_path))
+    )
+
+    assert assignment.edits[0]["points_possible"] == 100
+    report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
+    source_map = json.loads((tmp_path / ".danvas" / "source-map.json").read_text("utf-8"))
+    assert report["status"] == "updated"
+    assert report["readback"]["status"] == "matches"
+    fields = source_map["sources"][0]["last_posted"]["fields"]
+    assert fields["assignment_group_name"] == "Assignments"
+    assert fields["canvas_url"] == "[url]"
+
+
+def test_assignment_update_report_keeps_same_origin_file_links_valid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text(
+        """---
+assignment_id: 10
+title: Case 1 revised
+---
+
+[Case file](https://canvas.example/courses/101/files/44/download)
+""",
+        encoding="utf-8",
+    )
+    assignment = FakeAssignment(id=10, name="Case 1", description="<p>Old body.</p>")
+    course = FakeUpdateCourse([assignment])
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_update(update_args(source, tmp_path / "report"))
+
+    report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
+    assert report["update_payload"]["file_links"][0]["status"] == "valid"
+
+
 def test_command_assignments_update_uses_source_map_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

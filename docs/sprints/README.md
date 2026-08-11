@@ -149,3 +149,21 @@ Canvas command or Python package module. Target release: 0.10.1.
 Frozen sync, Ruff, ty, all 400 tests, and the complete local editable/wheel
 smoke passed on 2026-08-11. Main/tag CI and tagged global-install acceptance
 remain release gates.
+
+## 0.10.2 Assignment Release Maintenance
+
+The 0.10.1 version was consumed by the public Sprint 13 commit but was not
+tagged. The next maintenance release is therefore 0.10.2. It retains Sprint
+13's installed-CLI checks and repairs two evidence-integrity defects found in a
+post-implementation review:
+
+- assignment update/upsert comparison retains declared assignment-group aliases
+  and canonical Canvas URLs through no-change planning and live readback
+- file upload evidence records Canvas mutation outcome separately from stable-URL
+  completeness, so a successful upload cannot be reported as failed or invite
+  an unsafe retry
+
+The patch also passes the configured Canvas origin into assignment mutation
+projections and rejects an explicitly empty release-smoke expected version.
+Every supported fix has focused regression coverage. Release close-out requires
+the frozen suite, Ruff, ty, the isolated installed-CLI smoke, main CI, and tag CI.
