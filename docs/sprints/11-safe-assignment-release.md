@@ -141,6 +141,8 @@ mutation.
 For every successful upload, report only stable/safe fields:
 
 - `status: uploaded`
+- `mutation_status: succeeded`
+- `evidence_status: complete` or `partial`
 - `canvas_id`
 - `folder_id`
 - final `display_name` and `filename` from Canvas
@@ -149,14 +151,16 @@ For every successful upload, report only stable/safe fields:
 - size and content type when present
 
 Construct `canvas_url` from the configured trusted Canvas origin, course ID,
-and returned file ID. Never copy or trim the response's raw `url`,
+and returned file ID. If local URL construction fails after Canvas returns a
+file ID, retain `status: uploaded`, mark evidence partial, and print an explicit
+do-not-retry warning that points to the recorded ID. Never copy or trim the response's raw `url`,
 `download_url`, upload URL, or preview URL into durable output. Remove
 `url_present` after documenting the replacement; `canvas_url` is the supported
 field.
 
-Keep the existing nonzero partial-failure behavior. Successful rows remain
-usable when another row fails, while all failure text continues through the
-sanitized error boundary.
+Keep the existing nonzero partial-failure behavior for failed or indeterminate
+Canvas mutations. Successful rows remain usable when another row fails, while
+all failure text continues through the sanitized error boundary.
 
 ## Assignment Evidence Projection
 

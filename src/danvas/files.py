@@ -321,6 +321,7 @@ def command_files_upload(args: Any) -> None:
         },
     )
     failures = 0
+    evidence_gaps = 0
     results = []
     for row in local_rows:
         try:
@@ -343,16 +344,31 @@ def command_files_upload(args: Any) -> None:
         results.append(result)
         report["files"] = results
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
-        if result["status"] != "uploaded":
+        if result["mutation_status"] != "succeeded":
             failures += 1
+        elif result["evidence_status"] != "complete":
+            evidence_gaps += 1
     if args.output:
         write_json(Path(args.output), report)
         print(f"Wrote {args.output}")
     write_files_upload_report_run(report_run, report)
     if failures:
-        uploaded = sum(1 for row in results if row["status"] == "uploaded")
-        print(f"Upload incomplete: {uploaded} uploaded, {failures} failed.")
+        uploaded = sum(1 for row in results if row["mutation_status"] == "succeeded")
+        failed = sum(1 for row in results if row["mutation_status"] == "failed")
+        indeterminate = sum(
+            1 for row in results if row["mutation_status"] == "indeterminate"
+        )
+        outcomes = [f"{failed} failed"] if failed else []
+        if indeterminate:
+            outcomes.append(f"{indeterminate} indeterminate")
+        print(f"Upload incomplete: {uploaded} uploaded, {', '.join(outcomes)}.")
         raise SystemExit(1)
+    if evidence_gaps:
+        print(
+            f"Upload succeeded, but evidence is incomplete for {evidence_gaps} file(s). "
+            "Do not retry the upload; use the recorded canvas_id after correcting the "
+            "Canvas origin."
+        )
 
 
 def make_files_upload_report_run(
@@ -933,10 +949,23 @@ def upload_result_row(
             stable_url = stable_course_file_url(canvas_origin, course_id, int(canvas_id))
         except (TypeError, ValueError):
             stable_url = ""
-    status = "uploaded" if ok and canvas_id is not None and stable_url else "failed"
+    if not ok:
+        status = "failed"
+        mutation_status = "failed"
+    elif canvas_id is None:
+        status = "indeterminate"
+        mutation_status = "indeterminate"
+    else:
+        status = "uploaded"
+        mutation_status = "succeeded"
+    evidence_status = "complete" if status == "uploaded" and stable_url else "partial"
+    if status == "failed":
+        evidence_status = "not_available"
     row = {
         **local_row,
         "status": status,
+        "mutation_status": mutation_status,
+        "evidence_status": evidence_status,
         "canvas_id": canvas_id,
         "display_name": display_name,
         "filename": payload.get("filename") or local_row["name"],
@@ -949,8 +978,16 @@ def upload_result_row(
         row["size"] = payload.get("size")
     if not ok:
         row["error"] = safe_upload_error(payload)
-    elif status != "uploaded":
-        row["error"] = "Canvas reported upload success without safe file identity evidence."
+    elif canvas_id is None:
+        row["error"] = (
+            "Canvas reported upload success without a file ID; verify Canvas before retrying."
+        )
+    elif evidence_status != "complete":
+        row["evidence_warning"] = (
+            "Canvas accepted the upload and returned a file ID, but a safe stable URL could "
+            "not be constructed. Do not retry the upload; correct the Canvas origin and "
+            "reconstruct the URL from canvas_id."
+        )
     return row
 
 

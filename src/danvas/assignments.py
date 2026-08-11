@@ -382,10 +382,11 @@ def command_assignments_update(args: Any) -> None:
     if not source.is_file():
         raise SystemExit(f"Assignment Markdown source not found: {source}")
     project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    canvas_origin = str(getattr(args, "api_url", "") or "")
     local = assignment_update_local_source(
         source,
         course_id=int(args.course_id),
-        canvas_origin=str(getattr(args, "api_url", "") or ""),
+        canvas_origin=canvas_origin,
     )
     resolved = resolve_source_canvas_id(
         kind="assignment",
@@ -403,7 +404,7 @@ def command_assignments_update(args: Any) -> None:
         assignment_verify_canvas_record(
             course,
             assignment,
-            canvas_origin=str(getattr(args, "api_url", "") or ""),
+            canvas_origin=canvas_origin,
         )
         if assignment
         else None
@@ -420,6 +421,7 @@ def command_assignments_update(args: Any) -> None:
             update_payload={},
             dry_run=bool(args.dry_run),
             readback_status="skipped",
+            canvas_origin=canvas_origin,
         )
         write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
         print_assignment_update_summary(report)
@@ -437,6 +439,7 @@ def command_assignments_update(args: Any) -> None:
         update_payload=update_payload,
         dry_run=bool(args.dry_run),
         readback_status="skipped",
+        canvas_origin=canvas_origin,
     )
     if args.dry_run:
         write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
@@ -473,6 +476,7 @@ def update_assignment_from_loaded_source(
     assignment: Any,
     canvas_before: dict[str, Any],
 ) -> None:
+    canvas_origin = str(getattr(args, "api_url", "") or "")
     update_payload = assignment_update_payload(local["assignment"])
     update_lookup = {**lookup, "status": "matched"} if lookup["status"] == "would_update" else lookup
     planned_report = build_assignment_update_report(
@@ -486,6 +490,7 @@ def update_assignment_from_loaded_source(
         update_payload=update_payload,
         dry_run=False,
         readback_status="skipped",
+        canvas_origin=canvas_origin,
     )
     print_assignment_update_summary(planned_report)
     print_mutation_banner(
@@ -508,7 +513,7 @@ def update_assignment_from_loaded_source(
     canvas_after = assignment_verify_canvas_record(
         course,
         readback,
-        canvas_origin=str(getattr(args, "api_url", "") or ""),
+        canvas_origin=canvas_origin,
     )
     report = build_assignment_update_report(
         course=course,
@@ -521,6 +526,7 @@ def update_assignment_from_loaded_source(
         update_payload=update_payload,
         dry_run=False,
         readback_status="matches",
+        canvas_origin=canvas_origin,
     )
     write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
     print_assignment_update_summary(report)
@@ -545,10 +551,11 @@ def command_assignments_upsert(args: Any) -> None:
     if not args.dry_run and confirm not in {"create", "update"}:
         raise SystemExit("Live assignments upsert requires --confirm create or --confirm update.")
     project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
+    canvas_origin = str(getattr(args, "api_url", "") or "")
     local = assignment_update_local_source(
         source,
         course_id=int(args.course_id),
-        canvas_origin=str(getattr(args, "api_url", "") or ""),
+        canvas_origin=canvas_origin,
     )
     resolved = resolve_source_canvas_id(
         kind="assignment",
@@ -566,7 +573,7 @@ def command_assignments_upsert(args: Any) -> None:
         assignment_verify_canvas_record(
             course,
             assignment,
-            canvas_origin=str(getattr(args, "api_url", "") or ""),
+            canvas_origin=canvas_origin,
         )
         if assignment
         else None
@@ -578,6 +585,7 @@ def command_assignments_upsert(args: Any) -> None:
         resolved=resolved,
         lookup=lookup,
         canvas_before=canvas_before,
+        canvas_origin=canvas_origin,
     )
     print_assignment_upsert_summary(report)
     if report["status"] == "error":
@@ -645,6 +653,13 @@ def assignment_update_local_source(
             raise SystemExit("Use either 'name' or 'title', not both.")
         metadata["name"] = metadata.pop("title")
     frontmatter_id = metadata.get("assignment_id", metadata.get("canvas_id", metadata.get("id")))
+    declared_canvas_url = canonical_canvas_object_url(
+        metadata.get("canvas_url", metadata.get("html_url", "")),
+        canvas_origin=canvas_origin,
+    )
+    declared_assignment_group_name = str(
+        metadata.get("assignment_group_name", metadata.get("assignment_group", "")) or ""
+    )
     assignment = assignment_payload_from_metadata(source, metadata, body, default_published=False)
     if "assignment_group" in assignment:
         if "assignment_group_name" in assignment:
@@ -659,6 +674,8 @@ def assignment_update_local_source(
     return {
         "frontmatter_id": int(frontmatter_id) if frontmatter_id not in {None, ""} else None,
         "assignment": assignment,
+        "canvas_url": declared_canvas_url,
+        "assignment_group_name": declared_assignment_group_name,
         "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
         "body_text": normalized_text(html_to_text(assignment.get("description") or "")),
         "rendered_html": str(assignment.get("description") or ""),
@@ -1345,6 +1362,7 @@ def build_assignment_update_report(
     update_payload: dict[str, Any],
     dry_run: bool,
     readback_status: str,
+    canvas_origin: str | None,
 ) -> dict[str, Any]:
     local_record = assignment_update_local_compare_record(local)
     before_checks = assignment_verify_checks(local_record, canvas_before) if canvas_before else []
@@ -1381,7 +1399,7 @@ def build_assignment_update_report(
         "update_payload": safe_assignment_mutation_projection(
             update_payload,
             course_id=int(getattr(course, "id", 0)),
-            canvas_origin=None,
+            canvas_origin=canvas_origin,
         ),
         "diff": before_checks,
         "readback": {
@@ -1399,6 +1417,7 @@ def build_assignment_upsert_report(
     resolved: dict[str, Any],
     lookup: dict[str, Any],
     canvas_before: dict[str, Any] | None,
+    canvas_origin: str | None,
 ) -> dict[str, Any]:
     local_record = assignment_update_local_compare_record(local)
     diff = assignment_verify_checks(local_record, canvas_before) if canvas_before else []
@@ -1432,7 +1451,7 @@ def build_assignment_upsert_report(
             safe_assignment_mutation_projection(
                 local["assignment"],
                 course_id=int(getattr(course, "id", 0)),
-                canvas_origin=None,
+                canvas_origin=canvas_origin,
             )
             if action == "create"
             else {}
@@ -1441,7 +1460,7 @@ def build_assignment_upsert_report(
             safe_assignment_mutation_projection(
                 assignment_update_payload(local["assignment"]),
                 course_id=int(getattr(course, "id", 0)),
-                canvas_origin=None,
+                canvas_origin=canvas_origin,
             )
             if action == "update"
             else {}
@@ -1460,6 +1479,8 @@ def assignment_update_local_compare_record(local: dict[str, Any]) -> dict[str, A
         "lock_at": assignment.get("lock_at"),
         "published": assignment.get("published"),
         "assignment_group_id": assignment.get("assignment_group_id"),
+        "assignment_group_name": local.get("assignment_group_name"),
+        "canvas_url": local.get("canvas_url"),
         "submission_types": assignment.get("submission_types"),
         "grading_type": assignment.get("grading_type"),
         "group_category_id": assignment.get("group_category_id"),

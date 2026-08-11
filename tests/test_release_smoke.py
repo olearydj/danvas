@@ -65,7 +65,20 @@ def test_release_smoke_requires_expected_version_value(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 2
-    assert "requires a value" in result.stderr
+    assert "requires a non-empty value" in result.stderr
+
+
+def test_release_smoke_rejects_empty_expected_version(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [str(SCRIPT), "--expected-version", ""],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "requires a non-empty value" in result.stderr
 
 
 def test_release_smoke_cleans_temporary_root_after_build_failure(

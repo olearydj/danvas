@@ -1232,6 +1232,89 @@ def test_command_files_upload_partial_failure_writes_failed_manifest(
     assert manifest["status"] == "failed"
 
 
+def test_command_files_upload_records_success_when_stable_url_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_text("pdf", encoding="utf-8")
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(FakeUploadCourse())
+    )
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="rename",
+        dry_run=False,
+        api_url="",
+        output=None,
+        project_root=None,
+        no_report=False,
+        report_root=None,
+        report_dir=str(tmp_path / "report"),
+        report_slug=None,
+    )
+
+    command_files_upload(args)
+
+    output = capsys.readouterr().out
+    report = json.loads((tmp_path / "report" / "files-upload.json").read_text("utf-8"))
+    manifest = json.loads((tmp_path / "report" / "manifest.json").read_text("utf-8"))
+    row = report["files"][0]
+    assert row["status"] == "uploaded"
+    assert row["mutation_status"] == "succeeded"
+    assert row["evidence_status"] == "partial"
+    assert row["canvas_id"] == 1001
+    assert row["canvas_url"] == ""
+    assert "Do not retry the upload" in row["evidence_warning"]
+    assert "Upload succeeded, but evidence is incomplete" in output
+    assert manifest["status"] == "success"
+
+
+def test_command_files_upload_success_without_id_is_indeterminate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class NoIdentityFolder(FakeUploadFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            return True, {"display_name": Path(source).name, "folder_id": self.id}
+
+    class NoIdentityCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.slides = NoIdentityFolder(id=20, full_name="course files/slides")
+
+    source = tmp_path / "slides.pdf"
+    source.write_text("pdf", encoding="utf-8")
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(NoIdentityCourse())
+    )
+    args = SimpleNamespace(
+        course_id=101,
+        files=[str(source)],
+        folder="course files/slides",
+        folder_id=None,
+        on_duplicate="overwrite",
+        dry_run=False,
+        api_url="https://canvas.example/",
+        output=None,
+        project_root=None,
+        no_report=False,
+        report_root=None,
+        report_dir=str(tmp_path / "report"),
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        command_files_upload(args)
+
+    assert excinfo.value.code == 1
+    report = json.loads((tmp_path / "report" / "files-upload.json").read_text("utf-8"))
+    assert report["files"][0]["status"] == "indeterminate"
+    assert report["files"][0]["mutation_status"] == "indeterminate"
+    assert "verify Canvas before retrying" in report["files"][0]["error"]
+
+
 def test_command_files_upload_failure_payload_does_not_leak_urls(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

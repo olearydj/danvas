@@ -231,11 +231,12 @@ scripts/release-smoke.sh --expected-version 0.11.0
 The smoke script honors normal uv configuration and freshness rules, never
 contacts Canvas, and never changes the global danvas installation.
 
-Install an exact tagged release:
+Install the latest exact tagged release (the 0.11.0 development line is not yet
+tagged):
 
 ```bash
 uv tool install --force \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.11.0"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.10.2"
 ```
 
 Verify the installed environment outside the checkout:
@@ -256,7 +257,7 @@ and use an explicitly audited cutoff for this install command only:
 ```bash
 uv tool install --force \
   --exclude-newer YYYY-MM-DDTHH:MM:SSZ \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.11.0"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.10.2"
 ```
 
 Do not remove or loosen the global cutoff merely to make resolution succeed.
@@ -639,9 +640,12 @@ workflow resolves them.
 
 `files upload --dry-run` reads the resolved folder and records whether each file
 would be created, overwritten, or renamed. This is point-in-time evidence;
-Canvas's live result remains authoritative. Successful live rows provide
-`canvas_id`, `canvas_path`, and a reusable `canvas_url` such as
-`https://canvas.example/courses/101/files/44?wrap=1`.
+Canvas's live result remains authoritative. Live rows record separate
+`mutation_status` and `evidence_status` values. A successful row always retains
+its `canvas_id` and `canvas_path`; when the configured Canvas origin is valid it
+also provides a reusable `canvas_url` such as
+`https://canvas.example/courses/101/files/44?wrap=1`. If URL construction is
+incomplete, the row remains truthfully uploaded and warns not to retry it.
 
 ## CSV Formats
 
