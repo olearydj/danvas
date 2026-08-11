@@ -1,8 +1,8 @@
 # Sprint 11: Safe Assignment Release Evidence
 
-Status: implemented, locally verified, and accepted in a bounded live Canvas
-field case on 2026-08-11; release close-out remains pending. Target release:
-0.9.0.
+Status: implemented, locally verified, accepted in a bounded live Canvas field
+case on 2026-08-11, and released in consolidated `v0.10.0`. The intended 0.9.0
+slice remained an untagged development line.
 
 ## Objective
 
@@ -20,12 +20,12 @@ synchronization.
 
 ## Release Gate
 
-Sprint 10 is implemented on the unreleased 0.8.0 line and passed its explicitly
-authorized live Canvas acceptance case on 2026-08-11. Keep Sprint 11 as a
-separate 0.9.0 feature slice because it changes
+Sprint 10 was implemented on the untagged 0.8.0 line and passed its explicitly
+authorized live Canvas acceptance case on 2026-08-11. Sprint 11 remained a
+separate 0.9.0 development slice because it changes
 file-upload evidence, assignment-verification semantics, and multiple
-ordinary-output safety boundaries. Its earlier external gate is now complete;
-the development-line release states still need consolidated close-out.
+ordinary-output safety boundaries. Both slices shipped with Sprint 12 in the
+consolidated `v0.10.0` release.
 
 ## Current-State Audit
 
@@ -397,7 +397,7 @@ Passed on 2026-08-11 in sandbox course 1576638:
   assignments and zero files
 
 This completes the bounded live field gate. Sprint 10's field gate also passed
-on 2026-08-11, so only consolidated release close-out remains.
+on 2026-08-11, and both implementations shipped in consolidated `v0.10.0`.
 
 ## Exclusions
 

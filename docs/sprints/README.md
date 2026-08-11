@@ -74,7 +74,7 @@ testable. A final audit-cleanup pass also added Panopto timestamp resilience,
 corrected documentation drift, and replaced brittle/implicit tests. Ruff, ty,
 and all 312 tests pass for the combined implementation released as `v0.7.1`.
 
-## 0.8.0 Grade Evidence Follow-On
+## 0.8.0 Grade Evidence Development Line
 
 The implemented development-line follow-on is:
 
@@ -93,9 +93,10 @@ verification reported `verified_visible`, a stable-ID rerun returned
 `already_applied`, restoration was independently confirmed, and the disposable
 assignment was removed. The field case also established that this Canvas
 instance rejects grade updates on an unpublished assignment even when the
-enrollment is gradeable and the caller reports `manage_grades`.
+enrollment is gradeable and the caller reports `manage_grades`. This previously
+untagged development line shipped in the consolidated `v0.10.0` release.
 
-## 0.9.0 Assignment Release Follow-On
+## 0.9.0 Assignment Release Development Line
 
 The implemented next feature slice is:
 
@@ -111,8 +112,8 @@ invariant because that behavior is not present in the current source.
 It is locally verified with Ruff, ty, and all 381 tests. Its bounded live Canvas
 field case passed on 2026-08-11, including create/overwrite/rename planning,
 stable upload evidence, positive and negative exact-file verification, artifact
-scanning, and cleanup. The earlier 0.8.0 live gate is now complete; consolidated
-release close-out remains pending.
+scanning, and cleanup. This previously untagged development line shipped in the
+consolidated `v0.10.0` release.
 
 ## 0.10.0 Authorization-Resilient Snapshot Follow-On
 
@@ -130,4 +131,5 @@ implemented and locally verified with Ruff, ty, and all 395 tests. Its bounded
 read-only Canvas field case passed on 2026-08-11: the historical course produced
 an explicit partial/forbidden group-category state with no diff removal claims,
 while the sandbox produced an authoritative empty state. Release close-out
-remains pending.
+completed in `v0.10.0`: the exact commit passed CI, the tag is published, and an
+isolated tagged installation passed version, help, and local auth diagnostics.

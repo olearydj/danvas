@@ -1,7 +1,7 @@
 # Sprint 10: Truthful Grade Posting And Release Evidence
 
-Status: implemented, locally verified, and accepted in a bounded live Canvas
-field case on 2026-08-11.
+Status: implemented, locally verified, accepted in a bounded live Canvas field
+case on 2026-08-11, and released in consolidated `v0.10.0`.
 
 ## Objective
 

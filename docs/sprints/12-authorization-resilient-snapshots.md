@@ -1,8 +1,7 @@
 # Sprint 12: Authorization-Resilient Partial Snapshots
 
-Status: implemented, locally verified, and accepted in a bounded read-only
-Canvas field case on 2026-08-11; release close-out remains pending. Target
-release: 0.10.0.
+Status: implemented, locally verified, accepted in a bounded read-only Canvas
+field case on 2026-08-11, and released as `v0.10.0`.
 
 ## Objective
 

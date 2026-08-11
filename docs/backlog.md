@@ -102,6 +102,17 @@ inventory and documents semantic comparison of date-only and timezone-equivalent
 `publish_at` values. The patch is published on `origin/main`, passes CI, and is
 released as `v0.7.3`; the global CLI is installed from the tagged release.
 
+## 0.10.0 Consolidated Evidence And Snapshot Release
+
+The public 0.10.0 release consolidates the previously untagged 0.8.0 grade-
+evidence and 0.9.0 assignment-release development lines with Sprint 12's
+authorization-resilient snapshots. Sprints 10, 11, and 12 all passed their
+bounded field gates. Ruff, ty, and all 395 tests passed locally and in GitHub
+Actions for commit `92dc888`, which is published on `origin/main` and tagged
+`v0.10.0`. The global CLI is installed from that tag and independently reports
+`danvas 0.10.0`; `danvas --help` and the local `auth doctor` diagnostic also
+pass outside the repository environment.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as
@@ -113,8 +124,8 @@ closed.
 | Expanded course snapshot | `danvas refresh`, schema version 5 | Authority-aware optional collections, partial snapshots, safe section-level diff/status behavior, and atomic replacement are implemented in Sprint 12; add sections/enrollments only if roster workflows need them. |
 | Override-aware assignment status | schema-v3 snapshot, `danvas assignments overrides` | Snapshots remain redacted; membership exports are explicit private artifacts. |
 | Submission evidence exports | `danvas submissions export/grades/media` | Local replacement provenance remains optional future work. |
-| Transaction-safe grade patches | `danvas grades post/clear/comments/verify` | Truthful row outcomes, private receipts/recovery, and targeted release evidence passed bounded live acceptance; release close-out remains. |
-| Assignment release evidence | `danvas assignments verify/export`, `danvas files upload` | Stable upload links, duplicate-action plans, exact file-ID verification, and safe projections passed bounded live acceptance; release close-out remains. |
+| Transaction-safe grade patches | `danvas grades post/clear/comments/verify` | Truthful row outcomes, private receipts/recovery, and targeted release evidence passed bounded live acceptance and shipped in `v0.10.0`. |
+| Assignment release evidence | `danvas assignments verify/export`, `danvas files upload` | Stable upload links, duplicate-action plans, exact file-ID verification, and safe projections passed bounded live acceptance and shipped in `v0.10.0`. |
 | Canvas Pages bounded workflow | `danvas pages list/export/sync/render/css-check/create/update/verify`, schema-v4 status | Assets, rename/delete, broad upsert, and broader compatibility profiles remain deferred. |
 | Canvas-facing source lint | `danvas sources lint` | External HTTP checking and automatic rewriting remain deferred. |
 | Read-only Canvas/local status | `danvas status` | Continue refining next-action hints as new source workflows land. |
@@ -1401,12 +1412,8 @@ initiating its native instructor gradebook CSV export.
 Prioritize correctness and trustworthy release evidence before new command
 families:
 
-1. Complete consolidated release close-out for the currently versioned 0.10.0
-   tree. Sprint 10, Sprint 11, and Sprint 12 have all passed their field gates;
-   reconcile the 0.8.0/0.9.0 development-line notes, run final release checks,
-   then publish/tag/install the intended release state.
-2. Item 11: installed CLI health checks for the supported release workflow.
-3. Items 1 and 2: seeded discussion creation, then discussion verify/update.
+1. Item 11: installed CLI health checks for the supported release workflow.
+2. Items 1 and 2: seeded discussion creation, then discussion verify/update.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas
@@ -1429,8 +1436,8 @@ partial/indeterminate conclusions, and safe assignment output projections.
 Existing `unlock_at` and `group_category_id` comparisons were preserved rather
 than reimplemented. Ruff, ty, and all 381 tests pass locally. The bounded live
 Canvas field case passed on 2026-08-11 and its disposable assignment/files were
-removed. Sprint 10's field gate is now complete; consolidated release close-out
-remains pending.
+removed. Sprint 10's field gate is complete, and the combined implementation
+shipped in `v0.10.0`.
 
 Office package-part comparison, transcript filing, and other smaller workflow
 enhancements remain deferred unless a concrete course workflow changes this
@@ -1660,7 +1667,7 @@ ordering.
 
 8. Harden assignment release, file-link verification, and report sanitization.
 
-   Status: implemented on the 0.9.0 development line through
+   Status: implemented on the previously untagged 0.9.0 development line through
    `docs/sprints/11-safe-assignment-release.md`. Ruff, ty, and all 381 tests pass
    locally, and bounded live Canvas acceptance passed on 2026-08-11 with cleanup
    verified. A 2026-08-11 source audit confirmed that `unlock_at` and
@@ -1757,10 +1764,10 @@ ordering.
 
 9. Make course snapshots resilient to endpoint-specific authorization gaps.
 
-   Status: implemented on the 0.10.0 development line through
+   Status: released in `v0.10.0` through
    `docs/sprints/12-authorization-resilient-snapshots.md`. Ruff, ty, and all 395
-   tests pass locally, and bounded read-only field acceptance passed on
-   2026-08-11; release close-out remains pending. The field case reproduced
+   tests pass locally, CI passed for the release commit, and bounded read-only
+   field acceptance passed on 2026-08-11. The field case reproduced
    `Forbidden` for group-category enumeration in historical course 1685356
    while the same credentials returned an available, empty collection in
    sandbox course 1576638. This confirms the practical course/endpoint-specific
@@ -1866,6 +1873,16 @@ ordering.
      policy, despite the project environment working correctly. The operational
      workflow required a project-environment workaround until the tool install
      could be repaired.
+   - The 2026-08-11 `v0.10.0` close-out successfully built wheel/sdist artifacts,
+     installed the wheel in an isolated temporary tool directory, and installed
+     the global CLI from the exact Git tag. Version, help, and local auth-doctor
+     checks passed outside the repository environment. This is a usable manual
+     template but is not yet encoded in CI or durable installation guidance.
+   - The same close-out exposed two maintenance warnings worth handling in this
+     release-engineering slice: local uv 0.12.1 is newer than the declared
+     `uv-build>=0.11.0,<0.12.0` backend range, and GitHub Actions reports that
+     `actions/checkout@v4` and `astral-sh/setup-uv@v5` still target deprecated
+     Node.js 20 while the runner forces Node.js 24.
 
    Desired behavior:
 
