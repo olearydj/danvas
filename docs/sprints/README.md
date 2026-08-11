@@ -184,4 +184,6 @@ verification, and declared-field or body-only update scopes. The new
 the existing `danvas.discussions` module remains focused on export, local prompt
 sync, scoring, and grade upload. Target release: 0.11.0. Bounded live Canvas
 acceptance requires separate authorization and remains a release gate. Ruff,
-ty, all 431 tests, and isolated editable/wheel release smoke pass locally.
+ty, all 437 tests, and isolated editable/wheel release smoke pass locally. A
+post-review evidence hardening pass also rejects malformed nonblank grade rows
+and duplicate normalized Canvas IDs before Canvas access.

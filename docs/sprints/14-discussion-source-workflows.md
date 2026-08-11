@@ -171,7 +171,7 @@ equivalence, reverse posting, source-order and interrupted-create provenance,
 duplicate retry blocking, visible unavailable-seed verification, body-only
 update isolation, and declared-field-only full updates.
 
-Ruff, ty, and all 431 tests pass. The 0.11.0 isolated release smoke also passes
+Ruff, ty, and all 437 tests pass. The 0.11.0 isolated release smoke also passes
 for both editable and built-wheel installs, including version, help, and local
 auth-doctor checks. Live Canvas acceptance is intentionally separate because it
 creates and updates Canvas objects; it requires an explicitly authorized

@@ -908,11 +908,48 @@ def load_csv_rows(
         for column in required:
             if column not in headers:
                 raise SystemExit(f"Grades CSV must include {column}. Found: {', '.join(headers)}")
-        return [
-            row
-            for row in reader
-            if row.get("CanvasID") and (not require_grade_value or row.get("Grade"))
-        ]
+        rows: list[dict[str, str]] = []
+        seen_canvas_ids: dict[int, int] = {}
+        for raw_row in reader:
+            if all(not str(value or "").strip() for value in raw_row.values()):
+                continue
+            extra_values = raw_row.get(None)
+            if isinstance(extra_values, list) and any(str(value).strip() for value in extra_values):
+                raise SystemExit(f"Grades CSV row {reader.line_num} has unexpected extra columns.")
+            canvas_id_text = str(raw_row.get("CanvasID") or "").strip()
+            if not canvas_id_text:
+                raise SystemExit(f"Grades CSV row {reader.line_num} must include CanvasID.")
+            try:
+                canvas_id = int(canvas_id_text)
+            except ValueError as exc:
+                raise SystemExit(
+                    f"Grades CSV row {reader.line_num} has invalid CanvasID: {canvas_id_text!r}."
+                ) from exc
+            if canvas_id <= 0:
+                raise SystemExit(
+                    f"Grades CSV row {reader.line_num} has invalid CanvasID: {canvas_id_text!r}."
+                )
+            first_line = seen_canvas_ids.get(canvas_id)
+            if first_line is not None:
+                raise SystemExit(
+                    f"Grades CSV has duplicate CanvasID {canvas_id} on rows "
+                    f"{first_line} and {reader.line_num}."
+                )
+            if require_grade_value and not str(raw_row.get("Grade") or "").strip():
+                raise SystemExit(f"Grades CSV row {reader.line_num} must include Grade.")
+            seen_canvas_ids[canvas_id] = reader.line_num
+            row = {
+                str(key): str(value or "")
+                for key, value in raw_row.items()
+                if key is not None
+            }
+            row["CanvasID"] = str(canvas_id)
+            if require_grade_value:
+                row["Grade"] = row["Grade"].strip()
+            rows.append(row)
+        if not rows:
+            raise SystemExit("Grades CSV contains no data rows.")
+        return rows
 
 
 def current_user_id_for(canvas: Any) -> int:

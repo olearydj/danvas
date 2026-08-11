@@ -672,6 +672,11 @@ CanvasID,Name,Grade,Comment
 4024825,"Lawson, Jack",90,"Good work."
 ```
 
+Fully blank CSV rows are ignored. Any nonblank row missing `CanvasID` or
+`Grade`, any invalid/nonpositive Canvas ID, and duplicate IDs (including forms
+such as `1` and `001`) fail before Canvas access. Verify therefore cannot report
+success after silently omitting malformed input intent.
+
 ## Safety
 
 Use `--dry-run` before commands that write to Canvas:

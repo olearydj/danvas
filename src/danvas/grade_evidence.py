@@ -270,7 +270,12 @@ def write_recovery_artifacts(
     actions: list[dict[str, Any]],
     results: list[dict[str, Any]],
 ) -> list[Path]:
-    action_by_id = {int(action["canvas_id"]): action for action in actions}
+    action_by_id: dict[int, dict[str, Any]] = {}
+    for action in actions:
+        canvas_id = int(action["canvas_id"])
+        if canvas_id in action_by_id:
+            raise ValueError(f"Duplicate CanvasID in grade recovery actions: {canvas_id}")
+        action_by_id[canvas_id] = action
     affected = [row for row in results if row.get("outcome") in HALT_OUTCOMES]
     if not affected:
         return []

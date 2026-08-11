@@ -174,6 +174,12 @@ of verification.
 
 ## Implementation Boundaries
 
+Grade post/verify input treats every nonblank CSV row as intent. Rows missing a
+Canvas ID or required grade, invalid/nonpositive IDs, and duplicate normalized
+Canvas IDs fail before Canvas access; only fully blank rows are ignored. This
+keeps recovery action/result pairing one-to-one and prevents verification from
+silently certifying a subset of the supplied CSV.
+
 - Centralize post and clear row execution/classification in one internal helper
   so both commands share the same failure and readback semantics.
 - Keep planning, mutation, verification, receipt rendering, and recovery-data

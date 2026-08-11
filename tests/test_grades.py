@@ -142,6 +142,55 @@ def test_load_grade_rows_requires_columns(tmp_path: Path) -> None:
         load_grade_rows(path)
 
 
+def test_load_grade_rows_ignores_only_fully_blank_rows(tmp_path: Path) -> None:
+    path = tmp_path / "grades.csv"
+    path.write_text(
+        "CanvasID,Name,Grade,Comment\n,,,\n1,Doe,0,\n\n",
+        encoding="utf-8",
+    )
+
+    rows = load_grade_rows(path)
+
+    assert rows == [{"CanvasID": "1", "Name": "Doe", "Grade": "0", "Comment": ""}]
+
+
+@pytest.mark.parametrize(
+    ("row", "message"),
+    [
+        (",Doe,90,", "row 2 must include CanvasID"),
+        ("abc,Doe,90,", "row 2 has invalid CanvasID"),
+        ("1,Doe,,", "row 2 must include Grade"),
+    ],
+)
+def test_load_grade_rows_rejects_nonblank_malformed_rows(
+    tmp_path: Path, row: str, message: str
+) -> None:
+    path = tmp_path / "grades.csv"
+    path.write_text(f"CanvasID,Name,Grade,Comment\n{row}\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match=message):
+        load_grade_rows(path)
+
+
+def test_load_grade_rows_rejects_duplicate_canvas_ids(tmp_path: Path) -> None:
+    path = tmp_path / "grades.csv"
+    path.write_text(
+        "CanvasID,Name,Grade,Comment\n1,Doe,90,\n001,Doe again,80,\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="duplicate CanvasID 1 on rows 2 and 3"):
+        load_grade_rows(path)
+
+
+def test_load_grade_rows_rejects_empty_data(tmp_path: Path) -> None:
+    path = tmp_path / "grades.csv"
+    path.write_text("CanvasID,Name,Grade,Comment\n,,,\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="contains no data rows"):
+        load_grade_rows(path)
+
+
 def test_grades_post_skips_existing_and_posts_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

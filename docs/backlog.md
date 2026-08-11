@@ -148,9 +148,11 @@ explicit seeded-reply confirmation; reverse posting with source-order entry
 provenance; complete topic/assignment/seed readback; and a body-only update
 scope that never mutates entries. The implementation uses the new
 `danvas.discussion_sources` module and targets 0.11.0. Local verification is
-complete with Ruff, ty, all 431 tests, and isolated editable/wheel smoke;
+complete with Ruff, ty, all 437 tests, and isolated editable/wheel smoke;
 bounded live Canvas acceptance remains a separate, explicitly authorized
-release gate.
+release gate. The same review pass hardens grade evidence preflight: nonblank
+malformed rows and duplicate normalized Canvas IDs now fail before Canvas
+access, so verification and recovery cannot silently omit or mispair intent.
 
 ## Delivered Baseline
 
