@@ -113,6 +113,19 @@ Actions for commit `92dc888`, which is published on `origin/main` and tagged
 `danvas 0.10.0`; `danvas --help` and the local `auth doctor` diagnostic also
 pass outside the repository environment.
 
+## 0.11.0 Discussion Source Development Line
+
+Sprint 14 is implemented in
+`docs/sprints/14-discussion-source-workflows.md`. It adds authored discussion
+create, verify, and safe update commands; graded-assignment preservation;
+explicit seeded-reply confirmation; reverse posting with source-order entry
+provenance; complete topic/assignment/seed readback; and a body-only update
+scope that never mutates entries. The implementation uses the new
+`danvas.discussion_sources` module and targets 0.11.0. Local verification is
+complete with Ruff, ty, all 407 tests, and isolated editable/wheel smoke;
+bounded live Canvas acceptance remains a separate, explicitly authorized
+release gate.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as
@@ -128,6 +141,7 @@ closed.
 | Assignment release evidence | `danvas assignments verify/export`, `danvas files upload` | Stable upload links, duplicate-action plans, exact file-ID verification, and safe projections passed bounded live acceptance and shipped in `v0.10.0`. |
 | Canvas Pages bounded workflow | `danvas pages list/export/sync/render/css-check/create/update/verify`, schema-v4 status | Assets, rename/delete, broad upsert, and broader compatibility profiles remain deferred. |
 | Canvas-facing source lint | `danvas sources lint` | External HTTP checking and automatic rewriting remain deferred. |
+| Authored discussion workflow | `danvas discussions create/verify/update` | Sprint 14 is locally implemented; bounded disposable-topic Canvas acceptance remains before release. |
 | Read-only Canvas/local status | `danvas status` | Continue refining next-action hints as new source workflows land. |
 | Refresh diff | `danvas refresh --diff` | Plain diff remains terminal-first; report output is available through explicit report options. |
 | Local source discovery | `danvas.sources` plus `[sources.<kind>]` config | Continue reusing in future source-aware commands. |
@@ -149,7 +163,7 @@ Current command families include:
 - `quiz analysis/import-qti`
 - `submissions export/grades/media/feedback`
 - `grades post/clear/comments/verify`
-- `discussions export/sync-prompts/score`
+- `discussions create/verify/export/update/sync-prompts/score`
 - `announcements create/export/latest/sync/update/verify`
 - `pages list/export/sync/render/css-check/create/update/verify`
 - `sources lint`
@@ -169,13 +183,13 @@ sprint sequence as canonical.
 | Sprint 3 overall: safe updates and round-trip verification | Partial | Core update/readback work is split across Sprint Candidates C and D; report foundations are delivered; file compare/report follow-ons are Candidate B. |
 | Sprint 2: groups categories/import/verify | Not started | Sprint Candidate E. |
 | Sprint 2: group planning from roster | Not started | Sprint Candidate E. |
-| Sprint 2: seeded discussion creation | Not started | Sprint Candidate E plus Recent Field-Observed Workflow Gaps; now useful beyond the grouped-case workflow. |
+| Sprint 2: seeded discussion creation | Done locally | Sprint 14 generalizes creation beyond grouped cases with dry-run, graded metadata, readback, seed IDs, and provenance; live acceptance remains. |
 | Sprint 2: basic `files upload` | Done | Delivered Baseline; future work is Markdown asset rewriting and optional explicit folder creation. |
 | Sprint 2: due-date ergonomics | Done | Smaller Backlog Items; date-only assignment fields are delivered. |
 | Sprint 2 stretch: transcript filing helper | Not started | Smaller Backlog Items. |
 | Sprint 3: assignment update/upsert | Done | Candidate D; assignment create writes source-map provenance, update is live with readback verification, and upsert plans then requires `--confirm create` or `--confirm update` for live mutation. |
-| Sprint 3: announcement/discussion update pattern | Partial | Sprint Candidate D; announcement update is delivered, discussion update remains deferred until needed. |
-| Sprint 3: readback verification | Partial | Delivered for assignment create/update/upsert, announcement update, grade mutation verification, and bounded Page create/update; not yet broad across every write workflow. |
+| Sprint 3: announcement/discussion update pattern | Done | Announcement update and Sprint 14 discussion update/verify are delivered with stable identity and readback. |
+| Sprint 3: readback verification | Partial | Delivered for assignment create/update/upsert, announcement and discussion update, grade mutation verification, and bounded Page create/update; not yet broad across every write workflow. |
 | Sprint 3: round-trip metadata | Done | Sprint Candidate C; `.danvas/source-map.json` design and helpers are delivered for current update workflows. |
 | Sprint 3: Markdown asset rewriting | Not started | Sprint Candidate D, building on delivered `files upload`. |
 | Sprint 3: single-file download and compare | Done | Candidate B; `files download-one`, `files compare` metadata, and optional checksum against a supplied downloaded Canvas file are delivered. |
@@ -652,14 +666,15 @@ Recommended goals:
 
    ```bash
    danvas discussions create --course-id 1742719 discussion.md --seed-replies --dry-run
-   danvas discussions create-seeded --course-id 1742719 topic.md --replies replies.md --dry-run
    ```
 
    Desired behavior:
 
    - Accept one Markdown source with front matter for the root topic and
-     `--- reply ---` sections for instructor-seeded prompt replies, or accept a
-     root topic source plus a separate seeded-replies source.
+     `--- reply ---` sections for instructor-seeded prompt replies. Sprint 14
+     deliberately uses one reviewable source contract; a separate
+     `create-seeded --replies` surface is not needed unless field use reveals a
+     real split-source workflow.
    - Create the discussion topic and top-level instructor replies in one command.
    - Preserve graded discussion assignment metadata.
    - Post seed replies in the intended Canvas display order, accounting for the
@@ -1402,19 +1417,23 @@ Items 3 and 4 shipped in 0.6.0, and item 5 is now reflected in the external
 skill docs. A CASS transcript review covering the preceding 100 days on
 2026-08-09 confirmed the relevance of items 1, 2, and 6 through 9, and added
 items 10 and 11 below. Items 6, 8, 9, and 10 are implemented and have passed
-their bounded live or read-only field cases. Items 1 and 2 remain unimplemented
-product work; item 11 is designed as the next release-engineering sprint.
+their bounded live or read-only field cases. Items 1 and 2 are implemented
+locally together as Sprint 14 and await bounded live acceptance; item 11 is
+implemented as Sprint 13 and awaits its remaining release gates.
 Item 7 is explicitly deferred because Canvas does not expose a supported API for
 initiating its native instructor gradebook CSV export.
 
 ### Current Priority Order
 
-Prioritize correctness and trustworthy release evidence before new command
-families:
+Prioritize finishing the implemented release lines before opening another
+command family:
 
-1. Complete Sprint 13's main/tag CI and 0.10.1 release close-out. The installed
-   CLI health implementation and full local smoke already pass.
-2. Items 1 and 2: seeded discussion creation, then discussion verify/update.
+1. Run Sprint 14's explicitly authorized disposable-topic Canvas acceptance,
+   reconcile any field differences, and close the 0.11.0 release.
+2. Complete Sprint 13's still-relevant tag/global-install checks as part of that
+   0.11.0 release rather than publishing the superseded untagged 0.10.1 line.
+3. Reassess grouped case setup versus Markdown asset rewriting for the next
+   sprint; neither is pulled into Sprint 14.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas
@@ -1446,6 +1465,9 @@ ordering.
 
 1. Generalize seeded discussion creation beyond grouped cases.
 
+   Status: implemented locally in Sprint 14. Live disposable-topic acceptance
+   remains before release.
+
    Existing related item: Sprint Candidate E.3. The new evidence is that seeded
    prompts are useful for ordinary course discussions, not just grouped-case
    setup. The command should replace course-specific posting scripts, support
@@ -1453,6 +1475,9 @@ ordering.
    map provenance, and return topic, assignment, URL, and entry IDs.
 
 2. Add safe discussion source update and verification.
+
+   Status: implemented locally in Sprint 14. `--body-only` sends only the root
+   topic message, and neither update scope mutates discussion entries.
 
    ```bash
    danvas discussions verify content/discussions/unit-4.md --discussion-id 10819092
@@ -1865,9 +1890,10 @@ ordering.
 
 11. Add installed-CLI health coverage to the release workflow.
 
-   Status: implemented and locally verified as Sprint 13 on 2026-08-11,
-   targeting the 0.10.1 maintenance release. Main/tag CI and exact-tag global
-   installation remain release gates. See
+   Status: implemented and locally verified as Sprint 13 on 2026-08-11. Main CI
+   passed; tag CI and exact-tag global installation remain release gates and are
+   now carried into the 0.11.0 release because the untagged 0.10.1 development
+   line is superseded by Sprint 14. See
    `docs/sprints/13-installed-cli-release-health.md` for the bounded script,
    CI, version-matching, documentation, and acceptance contract.
 

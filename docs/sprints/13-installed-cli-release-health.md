@@ -1,7 +1,8 @@
 # Sprint 13: Installed CLI And Release Health
 
 Status: implemented and locally verified on 2026-08-11; main/tag CI and tagged
-global-install acceptance remain pending. Target release: 0.10.1.
+global-install acceptance remain pending. Originally targeted for 0.10.1; the
+untagged maintenance line is now consolidated into the 0.11.0 release.
 
 ## Objective
 
@@ -179,7 +180,7 @@ command:
 - focused tests cover executable/shell validity, running outside the checkout,
   missing arguments, pre-build version rejection, and cleanup after a forced
   build failure
-- package and lock metadata are synchronized at 0.10.1, with the build backend
+- package and lock metadata are synchronized at 0.11.0, with the build backend
   aligned to `uv_build>=0.12.0,<0.13.0`
 - CI uses `actions/checkout@v7.0.1`, `astral-sh/setup-uv@v9.0.0`, and pinned uv
   0.12.3; it now runs on version tags and adds a dependent isolated-install job
@@ -213,7 +214,7 @@ real global danvas receipt and executable were not modified.
 
 ## Operational Acceptance
 
-After merge but before `v0.10.1` is tagged:
+After merge but before `v0.11.0` is tagged:
 
 1. Run `scripts/release-smoke.sh` from a clean checkout and retain the concise
    terminal result.

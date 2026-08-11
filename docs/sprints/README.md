@@ -145,7 +145,24 @@ install, and startup checks into a reusable local script and CI contract. It
 also aligns the uv build-backend range, upgrades the workflow to Node.js 24
 action generations, validates package/tag version equality, and documents
 editable versus exact-tag installation and scoped uv recovery. It adds no
-Canvas command or Python package module. Target release: 0.10.1.
+Canvas command or Python package module. It was originally targeted for 0.10.1;
+the untagged line is now consolidated into the 0.11.0 release.
 Frozen sync, Ruff, ty, all 400 tests, and the complete local editable/wheel
 smoke passed on 2026-08-11. Main/tag CI and tagged global-install acceptance
 remain release gates.
+
+## 0.11.0 Authored Discussion Follow-On
+
+The implemented feature slice is:
+
+- Sprint 14: [Authored Discussion Creation And Safe Updates](14-discussion-source-workflows.md)
+
+Sprint 14 adds one Markdown contract for a root discussion topic and explicit
+`--- reply ---` instructor prompts, graded-discussion assignment metadata,
+offline create planning, stable topic/assignment/entry provenance, readback
+verification, and declared-field or body-only update scopes. The new
+`danvas.discussion_sources` module owns these mutation and evidence concerns;
+the existing `danvas.discussions` module remains focused on export, local prompt
+sync, scoring, and grade upload. Target release: 0.11.0. Bounded live Canvas
+acceptance requires separate authorization and remains a release gate. Ruff,
+ty, all 407 tests, and isolated editable/wheel release smoke pass locally.

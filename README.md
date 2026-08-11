@@ -225,7 +225,7 @@ temporary uv tool directories:
 
 ```bash
 scripts/release-smoke.sh
-scripts/release-smoke.sh --expected-version 0.10.1
+scripts/release-smoke.sh --expected-version 0.11.0
 ```
 
 The smoke script honors normal uv configuration and freshness rules, never
@@ -235,7 +235,7 @@ Install an exact tagged release:
 
 ```bash
 uv tool install --force \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.10.1"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.11.0"
 ```
 
 Verify the installed environment outside the checkout:
@@ -256,7 +256,7 @@ and use an explicitly audited cutoff for this install command only:
 ```bash
 uv tool install --force \
   --exclude-newer YYYY-MM-DDTHH:MM:SSZ \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.10.1"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.11.0"
 ```
 
 Do not remove or loosen the global cutoff merely to make resolution succeed.
@@ -418,15 +418,47 @@ max_snapshot_age_hours = 72
 
 ## Source Map
 
-Live assignment create/update, announcement update, and Page create/update
-workflows write generated provenance to `.danvas/source-map.json` after Canvas
-readback succeeds. Page sync writes provenance after verified local source
-creation and can recover a missing entry after an interrupted provenance write.
+Live assignment create/update, announcement update, discussion create/update,
+and Page create/update workflows write generated provenance to
+`.danvas/source-map.json` after Canvas readback succeeds. Page sync writes
+provenance after verified local source creation and can recover a missing entry
+after an interrupted provenance write.
 The source map links project-relative authored source paths to Canvas object IDs
 and stores safe comparable metadata plus body hashes. It does not store Canvas
 API tokens, verifier/download URLs, roster data, submissions, grades, private
 comments, or full student content. Dry-runs and read-only verification commands
 may read the source map but do not update it.
+
+## Authored Discussions
+
+Discussion Markdown uses front matter for topic and optional graded-assignment
+metadata. Put each instructor seed reply after a `--- reply ---` line:
+
+```markdown
+---
+title: Unit 4 Discussion
+published: false
+points_possible: 10
+assignment_group_name: Discussions
+due_at: 2026-09-01T04:59:00Z
+---
+
+Discuss the unit.
+
+--- reply ---
+
+## Prompt One
+
+Start with evidence.
+```
+
+Dry-run creation first. A source containing reply sections requires the explicit
+`--seed-replies` confirmation. Live creation reads the topic, linked assignment,
+and returned seed-entry IDs back before writing source-map provenance. Verify and
+update resolve only by `--discussion-id`, `canvas_id` front matter, or the source
+map; they never title-match. `discussions update --body-only` updates only the
+root topic message and never deletes, reorders, edits, or reposts instructor or
+student entries.
 
 ## Report Runs
 
@@ -532,6 +564,11 @@ danvas quiz import-qti chap07.zip --course-id 1742717 \
 danvas discussions export https://auburn.instructure.com/courses/1655780/discussion_topics/9772349 \
   --output discussion.json
 danvas discussions sync-prompts --course-id 1655780 --output-dir content/discussions --dry-run
+danvas discussions create --course-id 1655780 content/discussions/unit-4.md \
+  --seed-replies --dry-run
+danvas discussions verify --course-id 1655780 content/discussions/unit-4.md
+danvas discussions update --course-id 1655780 content/discussions/unit-4.md \
+  --body-only --dry-run
 danvas discussions score https://auburn.instructure.com/courses/1655780/discussion_topics/9772349 \
   2 2 3 2 --output discussion-scores.csv
 
