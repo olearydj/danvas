@@ -9,7 +9,9 @@ workflow that can create graded topics with instructor seed replies, verify the
 result, and update an identified root topic without disturbing any discussion
 entries.
 
-The implementation lives in `src/danvas/discussion_sources.py`. This is a new
+The implementation lives in `src/danvas/discussion_sources.py`. Shared authored
+datetime semantics live in `src/danvas/authored_content.py` and are also used by
+Pages. The discussion module is a new
 module because the create/update workflow has a different safety boundary from
 the existing discussion export and participation-scoring operations: it owns
 authored-source parsing, stable identity, mutation planning, readback evidence,
@@ -81,14 +83,14 @@ Live creation:
 
 1. prints a Canvas mutation banner;
 2. creates the topic and its assignment metadata in one request;
-3. posts seeded replies in reverse source order because the observed Canvas
+3. immediately records the returned topic identity as recovery provenance;
+4. posts seeded replies in reverse source order because the observed Canvas
    display is newest-first;
-4. retains the returned IDs in authored source order;
-5. reads the topic, assignment, and returned entries back;
-6. verifies declared topic/assignment fields, root body, seed count, and prompt
+5. retains the returned IDs in authored source order;
+6. reads the topic, assignment, and returned entries back;
+7. verifies declared topic/assignment fields, root body, seed count, and prompt
    headings;
-7. writes report evidence and source-map provenance only after complete
-   readback success.
+8. replaces recovery provenance with the complete verified source-map entry.
 
 The command prints and records topic ID, assignment ID, stable Canvas URL, and
 seed entry IDs.
@@ -103,16 +105,22 @@ seed entry IDs.
    `.danvas/source-map.json`.
 
 Front-matter/source-map conflicts fail unless the explicit CLI ID resolves the
-conflict. These commands never title-match and never create a missing topic.
-An announcement ID is rejected by update.
+conflict. Create refuses any source already bound by front matter or source-map
+identity and directs the operator to verify/update instead. These commands never
+title-match, and verify/update never create a missing topic. An announcement ID
+is rejected by update.
 
 Verification compares only declared values plus the always-declared title and
 root body. Supported evidence includes title, stable URL, discussion type,
 initial-post requirement, due/unlock/lock dates, points, publication state,
 assignment linkage and identity, assignment group, grading type, and group
-category. Seed count and headings are checked only when stable entry IDs are
-available from front matter, source-map provenance, or the current create run;
-student top-level posts are never guessed to be instructor prompts.
+category, every accepted rating/podcast/pinning/section field, and assignment
+override visibility. Date-only values and timezone-equivalent ISO timestamps
+compare semantically. Seed count and headings are checked only when stable entry
+IDs are available from front matter, source-map provenance, or the current
+create run; otherwise terminal and report output explicitly say seed verification
+was not available. Student top-level posts are never guessed to be instructor
+prompts.
 
 ## Update Boundary
 
@@ -136,29 +144,34 @@ available, with `--no-report`, `--report-root`, `--report-dir`, and
 IDs, and readback status.
 
 The source map stores stable topic, assignment, URL, update timestamp, seed
-entry IDs, comparable metadata, prompt count/headings, and a root-body hash. It
-does not duplicate the full root body or reply bodies.
+entry IDs, comparable metadata, prompt count/headings, and a root-body hash. An
+immediate post-create entry contains `topic_created` plus pending/incomplete
+verification state and is sufficient to block unsafe create retries. Complete
+readback replaces it with normal verified provenance. The source map does not
+duplicate the full root body or reply bodies.
 
 ## Failure Semantics
 
 - Invalid or empty sources fail before Canvas initialization.
 - A seed-bearing create without `--seed-replies` fails before Canvas
   initialization.
-- Dry-runs and no-change updates do not mutate Canvas or the source map.
-- Topic/assignment/reply readback mismatch exits nonzero and does not write
-  provenance.
+- Unbound dry-runs and no-change updates do not mutate Canvas or the source map.
+- Topic/assignment/reply readback mismatch exits nonzero while retaining
+  recovery identity and any returned seed entry IDs.
 - A failure after topic creation may leave a partial Canvas object; the report
-  is marked failed and the printed topic/entry IDs are the recovery handles.
+  is marked failed, recovery provenance blocks duplicate create, and the printed
+  topic/entry IDs remain explicit recovery handles.
 - Verification distinguishes not found from an indeterminate lookup failure.
 
 ## Acceptance
 
 Automated coverage includes parsing, seed confirmation, offline dry-run,
-graded creation payloads, reverse posting, source-order entry provenance,
-source-map identity, seed heading verification, body-only update isolation, and
-declared-field-only full updates.
+graded creation payloads, every accepted compare field, timezone/date-only
+equivalence, reverse posting, source-order and interrupted-create provenance,
+duplicate retry blocking, visible unavailable-seed verification, body-only
+update isolation, and declared-field-only full updates.
 
-Ruff, ty, and all 407 tests pass. The 0.11.0 isolated release smoke also passes
+Ruff, ty, and all 431 tests pass. The 0.11.0 isolated release smoke also passes
 for both editable and built-wheel installs, including version, help, and local
 auth-doctor checks. Live Canvas acceptance is intentionally separate because it
 creates and updates Canvas objects; it requires an explicitly authorized

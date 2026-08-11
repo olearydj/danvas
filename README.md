@@ -419,9 +419,12 @@ max_snapshot_age_hours = 72
 
 ## Source Map
 
-Live assignment create/update, announcement update, discussion create/update,
-and Page create/update workflows write generated provenance to
-`.danvas/source-map.json` after Canvas readback succeeds. Page sync writes
+Live assignment create/update, announcement update, discussion update, and Page
+create/update workflows write generated provenance to `.danvas/source-map.json`
+after Canvas readback succeeds. Discussion create records the returned topic ID
+immediately, before seeded replies or readback, so a partial failure cannot be
+retried as a duplicate; complete provenance replaces that recovery identity
+after successful readback. Page sync writes
 provenance after verified local source creation and can recover a missing entry
 after an interrupted provenance write.
 The source map links project-relative authored source paths to Canvas object IDs
@@ -454,12 +457,16 @@ Start with evidence.
 ```
 
 Dry-run creation first. A source containing reply sections requires the explicit
-`--seed-replies` confirmation. Live creation reads the topic, linked assignment,
-and returned seed-entry IDs back before writing source-map provenance. Verify and
-update resolve only by `--discussion-id`, `canvas_id` front matter, or the source
-map; they never title-match. `discussions update --body-only` updates only the
-root topic message and never deletes, reorders, edits, or reposts instructor or
-student entries.
+`--seed-replies` confirmation. Create refuses sources already bound by front
+matter or the source map. Live creation records the returned topic ID before
+seed posting, then reads the topic, linked assignment, and returned seed-entry
+IDs back before completing source-map provenance. Verify and update resolve only
+by `--discussion-id`, `canvas_id` front matter, or the source map; they never
+title-match. Date-only and timezone-equivalent discussion/assignment timestamps
+compare semantically. If stable seed entry IDs are unavailable, verification
+prints and records that seed headings/count were not checked. `discussions
+update --body-only` updates only the root topic message and never deletes,
+reorders, edits, or reposts instructor or student entries.
 
 ## Report Runs
 

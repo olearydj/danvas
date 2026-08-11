@@ -148,8 +148,9 @@ editable versus exact-tag installation and scoped uv recovery. It adds no
 Canvas command or Python package module. It was originally targeted for 0.10.1;
 the untagged line is included in the 0.10.2 maintenance release.
 Frozen sync, Ruff, ty, all 400 tests, and the complete local editable/wheel
-smoke passed on 2026-08-11. Main/tag CI and tagged global-install acceptance
-remain release gates.
+smoke passed on 2026-08-11. The published v0.10.2 tag passed both CI jobs on the
+exact release commit; replacing and checking the user's global installation
+remains an explicitly authorized acceptance step.
 
 ## 0.10.2 Assignment Release Maintenance
 
@@ -166,8 +167,8 @@ post-implementation review:
 
 The patch also passes the configured Canvas origin into assignment mutation
 projections and rejects an explicitly empty release-smoke expected version.
-Every supported fix has focused regression coverage. Release close-out requires
-the frozen suite, Ruff, ty, the isolated installed-CLI smoke, main CI, and tag CI.
+Every supported fix has focused regression coverage. The frozen suite, Ruff,
+ty, isolated installed-CLI smoke, and tag CI passed on the exact v0.10.2 commit.
 
 ## 0.11.0 Authored Discussion Follow-On
 
@@ -183,4 +184,4 @@ verification, and declared-field or body-only update scopes. The new
 the existing `danvas.discussions` module remains focused on export, local prompt
 sync, scoring, and grade upload. Target release: 0.11.0. Bounded live Canvas
 acceptance requires separate authorization and remains a release gate. Ruff,
-ty, all 407 tests, and isolated editable/wheel release smoke pass locally.
+ty, all 431 tests, and isolated editable/wheel release smoke pass locally.

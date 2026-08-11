@@ -10,7 +10,7 @@ import tempfile
 import unicodedata
 from contextlib import suppress
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
@@ -24,6 +24,7 @@ from markdown.extensions import Extension
 from markdown.treeprocessors import Treeprocessor
 
 from danvas.auth import canvas_from_args
+from danvas.authored_content import datetime_values_match
 from danvas.frontmatter import normalize_canvas_value, parse_frontmatter
 from danvas.reports import create_report_run, should_write_report_run
 from danvas.source_map import (
@@ -727,24 +728,7 @@ def page_metadata_values_match(field: str, canvas_value: Any, local_value: Any) 
 
 
 def publish_at_values_match(canvas_value: Any, local_value: Any) -> bool:
-    canvas_text = str(canvas_value or "").strip()
-    local_text = str(local_value or "").strip()
-    if not canvas_text or not local_text:
-        return canvas_text == local_text
-
-    canvas_date_only = re.fullmatch(r"\d{4}-\d{2}-\d{2}", canvas_text)
-    local_date_only = re.fullmatch(r"\d{4}-\d{2}-\d{2}", local_text)
-    try:
-        canvas_datetime = datetime.fromisoformat(canvas_text.replace("Z", "+00:00"))
-        local_datetime = datetime.fromisoformat(local_text.replace("Z", "+00:00"))
-    except ValueError:
-        return canvas_text == local_text
-
-    if canvas_date_only or local_date_only:
-        return canvas_datetime.date() == local_datetime.date()
-    if canvas_datetime.tzinfo is None or local_datetime.tzinfo is None:
-        return canvas_datetime == local_datetime
-    return canvas_datetime.astimezone(UTC) == local_datetime.astimezone(UTC)
+    return datetime_values_match(canvas_value, local_value)
 
 
 def resolve_page_identity(local: PageSource, args: Any) -> dict[str, Any]:

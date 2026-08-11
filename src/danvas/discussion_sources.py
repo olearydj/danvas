@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.auth import canvas_from_args
+from danvas.authored_content import datetime_values_match
 from danvas.canvas_links import canonical_canvas_object_url
 from danvas.config import resolve_assignment_group_id
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
@@ -68,24 +69,20 @@ DISCUSSION_PROVENANCE_FIELDS = {
     "posted_at",
     "seed_entry_ids",
 }
-DISCUSSION_COMPARE_FIELDS = {
+DISCUSSION_COMPARE_FIELDS = DISCUSSION_TOPIC_FIELDS | {
     "assignment_group_id",
     "assignment_id",
     "assignment_linked",
     "assignment_published",
     "canvas_url",
-    "discussion_type",
     "due_at",
     "grading_type",
-    "group_category_id",
-    "lock_at",
+    "only_visible_to_overrides",
     "points_possible",
-    "published",
-    "require_initial_post",
-    "title",
     "unlock_at",
     "body_text",
 }
+DISCUSSION_DATETIME_FIELDS = {"delayed_post_at", "due_at", "lock_at", "unlock_at"}
 
 
 def command_discussions_create(args: Any) -> None:
@@ -99,12 +96,27 @@ def command_discussions_create(args: Any) -> None:
             "Discussion source contains seeded replies. Pass --seed-replies to confirm posting them."
         )
     prepare_discussion_assignment(local, source)
+    resolved = resolve_discussion_identity(args, source, local, project_root)
     plan = build_discussion_create_report(
         args=args,
         source=source,
         local=local,
         dry_run=bool(args.dry_run),
     )
+    if resolved["id"] is not None:
+        plan["status"] = "already_bound"
+        plan["discussion_id"] = resolved["id"]
+        plan["id_resolution"] = safe_resolution(resolved)
+        plan["lookup"] = {
+            "status": "already_bound",
+            "reason": (
+                f"Source is already bound to Canvas discussion ID {resolved['id']}; "
+                "use discussions verify or update instead of create."
+            ),
+        }
+        write_discussion_report(args, "create", plan)
+        print_discussion_summary("create", plan)
+        raise SystemExit(1)
     if args.dry_run:
         write_discussion_report(args, "create", plan)
         print_discussion_summary("create", plan)
@@ -123,11 +135,25 @@ def command_discussions_create(args: Any) -> None:
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     topic_id: int | None = None
+    identity_path: Path | None = None
     posted_progress: list[dict[str, Any]] = []
     try:
         created = course.create_discussion_topic(**discussion_create_payload(local))
-        topic_id = int(first_value(created, canvas_object_to_dict(created), "id"))
+        created_payload = canvas_object_to_dict(created)
+        topic_id = int(first_value(created, created_payload, "id"))
         print(f"Created discussion topic ID {topic_id}")
+        identity_path = write_discussion_creation_identity(
+            source=source,
+            course_id=int(args.course_id),
+            created=created,
+            created_payload=created_payload,
+            local=local,
+            project_root=project_root,
+            seed_entry_ids=[],
+            verification_status="pending",
+            canvas_origin=canvas_origin,
+        )
+        print(f"Recorded created discussion identity in {identity_path}")
         posted = (
             post_seed_replies(
                 created,
@@ -155,11 +181,44 @@ def command_discussions_create(args: Any) -> None:
             canvas_record=canvas_record,
             posted=posted,
         )
+        write_discussion_creation_identity(
+            source=source,
+            course_id=int(args.course_id),
+            created=created,
+            created_payload=created_payload,
+            local=local,
+            project_root=project_root,
+            seed_entry_ids=posted_ids,
+            verification_status=report["status"],
+            canvas_origin=canvas_origin,
+        )
     except Exception as exc:  # noqa: BLE001 - retain bounded mutation failure evidence.
+        recovery_error = ""
+        if topic_id is not None and identity_path is not None:
+            try:
+                write_discussion_creation_identity(
+                    source=source,
+                    course_id=int(args.course_id),
+                    created=created,
+                    created_payload=created_payload,
+                    local=local,
+                    project_root=project_root,
+                    seed_entry_ids=[
+                        int(row["id"])
+                        for row in sorted(posted_progress, key=lambda row: row["source_index"])
+                    ],
+                    verification_status="incomplete",
+                    canvas_origin=canvas_origin,
+                )
+            except Exception as recovery_exc:  # noqa: BLE001 - retain original failure.
+                recovery_error = safe_error(str(recovery_exc))
         plan["status"] = "failed"
         plan["error"] = safe_error(str(exc))
         plan["canvas"] = {"id": topic_id} if topic_id is not None else {}
         plan["posted_entries"] = posted_progress
+        plan["source_map_status"] = "identity_recorded" if identity_path else "not_recorded"
+        if recovery_error:
+            plan["source_map_error"] = recovery_error
         write_discussion_report(args, "create", plan)
         print_discussion_summary("create", plan)
         raise
@@ -365,7 +424,6 @@ def load_discussion_source(source: Path, *, canvas_origin: str | None = None) ->
             "heading": markdown_heading(body),
             "body": body.strip(),
             "message": markdown_to_html(body),
-            "body_sha256": hashlib.sha256(body.strip().encode("utf-8")).hexdigest(),
         }
         for index, body in enumerate(seed_bodies, start=1)
     ]
@@ -535,15 +593,16 @@ def discussion_canvas_record(
         value = first_value(assignment, assignment_payload, name) if assignment else ""
         return value if value != "" else first_value(topic, payload, name)
 
+    topic_fields = {
+        name: first_value(topic, payload, name)
+        for name in DISCUSSION_TOPIC_FIELDS
+    }
     return {
+        **topic_fields,
         "id": first_value(topic, payload, "id"),
-        "title": first_value(topic, payload, "title"),
         "canvas_url": canonical_canvas_object_url(
             first_value(topic, payload, "html_url"), canvas_origin=canvas_origin
         ),
-        "discussion_type": first_value(topic, payload, "discussion_type"),
-        "require_initial_post": first_value(topic, payload, "require_initial_post"),
-        "published": first_value(topic, payload, "published"),
         "assignment_published": (
             first_value(assignment, assignment_payload, "published") if assignment else None
         ),
@@ -551,7 +610,7 @@ def discussion_canvas_record(
         "assignment_linked": bool(assignment_id),
         "assignment_group_id": field("assignment_group_id"),
         "grading_type": field("grading_type"),
-        "group_category_id": field("group_category_id"),
+        "only_visible_to_overrides": field("only_visible_to_overrides"),
         "points_possible": field("points_possible"),
         "due_at": field("due_at"),
         "unlock_at": field("unlock_at"),
@@ -609,17 +668,14 @@ def local_compare_record(local: dict[str, Any]) -> dict[str, Any]:
     topic = local["topic"]
     assignment = local["assignment"]
     return {
-        "title": topic.get("title"),
+        **{field: topic.get(field) for field in DISCUSSION_TOPIC_FIELDS},
         "canvas_url": local.get("canvas_url") or "",
-        "discussion_type": topic.get("discussion_type"),
-        "require_initial_post": topic.get("require_initial_post"),
-        "published": topic.get("published"),
         "assignment_published": (assignment.get("published") if assignment else None),
         "assignment_id": local.get("frontmatter_assignment_id"),
         "assignment_linked": bool(assignment or local.get("frontmatter_assignment_id")),
         "assignment_group_id": assignment.get("assignment_group_id"),
         "grading_type": assignment.get("grading_type"),
-        "group_category_id": topic.get("group_category_id"),
+        "only_visible_to_overrides": assignment.get("only_visible_to_overrides"),
         "points_possible": assignment.get("points_possible"),
         "due_at": assignment.get("due_at"),
         "unlock_at": assignment.get("unlock_at"),
@@ -709,6 +765,12 @@ def build_discussion_verify_report(
         status = "indeterminate" if lookup["status"] == "indeterminate" else "not_found"
     else:
         status = "matches" if all(row["matches"] for row in [*checks, *seeds]) else "mismatch"
+    if not local["seed_replies"]:
+        seed_verification = "not_applicable"
+    elif seeds:
+        seed_verification = "checked"
+    else:
+        seed_verification = "not_available"
     return {
         "evidence_schema": "discussion-source-v1",
         "course": safe_course(course),
@@ -722,7 +784,7 @@ def build_discussion_verify_report(
         "canvas": canvas_record or {},
         "checks": checks,
         "seed_checks": seeds,
-        "seed_verification": "checked" if seeds else "not_available",
+        "seed_verification": seed_verification,
     }
 
 
@@ -809,6 +871,44 @@ def safe_course(course: Any) -> dict[str, Any]:
 
 def safe_resolution(resolved: dict[str, Any]) -> dict[str, Any]:
     return {key: resolved.get(key) for key in ("source", "path", "id")}
+
+
+def write_discussion_creation_identity(
+    *,
+    source: Path,
+    course_id: int,
+    created: Any,
+    created_payload: dict[str, Any],
+    local: dict[str, Any],
+    project_root: Path | None,
+    seed_entry_ids: list[int],
+    verification_status: str,
+    canvas_origin: str | None,
+) -> Path:
+    """Persist a retry guard immediately after Canvas returns a topic identity."""
+    return write_source_map_entry(
+        kind="discussion",
+        source=source,
+        course_id=course_id,
+        canvas={
+            "id": first_value(created, created_payload, "id"),
+            "assignment_id": first_value(created, created_payload, "assignment_id"),
+            "url": canonical_canvas_object_url(
+                first_value(created, created_payload, "html_url"),
+                canvas_origin=canvas_origin,
+            ),
+            "updated_at": first_value(created, created_payload, "updated_at") or "",
+            "entry_ids": seed_entry_ids,
+        },
+        command="discussions create",
+        fields={
+            "mutation_status": "topic_created",
+            "verification_status": verification_status,
+            "seed_prompt_count": len(local["seed_replies"]),
+        },
+        body_sha256=local["body_sha256"],
+        project_root=project_root,
+    )
 
 
 def write_discussion_source_map_entry(
@@ -944,6 +1044,15 @@ def render_discussion_report(action: str, report: dict[str, Any]) -> str:
             lines.append(
                 f"| {check['field']} | `{check['local']}` | `{check['canvas']}` | `{status}` |"
             )
+    elif report.get("seed_verification") == "not_available":
+        lines.extend(
+            [
+                "",
+                "## Seeded prompts",
+                "",
+                "Seed verification: `not_available` (no stable Canvas entry IDs were available).",
+            ]
+        )
     if report.get("lookup", {}).get("reason"):
         lines.extend(["", f"Reason: {report['lookup']['reason']}"])
     return "\n".join(lines) + "\n"
@@ -955,6 +1064,8 @@ def print_discussion_summary(action: str, report: dict[str, Any]) -> None:
         print(f"  {check['field']}: {'OK' if check['matches'] else 'MISMATCH'}")
     for check in report.get("seed_checks", []):
         print(f"  {check['field']}: {'OK' if check['matches'] else 'MISMATCH'}")
+    if report.get("seed_verification") == "not_available":
+        print("  seeded prompts: NOT CHECKED (no stable Canvas entry IDs available)")
     if report.get("lookup", {}).get("reason"):
         print(f"  {report['lookup']['reason']}")
 
@@ -962,7 +1073,11 @@ def print_discussion_summary(action: str, report: dict[str, Any]) -> None:
 def verify_check(field: str, local_value: Any, canvas_value: Any) -> dict[str, Any]:
     local = comparable_value(local_value)
     canvas = comparable_value(canvas_value)
-    matches = local == canvas
+    matches = (
+        datetime_values_match(canvas_value, local_value)
+        if field in DISCUSSION_DATETIME_FIELDS
+        else local == canvas
+    )
     return {
         "field": field,
         "status": "matches" if matches else "mismatch",

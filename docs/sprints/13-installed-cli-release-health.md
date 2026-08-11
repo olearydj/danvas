@@ -1,8 +1,10 @@
 # Sprint 13: Installed CLI And Release Health
 
-Status: implemented and locally verified on 2026-08-11; main/tag CI and tagged
-global-install acceptance remain pending. Originally targeted for 0.10.1; the
-untagged maintenance line is now consolidated into the 0.11.0 release.
+Status: shipped in v0.10.2 on 2026-08-11. Main CI, exact-tag CI, and both
+isolated install lanes passed; replacing and checking the user's global
+installation remains an explicitly authorized acceptance step. The originally
+targeted 0.10.1 version was consumed by the public development commit but was
+never tagged.
 
 ## Objective
 
@@ -214,7 +216,7 @@ real global danvas receipt and executable were not modified.
 
 ## Operational Acceptance
 
-After merge but before `v0.11.0` is tagged:
+For an exact tagged release:
 
 1. Run `scripts/release-smoke.sh` from a clean checkout and retain the concise
    terminal result.
@@ -228,7 +230,8 @@ After merge but before `v0.11.0` is tagged:
 
 No live Canvas call or course mutation is required for this sprint.
 
-Step 1 passed locally on 2026-08-11. Steps 2 through 5 remain release gates.
+Steps 1 through 4 passed for `v0.10.2` on 2026-08-11. Step 5 remains pending
+explicit authorization.
 
 ## Exclusions
 

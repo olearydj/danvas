@@ -134,9 +134,10 @@ release:
 
 Focused regression tests cover alias no-change behavior, successful update
 readback and provenance, same-origin report projection, partial upload evidence,
-and indeterminate upload identity. Release close-out requires the full frozen
-suite, Ruff, ty, the isolated editable/wheel smoke, main CI, tag CI, and an exact-
-tag installed-CLI check. No new Canvas command or live field mutation is needed.
+and indeterminate upload identity. The full frozen suite, Ruff, ty, isolated
+editable/wheel smoke, and exact-tag CI passed for published tag `v0.10.2`; only
+the explicitly authorized replacement/check of the user's global installation
+remains. No new Canvas command or live field mutation is needed.
 
 ## 0.11.0 Discussion Source Development Line
 
@@ -147,7 +148,7 @@ explicit seeded-reply confirmation; reverse posting with source-order entry
 provenance; complete topic/assignment/seed readback; and a body-only update
 scope that never mutates entries. The implementation uses the new
 `danvas.discussion_sources` module and targets 0.11.0. Local verification is
-complete with Ruff, ty, all 407 tests, and isolated editable/wheel smoke;
+complete with Ruff, ty, all 431 tests, and isolated editable/wheel smoke;
 bounded live Canvas acceptance remains a separate, explicitly authorized
 release gate.
 
@@ -705,8 +706,9 @@ Recommended goals:
    - Post seed replies in the intended Canvas display order, accounting for the
      observed reverse-order display behavior when needed.
    - Return topic ID, assignment ID, URL, and seeded entry IDs.
-   - Write `.danvas/source-map.json` provenance for the topic and seeded entries
-     after successful readback.
+   - Record topic identity immediately after creation so a partial failure
+     cannot duplicate the topic on retry; replace it with complete topic/seed
+     provenance after successful readback.
    - Verify the created topic and prompt replies after posting.
 
 Definition of done:
@@ -1441,10 +1443,10 @@ These items came from field use after the 2026-06-24 backlog consolidation.
 Items 3 and 4 shipped in 0.6.0, and item 5 is now reflected in the external
 skill docs. A CASS transcript review covering the preceding 100 days on
 2026-08-09 confirmed the relevance of items 1, 2, and 6 through 9, and added
-items 10 and 11 below. Items 6, 8, 9, and 10 are implemented and have passed
+items 10 and 11 below. Items 6, 8, 9, 10, and 11 are implemented and have passed
 their bounded live or read-only field cases. Items 1 and 2 are implemented
-locally together as Sprint 14 and await bounded live acceptance; item 11 is
-implemented as Sprint 13 and awaits its remaining release gates.
+locally together as Sprint 14 and await bounded live acceptance; item 11 shipped
+in v0.10.2, with only the explicitly authorized global-install check pending.
 Item 7 is explicitly deferred because Canvas does not expose a supported API for
 initiating its native instructor gradebook CSV export.
 
@@ -1455,8 +1457,8 @@ command family:
 
 1. Run Sprint 14's explicitly authorized disposable-topic Canvas acceptance,
    reconcile any field differences, and close the 0.11.0 release.
-2. Complete Sprint 13's still-relevant tag/global-install checks as part of that
-   0.11.0 release rather than publishing the superseded untagged 0.10.1 line.
+2. Run Sprint 13's exact-tag global-install check when explicitly authorized;
+   v0.10.2 tag CI and both isolated install lanes have passed.
 3. Reassess grouped case setup versus Markdown asset rewriting for the next
    sprint; neither is pulled into Sprint 14.
 
@@ -1515,7 +1517,7 @@ ordering.
      the associated graded assignment: title, body, due date, points, published
      state, assignment linkage, and Canvas URL.
    - Compare seeded prompt count and headings when entry IDs or prompt source
-     metadata are available.
+     metadata are available, and surface `not_available` when they are not.
    - Support scoped updates such as `--body-only` that do not delete, reorder,
      or repost existing prompt replies or student responses.
    - Resolve IDs through explicit CLI options, front matter, or
@@ -1915,10 +1917,9 @@ ordering.
 
 11. Add installed-CLI health coverage to the release workflow.
 
-   Status: implemented and locally verified as Sprint 13 on 2026-08-11. Main CI
-   passed; tag CI and exact-tag global installation remain release gates and are
-   now carried into the 0.11.0 release because the untagged 0.10.1 development
-   line is superseded by Sprint 14. See
+   Status: shipped in v0.10.2 on 2026-08-11. Main and exact-tag CI passed,
+   including both isolated install lanes; replacing/checking the user's global
+   installation remains an explicitly authorized acceptance step. See
    `docs/sprints/13-installed-cli-release-health.md` for the bounded script,
    CI, version-matching, documentation, and acceptance contract.
 
