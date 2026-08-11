@@ -172,7 +172,7 @@ sprint sequence as canonical.
 | Sprint 3 stretch: human-readable operation reports | Partial | Delivered for several report-run commands; Candidate B keeps report consistency work alive for new commands. |
 | Sprint 3 beyond: rubric support | Deferred | Smaller Backlog Items; wait until update/upsert behavior is stable. |
 | Sprint 3 beyond: activity logging | Not recommended as a sprint | Not Recommended Or No Longer Relevant. |
-| Sprint 3 beyond: live Canvas gradebook export/download | Open field-backed backlog item | Recent Field-Observed Workflow Gaps, item 7. |
+| Sprint 3 beyond: live Canvas gradebook export/download | Deferred pending a supported Canvas API | Recent Field-Observed Workflow Gaps, item 7; manual native export remains simple and reliable. |
 | Sprint 3 beyond: `gradebook.py` cleanup | Not a product backlog feature | Treat as opportunistic maintenance, not sprint scope. |
 
 ### Done From Sprint 2/3
@@ -1391,7 +1391,9 @@ Items 3 and 4 shipped in 0.6.0, and item 5 is now reflected in the external
 skill docs. A CASS transcript review covering the preceding 100 days on
 2026-08-09 confirmed the relevance of items 1, 2, and 6 through 9, and added
 items 10 and 11 below. Items 6, 8, and 10 are implemented with bounded live
-acceptance pending; items 1, 2, 7, 9, and 11 remain unimplemented product work.
+acceptance pending; items 1, 2, 9, and 11 remain unimplemented product work.
+Item 7 is explicitly deferred because Canvas does not expose a supported API for
+initiating its native instructor gradebook CSV export.
 
 ### Current Priority Order
 
@@ -1402,10 +1404,9 @@ families:
    `docs/sprints/10-truthful-grade-posting.md`, which combines items 6 and 10.
 2. Complete the bounded live Canvas acceptance and release close-out for
    `docs/sprints/11-safe-assignment-release.md`, which implements item 8.
-3. Item 7: explicit live Canvas gradebook export.
-4. Item 9: authorization-resilient partial snapshots.
-5. Item 11: installed CLI health checks for the supported release workflow.
-6. Items 1 and 2: seeded discussion creation, then discussion verify/update.
+3. Item 9: authorization-resilient partial snapshots.
+4. Item 11: installed CLI health checks for the supported release workflow.
+5. Items 1 and 2: seeded discussion creation, then discussion verify/update.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas
@@ -1572,6 +1573,35 @@ ordering.
 
 7. Add an explicit live Canvas gradebook export/download command.
 
+   Status: deferred on 2026-08-11 after source and API investigation. Continue
+   using Canvas's native Gradebook export UI, then pass the downloaded CSV
+   unchanged to `danvas gradebook check` or `danvas gradebook audit`. Do not add
+   a stub `gradebook export` command: a discoverable command that only explains
+   why it cannot run would misrepresent the supported CLI surface.
+
+   Canvas's native export is initiated by the UI-only
+   `POST /courses/:course_id/gradebook_csv` route. The route returns progress and
+   attachment IDs, after which the documented Progress and Files APIs can be
+   used, but Canvas's bearer-token authentication is normally limited to
+   `/api/` requests. The existing danvas API token therefore cannot reliably
+   initiate the native export. Reconstructing a lookalike CSV from Assignments,
+   Submissions, and Enrollments APIs was rejected because it would not preserve
+   Canvas's authoritative weighted-group, drop-rule, unposted-grade,
+   differentiated-assignment, and enrollment-filter semantics. Browser-session
+   cookie/CSRF automation is disproportionate to the easy manual export and
+   would create a fragile credential boundary.
+
+   Revisit only if Canvas publishes a supported native gradebook-export API or
+   repeated field use demonstrates that the manual download is a material
+   operational burden.
+
+   Investigation references:
+
+   - [Canvas Gradebook CSV controller](https://github.com/instructure/canvas-lms/blob/master/app/controllers/gradebook_csvs_controller.rb)
+   - [Canvas bearer-token authentication](https://github.com/instructure/canvas-lms/blob/master/lib/authentication_methods.rb)
+   - [Canvas Progress API](https://developerdocs.instructure.com/services/canvas/resources/progress)
+   - [Canvas Files API](https://developerdocs.instructure.com/services/canvas/resources/files)
+
    Field evidence from the INSY 6600 Test 1 posting workflow on 2026-07-19:
 
    - `danvas grades post` and assignment-submission readback could verify a
@@ -1583,14 +1613,14 @@ ordering.
      posting consolidated scores to a new weighted assignment, the remaining
      verification step required leaving danvas to download the gradebook.
 
-   Proposed command shape:
+   Original proposed command shape:
 
    ```bash
    danvas gradebook export --output grading/current-gradebook.csv
    danvas gradebook check grading/current-gradebook.csv
    ```
 
-   Desired behavior:
+   Original desired behavior:
 
    - Download the same instructor gradebook CSV represented by Canvas's Gradebook
      export, using an authenticated supported Canvas endpoint rather than browser
@@ -1609,7 +1639,7 @@ ordering.
    - If Canvas requires asynchronous export generation, poll with a bounded
      timeout and leave clear failure evidence without a partial file.
 
-   Definition of done:
+   Original definition of done:
 
    - A live field test produces a CSV accepted unchanged by both existing
      gradebook commands.
