@@ -1,7 +1,7 @@
 # Sprint 10: Truthful Grade Posting And Release Evidence
 
-Status: implemented and locally verified on 2026-08-11; bounded live Canvas
-field acceptance remains pending explicit authorization.
+Status: implemented, locally verified, and accepted in a bounded live Canvas
+field case on 2026-08-11.
 
 ## Objective
 
@@ -239,17 +239,43 @@ target:
 Do not induce a live partial failure merely to test recovery; automated
 live-equivalent requester and state-machine tests own that case.
 
-### Field Acceptance Attempt
+### Field Acceptance Result
 
-On 2026-08-11, sandbox course 1576638 was confirmed reachable and suitable for
-disposable assignment/file work, but its only student enrollment was a real
-participant rather than Canvas's Test Student. The in-app browser needed to
-enter Student View and provision a Test Student was unavailable in the session.
-No grade, submission comment, or enrollment state was mutated.
+On 2026-08-11, the user explicitly authorized the sandbox's student enrollment
+for this bounded case. The test used a disposable assignment, exact assignment
+title/ID guards, one targeted enrollment, private report and rollback
+directories, and instructor-owned acceptance comments. No participant identity
+is retained in this durable record.
 
-The field gate therefore remains pending. Resume only after a Test Student or
-another explicitly authorized disposable enrollment is available; do not infer
-permission to use a real participant from the course's sandbox label.
+Canvas rejected the first grade/comment seed while the assignment was
+unpublished. Danvas read the submission back, correctly classified the row as
+`unchanged_failure`, and reported `not_determined`; no target state had changed.
+After the exact disposable assignment was temporarily published with update
+notifications disabled, the same grade-only seed succeeded. This establishes
+an operational constraint for this Canvas instance: an enrollment may be
+gradeable and the caller may hold `manage_grades`, yet an unpublished assignment
+can still reject the submission update as unauthorized.
+
+The accepted path then passed all required checks:
+
+- a private one-row dry-run planned the guarded grade plus `replace_exact`
+  change
+- the live command exercised the production requester fallback and returned
+  `verified_applied`
+- explicit `grades verify` confirmed the exact grade/comment state and reported
+  `verified_visible`
+- a stable-comment-ID rerun without stale one-shot expected-state guards
+  returned `already_applied` and made no mutation
+- `grades clear` restored the original empty grade and removed the exact owned
+  acceptance comment; an independent readback confirmed both fields were empty
+- the disposable assignment was deleted by guarded exact ID/title, and a final
+  assignment inventory confirmed cleanup
+
+The deliberately guarded original patch correctly refused a literal rerun once
+its `ExpectedCurrentGrade` and `ExpectedComment` preconditions became stale.
+For idempotent retry after a verified success, retain the exact owned comment ID
+but refresh or omit one-shot preconditions that describe the pre-mutation state.
+The bounded live field gate is complete.
 
 ## Definition Of Done
 

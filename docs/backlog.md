@@ -113,7 +113,7 @@ closed.
 | Expanded course snapshot | `danvas refresh`, schema version 5 | Authority-aware optional collections, partial snapshots, safe section-level diff/status behavior, and atomic replacement are implemented in Sprint 12; add sections/enrollments only if roster workflows need them. |
 | Override-aware assignment status | schema-v3 snapshot, `danvas assignments overrides` | Snapshots remain redacted; membership exports are explicit private artifacts. |
 | Submission evidence exports | `danvas submissions export/grades/media` | Local replacement provenance remains optional future work. |
-| Transaction-safe grade patches | `danvas grades post/clear/comments/verify` | Truthful row outcomes, private receipts/recovery, and targeted release evidence are locally verified; bounded live acceptance awaits an authorized disposable enrollment. |
+| Transaction-safe grade patches | `danvas grades post/clear/comments/verify` | Truthful row outcomes, private receipts/recovery, and targeted release evidence passed bounded live acceptance; release close-out remains. |
 | Assignment release evidence | `danvas assignments verify/export`, `danvas files upload` | Stable upload links, duplicate-action plans, exact file-ID verification, and safe projections passed bounded live acceptance; release close-out remains. |
 | Canvas Pages bounded workflow | `danvas pages list/export/sync/render/css-check/create/update/verify`, schema-v4 status | Assets, rename/delete, broad upsert, and broader compatibility profiles remain deferred. |
 | Canvas-facing source lint | `danvas sources lint` | External HTTP checking and automatic rewriting remain deferred. |
@@ -1390,10 +1390,9 @@ These items came from field use after the 2026-06-24 backlog consolidation.
 Items 3 and 4 shipped in 0.6.0, and item 5 is now reflected in the external
 skill docs. A CASS transcript review covering the preceding 100 days on
 2026-08-09 confirmed the relevance of items 1, 2, and 6 through 9, and added
-items 10 and 11 below. Items 6, 8, and 10 are implemented; item 8 has passed
-bounded live acceptance, while items 6 and 10 still need an authorized
-disposable enrollment. Item 9 is implemented and locally verified as Sprint 12;
-items 1, 2, and 11 remain unimplemented product work.
+items 10 and 11 below. Items 6, 8, 9, and 10 are implemented and have passed
+their bounded live or read-only field cases. Items 1, 2, and 11 remain
+unimplemented product work.
 Item 7 is explicitly deferred because Canvas does not expose a supported API for
 initiating its native instructor gradebook CSV export.
 
@@ -1402,16 +1401,12 @@ initiating its native instructor gradebook CSV export.
 Prioritize correctness and trustworthy release evidence before new command
 families:
 
-1. Complete the bounded live Canvas acceptance for
-   `docs/sprints/10-truthful-grade-posting.md`, which combines items 6 and 10,
-   after a Test Student or another explicitly authorized disposable enrollment
-   is available.
-2. Reconcile the Sprint 10 release gate and close out the 0.9.0 release for
-   `docs/sprints/11-safe-assignment-release.md`; its live field case has passed.
-3. Complete Sprint 12's 0.10.0 release close-out for authorization-resilient
-   partial snapshots; its bounded read-only field case has passed.
-4. Item 11: installed CLI health checks for the supported release workflow.
-5. Items 1 and 2: seeded discussion creation, then discussion verify/update.
+1. Complete consolidated release close-out for the currently versioned 0.10.0
+   tree. Sprint 10, Sprint 11, and Sprint 12 have all passed their field gates;
+   reconcile the 0.8.0/0.9.0 development-line notes, run final release checks,
+   then publish/tag/install the intended release state.
+2. Item 11: installed CLI health checks for the supported release workflow.
+3. Items 1 and 2: seeded discussion creation, then discussion verify/update.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas
@@ -1419,11 +1414,13 @@ accepted and whether the targeted students can see the resulting grades. The
 sprint applies the same partial-write contract to `grades clear`, adds private
 durable receipts that the previous terminal-only commands lacked, and does not
 broaden into grade-posting-policy mutation or gradebook export. It is now
-implemented and locally verified with Ruff, ty, and all 360 tests. A bounded
-2026-08-11 attempt made no mutations because the sandbox's only student
-enrollment was a real participant and the session could not provision Canvas's
-Test Student. Acceptance remains pending an explicitly authorized disposable
-enrollment.
+implemented and locally verified with Ruff, ty, and all 360 tests. Its bounded
+live Canvas field case passed on 2026-08-11 after explicit authorization of the
+sandbox enrollment. The production replacement fallback, exact verification,
+release conclusion, idempotent stable-ID rerun, restoration, and cleanup all
+passed. An initial unpublished-assignment update was authoritatively unchanged
+and correctly classified before the guarded assignment was temporarily
+published with notifications disabled.
 
 Sprint 11 is implemented in `docs/sprints/11-safe-assignment-release.md` on the
 0.9.0 development line. It adds stable upload URLs, duplicate-action preflight,
@@ -1432,7 +1429,8 @@ partial/indeterminate conclusions, and safe assignment output projections.
 Existing `unlock_at` and `group_category_id` comparisons were preserved rather
 than reimplemented. Ruff, ty, and all 381 tests pass locally. The bounded live
 Canvas field case passed on 2026-08-11 and its disposable assignment/files were
-removed; release-gate reconciliation and release close-out remain pending.
+removed. Sprint 10's field gate is now complete; consolidated release close-out
+remains pending.
 
 Office package-part comparison, transcript filing, and other smaller workflow
 enhancements remain deferred unless a concrete course workflow changes this
@@ -1536,9 +1534,10 @@ ordering.
    Implemented on the 0.8.0 development line through
    `docs/sprints/10-truthful-grade-posting.md` together with item 10 and the
    equivalent multi-step failure boundary in `grades clear`. Local automated
-   verification passes. A 2026-08-11 acceptance attempt stopped before mutation
-   because no Test Student or other explicitly authorized disposable enrollment
-   was available; bounded live Canvas acceptance remains pending.
+   verification passes, and bounded live Canvas acceptance passed on
+   2026-08-11 using an explicitly authorized sandbox enrollment. Exact
+   replacement, authoritative verification, stable-ID idempotence, restoration,
+   and disposable-assignment cleanup all succeeded.
 
    Field evidence from a live one-row grade correction on 2026-07-19:
 
@@ -1823,9 +1822,10 @@ ordering.
    uses targeted submission `posted_at` and `assignment_visible` evidence, while
    treating assignment publication, availability dates, and manual-posting
    policy as context rather than proof of student visibility. Local automated
-   verification passes. A 2026-08-11 acceptance attempt stopped before mutation
-   because no Test Student or other explicitly authorized disposable enrollment
-   was available; bounded live Canvas acceptance remains pending.
+   verification passes, and bounded live Canvas acceptance passed on
+   2026-08-11 using an explicitly authorized sandbox enrollment. The accepted
+   receipt reported `verified_visible`; exact state restoration and disposable
+   assignment cleanup were independently confirmed.
 
    Field evidence from a 16-student INSY 7750 posting workflow on 2026-08-07:
 

@@ -20,13 +20,12 @@ synchronization.
 
 ## Release Gate
 
-Sprint 10 is implemented on the unreleased 0.8.0 line but still needs its
-explicitly authorized live Canvas acceptance case and normal release close-out.
-Sprint 11 implementation proceeded on explicit instruction before that external
-gate completed. Keep it as a separate 0.9.0 feature slice because it changes
+Sprint 10 is implemented on the unreleased 0.8.0 line and passed its explicitly
+authorized live Canvas acceptance case on 2026-08-11. Keep Sprint 11 as a
+separate 0.9.0 feature slice because it changes
 file-upload evidence, assignment-verification semantics, and multiple
-ordinary-output safety boundaries. Do not release 0.9.0 until the pending 0.8.0
-acceptance/release state is reconciled explicitly.
+ordinary-output safety boundaries. Its earlier external gate is now complete;
+the development-line release states still need consolidated close-out.
 
 ## Current-State Audit
 
@@ -397,9 +396,8 @@ Passed on 2026-08-11 in sandbox course 1576638:
   final inventory confirmed the sandbox had returned to its original three
   assignments and zero files
 
-This completes the bounded live field gate. Release close-out still requires
-reconciling the pending Sprint 10 gate and publishing the intended 0.9.0 release
-state.
+This completes the bounded live field gate. Sprint 10's field gate also passed
+on 2026-08-11, so only consolidated release close-out remains.
 
 ## Exclusions
 

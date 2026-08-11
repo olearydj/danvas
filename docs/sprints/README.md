@@ -86,11 +86,14 @@ reporting with authoritative readback classification, adds bounded private
 recovery evidence, and records a conservative targeted-student release-state
 conclusion in private post/clear/verify receipts. It deliberately excludes
 grade-posting-policy mutations and live gradebook export. Ruff, ty, and all 360
-tests pass locally. A 2026-08-11 acceptance attempt stopped safely because the
-sandbox contained only a real participant and no Test Student could be
-provisioned in the unavailable browser session; no grade or comment state was
-changed. Its bounded live Canvas field acceptance remains pending explicit
-authorization of a disposable enrollment.
+tests pass locally. Its bounded live Canvas field acceptance passed on
+2026-08-11 after the user explicitly authorized the sandbox enrollment. The
+production exact-comment fallback returned `verified_applied`, explicit
+verification reported `verified_visible`, a stable-ID rerun returned
+`already_applied`, restoration was independently confirmed, and the disposable
+assignment was removed. The field case also established that this Canvas
+instance rejects grade updates on an unpublished assignment even when the
+enrollment is gradeable and the caller reports `manage_grades`.
 
 ## 0.9.0 Assignment Release Follow-On
 
@@ -108,8 +111,8 @@ invariant because that behavior is not present in the current source.
 It is locally verified with Ruff, ty, and all 381 tests. Its bounded live Canvas
 field case passed on 2026-08-11, including create/overwrite/rename planning,
 stable upload evidence, positive and negative exact-file verification, artifact
-scanning, and cleanup. Release close-out and reconciliation of the earlier 0.8.0
-release gate remain pending.
+scanning, and cleanup. The earlier 0.8.0 live gate is now complete; consolidated
+release close-out remains pending.
 
 ## 0.10.0 Authorization-Resilient Snapshot Follow-On
 

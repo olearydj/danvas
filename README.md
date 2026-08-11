@@ -617,6 +617,15 @@ fresh readback. Grade release conclusions are `verified_visible`,
 `verified_hidden`, `mixed`, or `not_determined`; publication and manual-posting
 policy are context rather than proof that students can see a grade.
 
+Auburn Canvas may reject grade/comment updates on an unpublished assignment as
+unauthorized even when the enrollment is gradeable and the caller has
+`manage_grades`; confirm publication state before diagnosing a token failure,
+but do not publish without explicit authorization. `ExpectedCurrentGrade` and
+`ExpectedComment` are one-shot pre-mutation guards. After verified success, an
+idempotent `replace_exact` retry should retain the exact owned `CommentID` while
+refreshing or omitting stale preconditions; the retry then reports
+`already_applied` without writing.
+
 `pages sync --dry-run` reads Canvas and plans local source creation. Live sync
 writes only missing local files with no-clobber installation and recoverable
 source-map provenance; it does not mutate Canvas and has no overwrite mode.
