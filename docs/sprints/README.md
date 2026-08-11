@@ -73,3 +73,18 @@ deferred unless a small extraction is necessary to make a remediation safely
 testable. A final audit-cleanup pass also added Panopto timestamp resilience,
 corrected documentation drift, and replaced brittle/implicit tests. Ruff, ty,
 and all 312 tests pass for the combined implementation released as `v0.7.1`.
+
+## 0.8.0 Grade Evidence Follow-On
+
+The implemented development-line follow-on is:
+
+- Sprint 10: [Truthful Grade Posting And Release Evidence](10-truthful-grade-posting.md)
+
+Sprint 10 combines field-observed backlog items 6 and 10. It fixes the
+production exact-comment replacement path, replaces binary per-row failure
+reporting with authoritative readback classification, adds bounded private
+recovery evidence, and records a conservative targeted-student release-state
+conclusion in private post/clear/verify receipts. It deliberately excludes
+grade-posting-policy mutations and live gradebook export. Ruff, ty, and all 360
+tests pass locally; its bounded live Canvas field acceptance remains pending
+explicit authorization.

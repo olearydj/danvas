@@ -1,6 +1,6 @@
 # danvas Backlog
 
-Last consolidated: 2026-07-27.
+Last consolidated: 2026-08-11.
 
 This document is the planning backlog for `danvas`. It distinguishes the shipped
 0.7.0 surface from genuine follow-on work. The lightweight implementation specs
@@ -113,7 +113,7 @@ closed.
 | Expanded course snapshot | `danvas refresh`, schema version 4 | Add sections/enrollments if roster workflows need them. |
 | Override-aware assignment status | schema-v3 snapshot, `danvas assignments overrides` | Snapshots remain redacted; membership exports are explicit private artifacts. |
 | Submission evidence exports | `danvas submissions export/grades/media` | Local replacement provenance remains optional future work. |
-| Transaction-safe grade patches | `danvas grades post/clear/comments/verify` | Continue field-testing exact comment replacement and rollback use. |
+| Transaction-safe grade patches | `danvas grades post/clear/comments/verify` | Truthful row outcomes, private receipts/recovery, and targeted release evidence are locally verified; bounded live acceptance remains. |
 | Canvas Pages bounded workflow | `danvas pages list/export/sync/render/css-check/create/update/verify`, schema-v4 status | Assets, rename/delete, broad upsert, and broader compatibility profiles remain deferred. |
 | Canvas-facing source lint | `danvas sources lint` | External HTTP checking and automatic rewriting remain deferred. |
 | Read-only Canvas/local status | `danvas status` | Continue refining next-action hints as new source workflows land. |
@@ -1387,7 +1387,35 @@ Definition of done for the remaining candidate:
 
 These items came from field use after the 2026-06-24 backlog consolidation.
 Items 3 and 4 shipped in 0.6.0, and item 5 is now reflected in the external
-skill docs. Items 1, 2, 6, 7, 8, and 9 remain product work.
+skill docs. A CASS transcript review covering the preceding 100 days on
+2026-08-09 confirmed the relevance of items 1, 2, and 6 through 9, and added
+items 10 and 11 below. Items 1, 2, and 6 through 11 remain product work.
+
+### Current Priority Order
+
+Prioritize correctness and trustworthy release evidence before new command
+families:
+
+1. Complete the bounded live Canvas acceptance and release close-out for
+   `docs/sprints/10-truthful-grade-posting.md`, which combines items 6 and 10.
+2. Item 8: assignment release, file-link verification, and report sanitization.
+3. Item 7: explicit live Canvas gradebook export.
+4. Item 9: authorization-resilient partial snapshots.
+5. Item 11: installed CLI health checks for the supported release workflow.
+6. Items 1 and 2: seeded discussion creation, then discussion verify/update.
+
+Sprint 10 was selected because items 6 and 10 are two halves of the
+same operational guarantee: a grade-posting run must state exactly what Canvas
+accepted and whether the targeted students can see the resulting grades. The
+sprint applies the same partial-write contract to `grades clear`, adds private
+durable receipts that the previous terminal-only commands lacked, and does not
+broaden into grade-posting-policy mutation or gradebook export. It is now
+implemented and locally verified with Ruff, ty, and all 360 tests; its bounded
+live Canvas acceptance remains pending explicit authorization.
+
+Office package-part comparison, transcript filing, and other smaller workflow
+enhancements remain deferred unless a concrete course workflow changes this
+ordering.
 
 1. Generalize seeded discussion creation beyond grouped cases.
 
@@ -1483,6 +1511,11 @@ skill docs. Items 1, 2, 6, 7, 8, and 9 remain product work.
      repeated evidence shows the CLI itself needs better timeout messaging.
 
 6. Fix exact grade-comment replacement and partial-write reporting.
+
+   Implemented on the 0.8.0 development line through
+   `docs/sprints/10-truthful-grade-posting.md` together with item 10 and the
+   equivalent multi-step failure boundary in `grades clear`. Local automated
+   verification passes; bounded live Canvas acceptance remains pending.
 
    Field evidence from a live one-row grade correction on 2026-07-19:
 
@@ -1712,6 +1745,77 @@ skill docs. Items 1, 2, 6, 7, 8, and 9 remain product work.
      misrepresenting it as empty or exposing sensitive response data.
    - Snapshot diff/status behavior and automated tests distinguish unavailable
      metadata from actual Canvas-side deletion.
+
+10. Record assignment release state with grade-posting verification.
+
+   Implemented on the 0.8.0 development line through
+   `docs/sprints/10-truthful-grade-posting.md` together with item 6. The sprint
+   uses targeted submission `posted_at` and `assignment_visible` evidence, while
+   treating assignment publication, availability dates, and manual-posting
+   policy as context rather than proof of student visibility. Local automated
+   verification passes; bounded live Canvas acceptance remains pending.
+
+   Field evidence from a 16-student INSY 7750 posting workflow on 2026-08-07:
+
+   - `danvas grades post` successfully verified every score and exact comment,
+     but the operator separately captured assignment state to establish whether
+     the grades remained hidden or had become visible to students.
+   - Exact score/comment readback is therefore necessary but not sufficient as
+     end-to-end posting evidence when release timing matters.
+
+   Desired behavior:
+
+   - Include a sanitized assignment release-state summary in `grades post` and
+     `grades verify` evidence whenever Canvas exposes the relevant fields:
+     publication state, availability dates, and grade-posting/visibility state.
+   - Clearly distinguish `verified hidden`, `verified visible`, and `student
+     visibility not determined`; do not infer visibility from assignment
+     publication alone.
+   - Preserve the existing private grade/comment evidence boundary: the summary
+     must not expose student data, access tokens, or verifier-bearing URLs.
+   - Capture the state in the normal post/write report so operators do not need
+     an ad hoc, separate assignment snapshot for a grading close-out.
+
+   Definition of done:
+
+   - A grade-post report states both row-level score/comment verification and
+     the supported assignment release-state conclusion.
+   - Tests cover hidden, visible, unavailable/unsupported, and date-limited
+     state representations without overstating what Canvas reports.
+
+11. Add installed-CLI health coverage to the release workflow.
+
+   Field evidence from a course status workflow on 2026-06-25:
+
+   - The globally installed editable `danvas` launcher failed before command
+     parsing because its isolated environment held an incompatible `secretpath`
+     version.
+   - A normal reinstall was initially blocked by a global uv `exclude-newer`
+     policy, despite the project environment working correctly. The operational
+     workflow required a project-environment workaround until the tool install
+     could be repaired.
+
+   Desired behavior:
+
+   - Define the supported installation modes (editable development checkout and
+     tagged release) and smoke-test each in its isolated tool environment.
+   - After installation, verify `danvas --version` and a minimal import/auth
+     diagnostic before treating the installation as usable.
+   - Document how dependency freshness constraints such as uv's
+     `exclude-newer` affect a local editable reinstall, including a scoped
+     recovery path that does not weaken the user's global policy.
+   - Keep this as release engineering and documentation work unless a future
+     import-boundary design can make `danvas auth doctor` available when optional
+     authentication dependencies are broken.
+
+   Definition of done:
+
+   - Release close-out and editable-install guidance include a reproducible
+     isolated-environment smoke test.
+   - A dependency mismatch fails with an actionable diagnostic rather than a
+     raw import traceback where practical.
+   - CI or release verification exercises the documented install path without
+     relying on the repository virtual environment.
 
 ## Smaller Backlog Items
 

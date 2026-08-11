@@ -56,7 +56,10 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - optional text comments from CSV
   - online baseline preflight, expected-current-grade checks, comment/delta checks, and automatic rollback artifacts
   - append or replace exact instructor-owned comments and safely clear targeted grades/comments
-  - verify Canvas grades/comments against CSV
+  - classify every live row from authoritative readback as verified, unchanged failure, partial, unverified, indeterminate, or not attempted
+  - stop new writes after unsafe outcomes and emit guarded private recovery evidence when the final state is known
+  - verify Canvas grades/comments against CSV and report targeted grade visibility from Canvas `posted_at` and assignment-visibility evidence
+  - write private plan/result/verify report runs by default in course projects
 
 - manage Canvas Pages
   - deterministic Markdown or native-HTML fragment rendering with stable heading anchors
@@ -377,8 +380,8 @@ may read the source map but do not update it.
 ## Report Runs
 
 Report-first commands such as assignment audits, file inventories, file
-comparisons, gradebook checks/audits, quiz analyses, source sync, verification,
-and update dry-run/readback workflows write dated run directories under
+comparisons, gradebook checks/audits, grade post/clear/verify, quiz analyses,
+source sync, verification, and update dry-run/readback workflows write dated run directories under
 `.danvas/reports/` by default when a course project is available:
 
 ```text
@@ -393,9 +396,9 @@ then falls back to the system local date. `danvas init` adds `.danvas/reports/` 
 `.gitignore` in git repositories.
 
 Report runs classified with `may_contain_private_student_data: true`, including
-gradebook checks/audits and quiz analyses, create their run directory and every
-artifact without group or other permissions. This protection applies to default
-and explicitly selected report directories.
+grade post/clear/verify, gradebook checks/audits, and quiz analyses, create their
+run directory and every artifact without group or other permissions. This
+protection applies to default and explicitly selected report directories.
 
 Use `--output`, `--report-md`, or `--output-dir` when you need a specific legacy
 path. Use `--report-root` to choose a different root while keeping the dated run
@@ -569,7 +572,19 @@ danvas quiz import-qti ... --dry-run
 danvas files upload ... --dry-run
 ```
 
-`grades post --dry-run` reads the current Canvas state and validates the full patch without writing. Use `--offline-preview` only when authentication is intentionally unavailable. Live posting writes private rollback JSON/CSV before the first mutation.
+`grades post --dry-run` reads the current Canvas state and validates the full
+patch without writing. Use `--offline-preview` only when authentication is
+intentionally unavailable. Post, clear, and verify write private report runs by
+default when a course project is discoverable; use `--project-root` for explicit
+project discovery and `--no-report`, `--report-root`, `--report-dir`, or
+`--report-slug` to control the report. Live post/clear writes private
+rollback JSON/CSV before the first mutation, reads every attempted row back, and
+stops new writes after a partial, unverified, or indeterminate result. When the
+observed state supports safe preconditions, danvas also writes a guarded forward
+recovery CSV; otherwise it leaves private JSON/Markdown guidance and requires a
+fresh readback. Grade release conclusions are `verified_visible`,
+`verified_hidden`, `mixed`, or `not_determined`; publication and manual-posting
+policy are context rather than proof that students can see a grade.
 
 `pages sync --dry-run` reads Canvas and plans local source creation. Live sync
 writes only missing local files with no-clobber installation and recoverable

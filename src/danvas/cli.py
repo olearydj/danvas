@@ -127,7 +127,7 @@ submissions_app = typer.Typer(
     no_args_is_help=True,
 )
 grades_app = typer.Typer(
-    help="Post grades from CSV, optionally with comments, then verify Canvas matches the CSV.",
+    help="Safely post, clear, and verify CSV grades/comments with private readback evidence.",
     no_args_is_help=True,
 )
 discussions_app = typer.Typer(
@@ -1672,14 +1672,19 @@ def submissions_feedback(
 
 @grades_app.command(
     "post",
-    help="Post assignment grades from CSV. If Comment is present, add it once as a submission comment.",
+    help="Post CSV grades/comments, classify readback outcomes, and record private evidence.",
 )
 def grades_post(
     assignment_id: AssignmentId,
     grades_csv: Annotated[
         Path,
         typer.Option(
-            "--grades-csv", "-g", help="CSV with CanvasID, Grade, optional Name, optional Comment."
+            "--grades-csv",
+            "-g",
+            help=(
+                "CSV with CanvasID, Grade, optional Name/Comment, and guarded "
+                "CommentAction fields."
+            ),
         ),
     ],
     course_id: CourseId = None,
@@ -1710,6 +1715,21 @@ def grades_post(
     sleep_seconds: Annotated[
         float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
     ] = 0.25,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default private report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact private report directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -1726,6 +1746,11 @@ def grades_post(
             expected_assignment_title=expected_assignment_title,
             rollback_dir=str(rollback_dir) if rollback_dir else None,
             sleep_seconds=sleep_seconds,
+            project_root=str(project_root),
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
@@ -1736,7 +1761,7 @@ def grades_post(
 
 @grades_app.command(
     "clear",
-    help="Clear targeted grades and optionally exact instructor-owned comments from CSV.",
+    help="Clear targeted grades/comments, classify readback outcomes, and record private evidence.",
 )
 def grades_clear(
     assignment_id: AssignmentId,
@@ -1769,6 +1794,21 @@ def grades_clear(
     sleep_seconds: Annotated[
         float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
     ] = 0.25,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default private report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact private report directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -1784,6 +1824,11 @@ def grades_clear(
             expected_assignment_title=expected_assignment_title,
             rollback_dir=str(rollback_dir) if rollback_dir else None,
             sleep_seconds=sleep_seconds,
+            project_root=str(project_root),
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
@@ -1825,7 +1870,8 @@ def grades_comments(
 
 
 @grades_app.command(
-    "verify", help="Check Canvas grades/comments against a CSV and exit nonzero on mismatch."
+    "verify",
+    help="Verify CSV grades/comments and record targeted student release-state evidence.",
 )
 def grades_verify(
     assignment_id: AssignmentId,
@@ -1833,6 +1879,21 @@ def grades_verify(
         Path, typer.Option("--grades-csv", "-g", help="CSV with CanvasID, Grade, optional Comment.")
     ],
     course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default private report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact private report directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -1844,6 +1905,11 @@ def grades_verify(
             course_id=course_id,
             assignment_id=assignment_id,
             grades_csv=str(grades_csv),
+            project_root=str(project_root),
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,

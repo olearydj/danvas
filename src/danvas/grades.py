@@ -10,7 +10,23 @@ import time
 from pathlib import Path
 from typing import Any
 
+from canvasapi.util import combine_kwargs
+
 from danvas.auth import canvas_from_args
+from danvas.grade_evidence import (
+    HALT_OUTCOMES,
+    SUCCESS_OUTCOMES,
+    assignment_release_context,
+    classify_effect_outcome,
+    classify_release_state,
+    make_grade_report_run,
+    safe_plan_rows,
+    safe_result_rows,
+    summarize_outcomes,
+    write_failed_grade_report,
+    write_grade_report,
+    write_recovery_artifacts,
+)
 from danvas.reports import safe_error
 from danvas.utils import mark_private, print_mutation_banner, write_json, write_rows
 
@@ -33,6 +49,7 @@ def command_grades_post(args: Any) -> None:
         print_offline_preview(rows)
         return
 
+    report_run = make_grade_report_run(args, command="grades post", source=source)
     try:
         canvas = canvas_from_args(args)
         assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
@@ -44,16 +61,30 @@ def command_grades_post(args: Any) -> None:
             current_user_id=current_user_id,
         )
     except Exception as exc:  # noqa: BLE001
+        write_failed_grade_report(
+            report_run, command="grades post", error=exc, artifact="grades-plan"
+        )
         raise SystemExit(f"Grade preflight failed: {safe_error(str(exc))}") from exc
     print_grade_plan(plan, dry_run=bool(args.dry_run))
-    fail_for_blocked_plan(plan)
+    if plan_has_blockers(plan):
+        write_grade_report(
+            report_run,
+            build_grade_plan_report(plan, command="grades post", status="blocked"),
+            artifact="grades-plan",
+            success=False,
+        )
+        fail_for_blocked_plan(plan)
     if args.dry_run:
+        write_grade_report(
+            report_run,
+            build_grade_plan_report(plan, command="grades post", status="dry_run"),
+            artifact="grades-plan",
+            success=True,
+        )
         return
 
-    rollback_paths = write_grade_rollback(
-        source,
-        plan,
-        rollback_dir=Path(args.rollback_dir) if getattr(args, "rollback_dir", None) else None,
+    rollback_paths = capture_grade_rollback(
+        source, plan, args=args, report_run=report_run, command="grades post"
     )
     print_mutation_banner(
         "post grades",
@@ -65,12 +96,39 @@ def command_grades_post(args: Any) -> None:
             "rollback": rollback_paths[0],
         },
     )
-    apply_grade_post_plan(assignment, plan, sleep_seconds=args.sleep_seconds)
+    results = apply_grade_plan(
+        assignment, plan, mode="post", sleep_seconds=args.sleep_seconds
+    )
+    recovery_paths, recovery_error = capture_grade_recovery(
+        report_run=report_run,
+        source=source,
+        mode="post",
+        actions=plan["actions"],
+        results=results,
+    )
+    report = build_grade_result_report(
+        plan,
+        results,
+        command="grades post",
+        rollback_paths=rollback_paths,
+        recovery_paths=recovery_paths,
+        include_release=True,
+        evidence_error=recovery_error,
+    )
+    success = recovery_error is None and all(
+        result["outcome"] in SUCCESS_OUTCOMES for result in results
+    )
+    write_grade_report(
+        report_run, report, artifact="grades-result", success=success
+    )
+    if not success:
+        raise SystemExit(1)
 
 
 def command_grades_clear(args: Any) -> None:
     source = Path(args.grades_csv)
     rows = load_clear_rows(source)
+    report_run = make_grade_report_run(args, command="grades clear", source=source)
     try:
         canvas = canvas_from_args(args)
         assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
@@ -82,16 +140,30 @@ def command_grades_clear(args: Any) -> None:
             current_user_id=current_user_id,
         )
     except Exception as exc:  # noqa: BLE001
+        write_failed_grade_report(
+            report_run, command="grades clear", error=exc, artifact="grades-plan"
+        )
         raise SystemExit(f"Grade-clear preflight failed: {safe_error(str(exc))}") from exc
     print_grade_plan(plan, dry_run=bool(args.dry_run))
-    fail_for_blocked_plan(plan)
+    if plan_has_blockers(plan):
+        write_grade_report(
+            report_run,
+            build_grade_plan_report(plan, command="grades clear", status="blocked"),
+            artifact="grades-plan",
+            success=False,
+        )
+        fail_for_blocked_plan(plan)
     if args.dry_run:
+        write_grade_report(
+            report_run,
+            build_grade_plan_report(plan, command="grades clear", status="dry_run"),
+            artifact="grades-plan",
+            success=True,
+        )
         return
 
-    rollback_paths = write_grade_rollback(
-        source,
-        plan,
-        rollback_dir=Path(args.rollback_dir) if getattr(args, "rollback_dir", None) else None,
+    rollback_paths = capture_grade_rollback(
+        source, plan, args=args, report_run=report_run, command="grades clear"
     )
     print_mutation_banner(
         "clear grades/comments",
@@ -103,7 +175,33 @@ def command_grades_clear(args: Any) -> None:
             "rollback": rollback_paths[0],
         },
     )
-    apply_grade_clear_plan(assignment, plan, sleep_seconds=args.sleep_seconds)
+    results = apply_grade_plan(
+        assignment, plan, mode="clear", sleep_seconds=args.sleep_seconds
+    )
+    recovery_paths, recovery_error = capture_grade_recovery(
+        report_run=report_run,
+        source=source,
+        mode="clear",
+        actions=plan["actions"],
+        results=results,
+    )
+    report = build_grade_result_report(
+        plan,
+        results,
+        command="grades clear",
+        rollback_paths=rollback_paths,
+        recovery_paths=recovery_paths,
+        include_release=False,
+        evidence_error=recovery_error,
+    )
+    success = recovery_error is None and all(
+        result["outcome"] in SUCCESS_OUTCOMES for result in results
+    )
+    write_grade_report(
+        report_run, report, artifact="grades-result", success=success
+    )
+    if not success:
+        raise SystemExit(1)
 
 
 def command_grades_comments(args: Any) -> None:
@@ -130,20 +228,71 @@ def command_grades_comments(args: Any) -> None:
 
 
 def command_grades_verify(args: Any) -> None:
-    rows = load_grade_rows(Path(args.grades_csv))
-    canvas = canvas_from_args(args)
-    assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
-    failures = 0
-    for row in rows:
-        submission = assignment.get_submission(
-            int(row["CanvasID"]), include=["submission_comments"]
+    source = Path(args.grades_csv)
+    rows = load_grade_rows(source)
+    report_run = make_grade_report_run(args, command="grades verify", source=source)
+    try:
+        canvas = canvas_from_args(args)
+        assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
+        results = []
+        for row in rows:
+            submission = assignment.get_submission(
+                int(row["CanvasID"]), include=["submission_comments", "visibility"]
+            )
+            grade_ok = grade_matches(submission, row["Grade"].strip())
+            comment = row.get("Comment", "").strip()
+            comment_ok = not comment or comment_exists(submission, comment)
+            desired_verified = grade_ok and comment_ok
+            status = "OK" if desired_verified else "MISMATCH"
+            print(f"  {row.get('Name') or row['CanvasID']}: {status}")
+            results.append(
+                {
+                    "canvas_id": int(row["CanvasID"]),
+                    "name": row.get("Name") or "",
+                    "outcome": "verified" if desired_verified else "mismatch",
+                    "desired_verified": desired_verified,
+                    "intended_grade": row["Grade"].strip(),
+                    "comment_action": "verify_exact" if comment else "none",
+                    "intended_comment": comment,
+                    "target_comment_id": None,
+                    "observed": observe_submission(submission),
+                    "effect_status": {
+                        "grade": "desired" if grade_ok else "other",
+                        "comment": "desired" if comment_ok else "other",
+                    },
+                    "phase": "verify",
+                    "error": None,
+                }
+            )
+    except Exception as exc:  # noqa: BLE001
+        write_failed_grade_report(
+            report_run, command="grades verify", error=exc, artifact="grades-verify"
         )
-        grade_ok = grade_matches(submission, row["Grade"].strip())
-        comment = row.get("Comment", "").strip()
-        comment_ok = not comment or comment_exists(submission, comment)
-        status = "OK" if grade_ok and comment_ok else "MISMATCH"
-        print(f"  {row.get('Name') or row['CanvasID']}: {status}")
-        failures += 0 if status == "OK" else 1
+        raise SystemExit(f"Grade verification failed: {safe_error(str(exc))}") from exc
+
+    release_state = classify_release_state(
+        results,
+        assignment_context=assignment_release_context(assignment),
+        require_desired_verified=True,
+        basis="verified_target_state",
+    )
+    print_release_state(release_state)
+    failures = sum(not result["desired_verified"] for result in results)
+    report = {
+        "command": "grades verify",
+        "status": "verified" if not failures else "mismatch",
+        "assignment_id": int(getattr(assignment, "id", args.assignment_id)),
+        "assignment_title": str(getattr(assignment, "name", "") or ""),
+        "summary": summarize_outcomes(results),
+        "rows": safe_result_rows(results),
+        "release_state": release_state,
+    }
+    write_grade_report(
+        report_run,
+        report,
+        artifact="grades-verify",
+        success=not failures,
+    )
     if failures:
         raise SystemExit(1)
 
@@ -160,7 +309,9 @@ def build_grade_post_plan(
     actions = []
     for row in rows:
         canvas_id = int(row["CanvasID"])
-        submission = assignment.get_submission(canvas_id, include=["submission_comments"])
+        submission = assignment.get_submission(
+            canvas_id, include=["submission_comments", "visibility"]
+        )
         action = base_action(row, submission)
         proposed = row["Grade"].strip()
         action["proposed_grade"] = proposed
@@ -209,7 +360,9 @@ def build_grade_clear_plan(
     actions = []
     for row in rows:
         canvas_id = int(row["CanvasID"])
-        submission = assignment.get_submission(canvas_id, include=["submission_comments"])
+        submission = assignment.get_submission(
+            canvas_id, include=["submission_comments", "visibility"]
+        )
         action = base_action(row, submission)
         expected = row.get("ExpectedCurrentGrade", "").strip()
         if expected and not grade_matches(submission, expected):
@@ -221,6 +374,7 @@ def build_grade_clear_plan(
         action["grade_change"] = action["clear_grade"] and current_grade(submission) not in {None, ""}
         comment_id = row.get("CommentID", "").strip()
         exact_text = row.get("Comment", "").strip()
+        action["comment"] = exact_text
         if comment_id or exact_text:
             target = resolve_owned_comment(
                 submission,
@@ -248,6 +402,7 @@ def assignment_plan(
     return {
         "assignment_id": int(getattr(assignment, "id", 0) or 0),
         "assignment_title": title,
+        "assignment_context": assignment_release_context(assignment),
         "blockers": blockers,
         "actions": actions,
     }
@@ -260,6 +415,7 @@ def base_action(row: dict[str, str], submission: Any) -> dict[str, Any]:
         "current_grade": current_grade(submission),
         "current_score": getattr(submission, "score", None),
         "current_comments": [comment_record(comment) for comment in submission_comments(submission)],
+        "prewrite_observation": observe_submission(submission),
         "submission": submission,
         "blockers": [],
         "grade_change": False,
@@ -293,78 +449,376 @@ def check_deduction_consistency(
         )
 
 
-def apply_grade_post_plan(assignment: Any, plan: dict[str, Any], *, sleep_seconds: float) -> None:
-    posted = skipped = failed = 0
+def apply_grade_plan(
+    assignment: Any,
+    plan: dict[str, Any],
+    *,
+    mode: str,
+    sleep_seconds: float,
+) -> list[dict[str, Any]]:
+    """Apply post/clear actions with authoritative per-effect readback."""
+    results: list[dict[str, Any]] = []
+    halted = False
     for action in plan["actions"]:
         label = action_label(action)
+        if halted:
+            result = base_result(action, "not_attempted")
+            result["phase"] = "halted"
+            results.append(result)
+            print(f"  {label}: not attempted after an unsafe prior outcome")
+            continue
         if not action["grade_change"] and not action["comment_change"]:
-            skipped += 1
-            print(f"  {label}: already posted")
+            result = base_result(action, "already_applied")
+            result["observed"] = action["prewrite_observation"]
+            result["desired_verified"] = True
+            result["phase"] = "preflight"
+            results.append(result)
+            print(f"  {label}: already applied")
             continue
+
+        error: Exception | None = None
+        phase = "mutation"
         try:
-            submission = action["submission"]
-            kwargs: dict[str, Any] = {}
-            if action["grade_change"]:
-                kwargs["submission"] = {"posted_grade": action["proposed_grade"]}
-            if action["comment_action"] == "append" and action["comment_change"]:
-                kwargs["comment"] = {"text_comment": action["comment"]}
-            if kwargs:
-                submission.edit(**kwargs)
-            if action["comment_action"] == "replace_exact" and action["comment_change"]:
-                edit_submission_comment(submission, action["target_comment"]["id"], action["comment"])
-            verify_post_action(assignment, action)
-            posted += 1
-            print(f"  {label}: posted and verified")
-            time.sleep(sleep_seconds)
+            apply_grade_action(action, mode=mode)
+            phase = "readback"
         except Exception as exc:  # noqa: BLE001
-            failed += 1
-            print(f"  {label}: FAILED {type(exc).__name__}: {safe_error(str(exc))}")
-    print(f"Done. Posted: {posted}, Already present: {skipped}, Failed: {failed}")
-    if failed:
-        raise SystemExit(1)
-
-
-def apply_grade_clear_plan(assignment: Any, plan: dict[str, Any], *, sleep_seconds: float) -> None:
-    changed = skipped = failed = 0
-    for action in plan["actions"]:
-        label = action_label(action)
-        if action["already_applied"]:
-            skipped += 1
-            print(f"  {label}: already clear")
-            continue
+            error = exc
+            phase = str(action.get("_mutation_phase") or "mutation")
         try:
-            submission = action["submission"]
-            if action["grade_change"]:
-                submission.edit(submission={"posted_grade": ""})
-            if action.get("comment_change"):
-                delete_submission_comment(submission, action["target_comment"]["id"])
-            verify_clear_action(assignment, action)
-            changed += 1
-            print(f"  {label}: cleared and verified")
-            time.sleep(sleep_seconds)
+            submission = assignment.get_submission(
+                action["canvas_id"], include=["submission_comments", "visibility"]
+            )
+            observed = observe_submission(submission)
         except Exception as exc:  # noqa: BLE001
-            failed += 1
-            print(f"  {label}: FAILED {type(exc).__name__}: {safe_error(str(exc))}")
-    print(f"Done. Changed: {changed}, Already clear: {skipped}, Failed: {failed}")
-    if failed:
-        raise SystemExit(1)
+            readback_error = exc
+            result = base_result(action, "indeterminate")
+            result.update(
+                {
+                    "phase": "readback",
+                    "error": safe_error(str(error or readback_error)),
+                    "readback_error": safe_error(str(readback_error)),
+                    "observed": {
+                        "readback_available": False,
+                        "error": safe_error(str(readback_error)),
+                    },
+                }
+            )
+        else:
+            effect_status = classify_action_effects(action, observed, mode=mode)
+            outcome, detail = classify_effect_outcome(
+                effect_status, had_error=error is not None
+            )
+            result = base_result(action, outcome)
+            result.update(
+                {
+                    "detail": detail,
+                    "phase": phase,
+                    "error": safe_error(str(error)) if error else None,
+                    "effect_status": effect_status,
+                    "observed": observed,
+                    "desired_verified": outcome in SUCCESS_OUTCOMES,
+                }
+            )
+        results.append(result)
+        print_grade_result(label, result)
+        if result["outcome"] in HALT_OUTCOMES:
+            halted = True
+        if result["outcome"] == "verified_applied":
+            time.sleep(sleep_seconds)
+
+    summary = summarize_outcomes(results)
+    totals = ", ".join(f"{name}: {count}" for name, count in summary.items())
+    print(f"Done. {totals}")
+    return results
 
 
-def verify_post_action(assignment: Any, action: dict[str, Any]) -> None:
-    submission = assignment.get_submission(action["canvas_id"], include=["submission_comments"])
-    if not grade_matches(submission, action["proposed_grade"]):
-        raise RuntimeError("grade readback mismatch")
-    if action["comment"] and not comment_exists(submission, action["comment"]):
-        raise RuntimeError("comment readback mismatch")
+def apply_grade_action(action: dict[str, Any], *, mode: str) -> None:
+    submission = action["submission"]
+    if mode == "post":
+        kwargs: dict[str, Any] = {}
+        if action["grade_change"]:
+            kwargs["submission"] = {"posted_grade": action["proposed_grade"]}
+        if action["comment_action"] == "append" and action["comment_change"]:
+            kwargs["comment"] = {"text_comment": action["comment"]}
+        if kwargs:
+            action["_mutation_phase"] = "submission_edit"
+            submission.edit(**kwargs)
+        if action["comment_action"] == "replace_exact" and action["comment_change"]:
+            action["_mutation_phase"] = "comment_replace"
+            edit_submission_comment(
+                submission, action["target_comment"]["id"], action["comment"]
+            )
+        return
+
+    if action["grade_change"]:
+        action["_mutation_phase"] = "grade_clear"
+        submission.edit(submission={"posted_grade": ""})
+    if action.get("comment_change"):
+        action["_mutation_phase"] = "comment_delete"
+        delete_submission_comment(submission, action["target_comment"]["id"])
 
 
-def verify_clear_action(assignment: Any, action: dict[str, Any]) -> None:
-    submission = assignment.get_submission(action["canvas_id"], include=["submission_comments"])
-    if action["clear_grade"] and current_grade(submission) not in {None, ""}:
-        raise RuntimeError("grade clear readback mismatch")
-    target = action.get("target_comment")
-    if target and any(comment_id(comment) == target["id"] for comment in submission_comments(submission)):
-        raise RuntimeError("comment delete readback mismatch")
+def classify_action_effects(
+    action: dict[str, Any], observed: dict[str, Any], *, mode: str
+) -> dict[str, str]:
+    grade_status = "not_planned"
+    if action.get("grade_change"):
+        desired_grade = action.get("proposed_grade")
+        if observation_grade_matches(observed, desired_grade):
+            grade_status = "desired"
+        elif observation_grade_matches(
+            observed, action.get("current_grade"), action.get("current_score")
+        ):
+            grade_status = "original"
+        else:
+            grade_status = "other"
+
+    comment_status = "not_planned"
+    if action.get("comment_change"):
+        comments = observed.get("comments") or []
+        if mode == "post" and action.get("comment_action") == "append":
+            desired = comment_record_exists(comments, text=action.get("comment"))
+            original = not comment_record_exists(
+                action["prewrite_observation"].get("comments") or [],
+                text=action.get("comment"),
+            )
+            comment_status = "desired" if desired else ("original" if original else "other")
+        else:
+            target = action.get("target_comment") or {}
+            observed_target = find_comment_record(
+                comments, comment_id_value=target.get("id")
+            )
+            if mode == "clear":
+                comment_status = "desired" if not observed_target else "original"
+            elif observed_target and str(observed_target.get("comment") or "").strip() == str(
+                action.get("comment") or ""
+            ).strip():
+                comment_status = "desired"
+            elif observed_target and str(observed_target.get("comment") or "").strip() == str(
+                target.get("comment") or ""
+            ).strip():
+                comment_status = "original"
+            else:
+                comment_status = "other"
+    return {"grade": grade_status, "comment": comment_status}
+
+
+def observe_submission(submission: Any) -> dict[str, Any]:
+    return {
+        "readback_available": True,
+        "grade": current_grade(submission),
+        "score": getattr(submission, "score", None),
+        "comments": [comment_record(comment) for comment in submission_comments(submission)],
+        "posted_at_available": hasattr(submission, "posted_at"),
+        "posted_at": getattr(submission, "posted_at", None),
+        "assignment_visible_available": hasattr(submission, "assignment_visible"),
+        "assignment_visible": getattr(submission, "assignment_visible", None),
+    }
+
+
+def grade_value_matches(observed: Any, expected: Any) -> bool:
+    if expected in {None, ""}:
+        return observed in {None, ""}
+    if observed in {None, ""}:
+        return False
+    try:
+        return abs(float(observed) - float(expected)) < 0.0001
+    except (TypeError, ValueError):
+        return str(observed).strip() == str(expected).strip()
+
+
+def observation_grade_matches(observation: dict[str, Any], *expected_values: Any) -> bool:
+    observed_values = (observation.get("grade"), observation.get("score"))
+    nonempty_expected = [value for value in expected_values if value not in {None, ""}]
+    if not nonempty_expected:
+        return all(value in {None, ""} for value in observed_values)
+    return any(
+        grade_value_matches(observed, expected)
+        for observed in observed_values
+        for expected in nonempty_expected
+    )
+
+
+def comment_record_exists(
+    comments: list[dict[str, Any]],
+    *,
+    text: Any = None,
+    comment_id_value: Any = None,
+) -> bool:
+    return find_comment_record(
+        comments, text=text, comment_id_value=comment_id_value
+    ) is not None
+
+
+def find_comment_record(
+    comments: list[dict[str, Any]],
+    *,
+    text: Any = None,
+    comment_id_value: Any = None,
+) -> dict[str, Any] | None:
+    for comment in comments:
+        id_matches = comment_id_value is None or str(comment.get("id")) == str(
+            comment_id_value
+        )
+        text_matches = text is None or str(comment.get("comment") or "").strip() == str(
+            text
+        ).strip()
+        if id_matches and text_matches:
+            return comment
+    return None
+
+
+def base_result(action: dict[str, Any], outcome: str) -> dict[str, Any]:
+    target = action.get("target_comment") or {}
+    return {
+        "canvas_id": action["canvas_id"],
+        "name": action.get("name") or "",
+        "outcome": outcome,
+        "detail": None,
+        "phase": None,
+        "error": None,
+        "readback_error": None,
+        "intended_grade": action.get("proposed_grade"),
+        "comment_action": action.get("comment_action", "none"),
+        "intended_comment": action.get("comment") or "",
+        "target_comment_id": target.get("id"),
+        "effect_status": {},
+        "desired_verified": outcome in SUCCESS_OUTCOMES,
+        "observed": {"readback_available": False},
+    }
+
+
+def build_grade_plan_report(
+    plan: dict[str, Any], *, command: str, status: str
+) -> dict[str, Any]:
+    release_rows = [
+        {"observed": action["prewrite_observation"], "desired_verified": True}
+        for action in plan["actions"]
+    ]
+    release_state = classify_release_state(
+        release_rows,
+        assignment_context=plan["assignment_context"],
+        require_desired_verified=False,
+        basis="current_target_state",
+    )
+    summary = {
+        "target_rows": len(plan["actions"]),
+        "grade_changes": sum(bool(action.get("grade_change")) for action in plan["actions"]),
+        "comment_changes": sum(
+            bool(action.get("comment_change")) for action in plan["actions"]
+        ),
+        "blocked_rows": sum(bool(action.get("blockers")) for action in plan["actions"]),
+        "assignment_blockers": len(plan["blockers"]),
+    }
+    return {
+        "command": command,
+        "status": status,
+        "assignment_id": plan["assignment_id"],
+        "assignment_title": plan["assignment_title"],
+        "summary": summary,
+        "rows": safe_plan_rows(plan["actions"]),
+        "release_state": release_state,
+    }
+
+
+def build_grade_result_report(
+    plan: dict[str, Any],
+    results: list[dict[str, Any]],
+    *,
+    command: str,
+    rollback_paths: tuple[Path, Path],
+    recovery_paths: list[Path],
+    include_release: bool,
+    evidence_error: str | None,
+) -> dict[str, Any]:
+    success = evidence_error is None and all(
+        result["outcome"] in SUCCESS_OUTCOMES for result in results
+    )
+    release_state = None
+    if include_release:
+        release_state = classify_release_state(
+            results,
+            assignment_context=plan["assignment_context"],
+            require_desired_verified=True,
+            basis="verified_target_state",
+        )
+        print_release_state(release_state)
+    return {
+        "command": command,
+        "status": "success" if success else "failed",
+        "assignment_id": plan["assignment_id"],
+        "assignment_title": plan["assignment_title"],
+        "summary": summarize_outcomes(results),
+        "rows": safe_result_rows(results),
+        "rollback_artifacts": [str(path) for path in rollback_paths],
+        "recovery_artifacts": [str(path) for path in recovery_paths],
+        "evidence_error": evidence_error,
+        "release_state": release_state,
+    }
+
+
+def capture_grade_rollback(
+    source: Path,
+    plan: dict[str, Any],
+    *,
+    args: Any,
+    report_run: Any,
+    command: str,
+) -> tuple[Path, Path]:
+    try:
+        return write_grade_rollback(
+            source,
+            plan,
+            rollback_dir=(
+                Path(args.rollback_dir) if getattr(args, "rollback_dir", None) else None
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        write_failed_grade_report(
+            report_run, command=command, error=exc, artifact="grades-result"
+        )
+        raise SystemExit(f"Grade rollback capture failed: {safe_error(str(exc))}") from exc
+
+
+def capture_grade_recovery(
+    *,
+    report_run: Any,
+    source: Path,
+    mode: str,
+    actions: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+) -> tuple[list[Path], str | None]:
+    try:
+        return (
+            write_recovery_artifacts(
+                report_run,
+                source=source,
+                mode=mode,
+                actions=actions,
+                results=results,
+            ),
+            None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        error = safe_error(str(exc))
+        print(f"Private recovery evidence could not be written: {error}")
+        return [], error
+
+
+def plan_has_blockers(plan: dict[str, Any]) -> bool:
+    return bool(plan["blockers"]) or any(action["blockers"] for action in plan["actions"])
+
+
+def print_grade_result(label: str, result: dict[str, Any]) -> None:
+    detail = f" ({result['detail']})" if result.get("detail") else ""
+    error = f": {result['error']}" if result.get("error") else ""
+    print(f"  {label}: {result['outcome']}{detail}{error}")
+
+
+def print_release_state(release_state: dict[str, Any]) -> None:
+    conclusion = release_state["conclusion"]
+    reason = f" ({release_state['reason']})" if release_state.get("reason") else ""
+    print(f"Grade release state: {conclusion}{reason}")
 
 
 def write_grade_rollback(
@@ -574,7 +1028,7 @@ def edit_submission_comment(submission: Any, target_id: int, text: str) -> None:
         "PUT",
         f"courses/{submission.course_id}/assignments/{submission.assignment_id}/"
         f"submissions/{submission.user_id}/comments/{target_id}",
-        _kwargs={"comment": text},
+        _kwargs=combine_kwargs(comment=text),
     )
 
 

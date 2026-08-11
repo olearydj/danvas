@@ -171,6 +171,51 @@ def test_gradebook_audit_cli(tmp_path: Path) -> None:
     assert not (tmp_path / ".danvas" / "reports").exists()
 
 
+def test_grade_commands_expose_private_report_options_and_forward_args(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    grades_csv = tmp_path / "grades.csv"
+    grades_csv.write_text("CanvasID,Grade\n1,90\n", encoding="utf-8")
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "danvas.cli.command_grades_post", lambda args: captured.update(vars(args))
+    )
+    report_dir = tmp_path / "report"
+
+    result = runner.invoke(
+        app,
+        [
+            "grades",
+            "post",
+            "--course-id",
+            "101",
+            "--assignment-id",
+            "5",
+            "--grades-csv",
+            str(grades_csv),
+            "--dry-run",
+            "--project-root",
+            str(tmp_path),
+            "--report-dir",
+            str(report_dir),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["project_root"] == str(tmp_path)
+    assert captured["no_report"] is False
+    assert captured["report_dir"] == str(report_dir)
+    expected = {
+        "--project-root",
+        "--no-report",
+        "--report-root",
+        "--report-dir",
+        "--report-slug",
+    }
+    for command_name in ("post", "clear", "verify"):
+        assert expected <= option_names("grades", command_name)
+
+
 def test_gradebook_check_cli_writes_report_run_in_project(tmp_path: Path) -> None:
     gradebook = tmp_path / "gradebook.csv"
     write_gradebook_fixture(gradebook)
