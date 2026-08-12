@@ -68,6 +68,8 @@ def test_sensitive_detector_supports_whole_value_hashing_without_near_matches() 
         "access_token: eyJabc123",
         "x-amz-signature: abc123",
         "secret: hunter2",
+        "token: abc123",
+        "signature: sig123",
         'token="abc123"',
         "token='abc123'",
         "Bearer abc123",
@@ -84,10 +86,24 @@ def test_sensitive_detector_catches_credential_shaped_text(value: str) -> None:
         "Policy: late work is accepted through Friday.",
         "This accommodation expires: Friday.",
         "The bearer of the group report should submit it.",
+        "Signature: missing on page 3, please resubmit.",
+        "signature: see attached form",
+        "token: see rubric",
+        "Please give this feedback to the bearer directly.",
+        "The bearer token concept is covered in week 4.",
+        "Discuss bearer instruments in your finance memo.",
     ],
 )
 def test_sensitive_detector_preserves_benign_prose(value: str) -> None:
     assert not contains_sensitive_text(value)
+
+
+@pytest.mark.parametrize("value", ["Policy: eyJabc123", "Expires: 1770000000"])
+def test_sensitive_detector_reserves_colon_policy_fields_for_error_sanitizing(
+    value: str,
+) -> None:
+    assert not contains_sensitive_text(value)
+    assert "[redacted]" in sanitize_error(value)
 
 
 @pytest.mark.parametrize("value", ['token="abc123"', "token='abc123'"])

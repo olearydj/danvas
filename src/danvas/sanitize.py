@@ -42,23 +42,29 @@ SENSITIVE_NAME_PATTERN = (
     r"(?:access_)?token|verifier|secret|api[_-]?key|secure[_-]?params|signature|policy|"
     r"expires|key[_-]?pair[_-]?id|awsaccesskeyid|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+"
 )
-CREDENTIAL_NAME_PATTERN = (
-    r"(?:access_)?token|verifier|secret|api[_-]?key|secure[_-]?params|signature|"
-    r"key[_-]?pair[_-]?id|awsaccesskeyid|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+"
-)
 ASSIGNED_VALUE_PATTERN = r'(?:"[^"\r\n]+"|\'[^\'\r\n]+\'|[^&\s,;"\']+)'
 SENSITIVE_VALUE_RE = re.compile(
     r"(?i)(?<![A-Za-z0-9])"
     rf"({SENSITIVE_NAME_PATTERN})"
     rf"\s*([=:])\s*({ASSIGNED_VALUE_PATTERN})"
 )
-SENSITIVE_TEXT_RE = re.compile(
-    rf"(?i)(?<![A-Za-z0-9])(?:{CREDENTIAL_NAME_PATTERN})\s*[:=]\s*"
-    rf"{ASSIGNED_VALUE_PATTERN}"
-    rf"|(?<![A-Za-z0-9])(?:policy|expires)\s*=\s*{ASSIGNED_VALUE_PATTERN}"
-    r"|\bauthorization\s*[:=]\s*bearer\s+[^\s,;]+"
-    r"|\bbearer\s+(?!of\b)[^\s,;]+"
+UNAMBIGUOUS_CREDENTIAL_RE = re.compile(
+    rf"(?i)(?<![A-Za-z0-9_-])(?:access[_-]?token|verifier|secret|api[_-]?key|"
+    rf"secure[_-]?params|key[_-]?pair[_-]?id|awsaccesskeyid|x-amz-[a-z0-9-]+|"
+    rf"x-goog-[a-z0-9-]+)\s*[:=]\s*{ASSIGNED_VALUE_PATTERN}"
 )
+AMBIGUOUS_EQUALS_RE = re.compile(
+    rf"(?i)(?<![A-Za-z0-9_-])(?:token|signature|policy|expires)\s*=\s*"
+    rf"{ASSIGNED_VALUE_PATTERN}"
+)
+AMBIGUOUS_COLON_RE = re.compile(
+    rf"(?i)(?<![A-Za-z0-9_-])(?:token|signature)\s*:\s*"
+    rf"(?P<value>{ASSIGNED_VALUE_PATTERN})"
+)
+AUTHORIZATION_BEARER_RE = re.compile(
+    r"(?i)\bauthorization\s*[:=]\s*bearer\s+[^\s,;]+"
+)
+BARE_BEARER_RE = re.compile(r"(?i)\bbearer\s+(?P<value>[^\s,;]+)")
 
 
 def normalize_sensitive_name(value: str) -> str:
@@ -78,7 +84,26 @@ def is_sensitive_key(key: str, *, embedded: bool = False) -> bool:
 
 def contains_sensitive_text(value: Any) -> bool:
     """Detect a sensitive value marker without returning sanitized prose."""
-    return bool(SENSITIVE_TEXT_RE.search(str(value or "")))
+    text = str(value or "")
+    if (
+        UNAMBIGUOUS_CREDENTIAL_RE.search(text)
+        or AMBIGUOUS_EQUALS_RE.search(text)
+        or AUTHORIZATION_BEARER_RE.search(text)
+    ):
+        return True
+    return any(
+        _credential_shaped_payload(match.group("value"))
+        for pattern in (AMBIGUOUS_COLON_RE, BARE_BEARER_RE)
+        for match in pattern.finditer(text)
+    )
+
+
+def _credential_shaped_payload(value: str) -> bool:
+    """Distinguish opaque credential values from ordinary comment prose."""
+    payload = value.strip().strip("\"'").rstrip(".,!?)]}")
+    return len(payload) >= 6 and any(
+        character.isdigit() or character in "._~+/=-" for character in payload
+    )
 
 
 def sanitize_error(value: Any, *, url_marker: str = "[url]") -> str:

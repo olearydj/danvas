@@ -273,10 +273,15 @@ be attributed to one boundary.
 - stable canonical Canvas object links remain available where explicitly safe;
 - upload-failure projections conservatively drop compound keys containing the
   historical token, URL, and verifier markers;
-- benign grading-comment prose containing words such as `policy`, `expires`, or
-  `bearer` is retained unless it uses a credential-shaped marker.
-- colon-delimited, quoted, and bare-Bearer credentials remain sensitive for
-  whole-value grade recovery hashing.
+- benign grading-comment prose containing words such as `policy`, `expires`,
+  `token`, `signature`, or `bearer` is retained unless it uses a
+  credential-shaped marker;
+- explicit equals assignments, unambiguous credential names, and authorization
+  headers remain sensitive, while prose-capable colon fields and bare `Bearer`
+  markers require a credential-shaped payload for whole-value grade recovery
+  hashing;
+- colon-form `Policy` and `Expires` values remain the error sanitizer's concern,
+  rather than making grade-comment recovery discard prose-capable rows.
 
 ### Snapshot behavior
 
@@ -348,7 +353,7 @@ structured YAML/date errors, and conservative ordering lint after timezone
 findings. Announcement `specific_sections` readback requests Canvas section data
 and maps returned section objects to stable IDs.
 
-Local verification on 2026-08-12 passes Ruff, ty, and all 521 tests in a clean
+Local verification on 2026-08-12 passes Ruff, ty, and all 540 tests in a clean
 frozen environment. The package and lock metadata are synchronized at 0.12.0;
 isolated editable and wheel release smoke also passes for that exact version. A
 bounded acceptance in sandbox course 1576638 created announcement 10917561 for

@@ -150,10 +150,28 @@ def test_recovery_text_redacts_sensitive_url_parameters() -> None:
         "Policy: late work is accepted through Friday.",
         "This accommodation expires: Friday.",
         "The bearer of the group report should submit it.",
+        "Signature: missing on page 3, please resubmit.",
+        "signature: see attached form",
+        "token: see rubric",
+        "Please give this feedback to the bearer directly.",
+        "The bearer token concept is covered in week 4.",
+        "Discuss bearer instruments in your finance memo.",
     ],
 )
 def test_recovery_text_preserves_benign_sensitive_vocabulary(text: str) -> None:
     assert recovery_text(text) == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["token: abc123", "signature: sig123", "Bearer abc123"],
+)
+def test_recovery_text_hashes_credential_shaped_comment_text(text: str) -> None:
+    result = recovery_text(text)
+
+    assert isinstance(result, dict)
+    assert result["status"] == "redacted_sensitive_value"
+    assert text not in str(result)
 
 
 def test_forward_recovery_requires_representable_grade_baseline() -> None:

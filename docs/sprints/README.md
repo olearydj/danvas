@@ -203,5 +203,6 @@ release: 0.12.0. Post-review compatibility passes pin field-specific text and
 boolean semantics, fixed-plus-declared announcement verification, upload-key and
 bidirectional grade-comment protection, centralized source errors, and
 timezone-aware lint-ordering contracts. Section-specific announcement readback
-passed a bounded disposable sandbox case. Ruff, ty, and all 521 tests pass in a
-clean frozen environment.
+passed a bounded disposable sandbox case. Ruff, ty, and all 540 tests pass in a
+clean frozen environment, including realistic token/signature/bearer grading
+prose in the final sanitizer boundary corpus.
