@@ -49,6 +49,29 @@ def test_page_title_comparison_preserves_exact_text_semantics() -> None:
     assert page_metadata_values_match("title", "3.1", "3.10") is False
 
 
+def test_page_metadata_comparison_handles_yaml_typed_scalars() -> None:
+    assert page_metadata_values_match("title", "2026", 2026) is True
+    assert page_metadata_values_match("published", False, "false") is True
+    assert page_metadata_values_match("published", True, "false") is False
+
+
+def test_page_source_normalizes_closed_quoted_boolean_vocabulary(tmp_path: Path) -> None:
+    source = write_source(
+        tmp_path / "page.md",
+        "Help.",
+        extra='front_page: "false"\nnotify_of_update: "true"\n',
+    )
+
+    local = load_page_source(source)
+
+    assert local.metadata["front_page"] is False
+    assert local.metadata["notify_of_update"] is True
+
+    source.write_text('---\ntitle: Help\npublished: "no"\n---\nHelp.\n', encoding="utf-8")
+    with pytest.raises(SystemExit, match="published must be true or false"):
+        load_page_source(source)
+
+
 def test_page_source_rejects_offset_free_publish_timestamp(tmp_path: Path) -> None:
     source = write_source(
         tmp_path / "page.md",

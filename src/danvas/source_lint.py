@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -20,6 +20,7 @@ from danvas.utils import write_json
 
 LintKind = Literal["assignment", "announcement", "discussion", "page"]
 SEVERITY_ORDER = {"warning": 1, "error": 2}
+MAX_PLAUSIBLE_OFFSET_SPAN = timedelta(hours=28)
 DATE_FIELDS = {
     "due_at",
     "due_date",
@@ -192,13 +193,36 @@ def lint_dates(
         parsed[field] = date
     for earlier, later in (("unlock_at", "due_at"), ("due_at", "lock_at"), ("unlock_at", "lock_at")):
         if earlier in parsed and later in parsed:
-            try:
-                invalid = parsed[earlier] > parsed[later]
-            except TypeError:
-                invalid = False
+            invalid, mixed_timezone = dates_out_of_order(parsed[earlier], parsed[later])
             if invalid:
-                findings.append(finding("date-order", "error", path, f"{earlier} occurs after {later}.", "Put unlock, due, and lock dates in chronological order."))
+                message = (
+                    f"{earlier} occurs after {later}."
+                    if not mixed_timezone
+                    else (
+                        f"{earlier} appears after {later} by the written wall-clock values; "
+                        "one value has no timezone."
+                    )
+                )
+                findings.append(
+                    finding(
+                        "date-order",
+                        "warning" if mixed_timezone else "error",
+                        path,
+                        message,
+                        "Add timezone offsets, then put unlock, due, and lock dates in chronological order.",
+                    )
+                )
     return findings
+
+
+def dates_out_of_order(earlier: datetime, later: datetime) -> tuple[bool, bool]:
+    """Compare source ordering, conservatively handling one ambiguous timezone."""
+    earlier_aware = earlier.tzinfo is not None and earlier.utcoffset() is not None
+    later_aware = later.tzinfo is not None and later.utcoffset() is not None
+    if earlier_aware == later_aware:
+        return earlier > later, False
+    wall_clock_gap = earlier.replace(tzinfo=None) - later.replace(tzinfo=None)
+    return wall_clock_gap > MAX_PLAUSIBLE_OFFSET_SPAN, True
 
 
 def clean_heading(value: str) -> str:

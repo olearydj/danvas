@@ -27,7 +27,15 @@ NOW = dt.datetime(2026, 6, 12, 1, 0, tzinfo=dt.UTC)
 
 def test_status_comparison_preserves_legacy_scalar_semantics() -> None:
     assert values_equal("published", False, None) is True
+    assert values_equal("published", "false", True) is False
+    assert values_equal("published", "no", True) is False
+    assert values_equal("published", "0", True) is False
     assert values_equal("title", "3.10", "3.1") is False
+    assert values_equal(
+        "publish_at",
+        "2026-09-01T10:00:00+00:00",
+        "2026-09-01T10:00:00Z",
+    ) is True
 
 
 def build_snapshot() -> dict[str, Any]:

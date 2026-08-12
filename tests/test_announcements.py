@@ -14,6 +14,8 @@ from danvas.announcements import (
     ANNOUNCEMENT_METADATA_FIELDS,
     announcement_records,
     announcement_update_checks,
+    announcement_verify_checks,
+    announcement_verify_local_source,
     command_announcements_create,
     command_announcements_latest,
     command_announcements_sync,
@@ -517,7 +519,8 @@ Different content.
         encoding="utf-8",
     )
     report_dir = tmp_path / "report"
-    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    fake_canvas = FakeCanvas()
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: fake_canvas)
     args = SimpleNamespace(
         course_id=101,
         project_root=None,
@@ -559,7 +562,8 @@ First body
         encoding="utf-8",
     )
     report_dir = tmp_path / "report"
-    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    fake_canvas = FakeCanvas()
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: fake_canvas)
     args = SimpleNamespace(
         course_id=101,
         project_root=None,
@@ -580,6 +584,7 @@ First body
     assert all(check["matches"] for check in report["checks"])
     assert manifest["command"] == "announcements verify"
     assert manifest["status"] == "success"
+    assert {"include": ["sections"]} in fake_canvas.course.discussion_topic_kwargs
     assert "Announcement verify: matches" in capsys.readouterr().out
 
 
@@ -679,6 +684,66 @@ def test_command_announcements_verify_allows_source_without_title(
     assert "title" in {
         check["field"] for check in report["checks"] if not check["matches"]
     }
+
+
+def test_announcement_verify_ignores_unknown_metadata_but_validates_datetimes(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "announcement.md"
+    source.write_text(
+        "---\ncanvas_id: 1\nfuture_metadata: retained-by-author\n---\n\nFirst body\n",
+        encoding="utf-8",
+    )
+
+    local = announcement_verify_local_source(source)
+
+    assert local["canvas_id"] == 1
+    assert "future_metadata" not in local
+
+    source.write_text(
+        "---\ncanvas_id: 1\ndelayed_post_at: 2026-09-01T09:00:00\n---\n\nFirst body\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit, match="requires Z or an explicit UTC offset"):
+        announcement_verify_local_source(source)
+
+
+def test_announcement_verify_checks_legacy_and_declared_supported_fields() -> None:
+    local = {
+        "title": "First Update",
+        "canvas_url": "https://canvas.example/courses/1/discussion_topics/1",
+        "published": True,
+        "delayed_post_at": "",
+        "lock_at": "",
+        "body_text": "First body",
+        "pinned": True,
+        "specific_sections": [11, 12],
+        "declared_fields": ["pinned", "specific_sections"],
+    }
+    canvas = {
+        "title": "First Update",
+        "html_url": "https://canvas.example/courses/1/discussion_topics/1",
+        "published": True,
+        "message": "First body",
+        "topic": {
+            "pinned": False,
+            "is_section_specific": True,
+            "sections": [{"id": 12}, {"id": 11}],
+        },
+    }
+
+    checks = {row["field"]: row for row in announcement_verify_checks(local, canvas)}
+
+    assert {
+        "title",
+        "canvas_url",
+        "published",
+        "body_text",
+        "pinned",
+        "specific_sections",
+    } <= set(checks)
+    assert checks["pinned"]["matches"] is False
+    assert checks["specific_sections"]["matches"] is True
 
 
 def test_command_announcements_verify_requires_canvas_id(

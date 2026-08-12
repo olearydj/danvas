@@ -22,6 +22,17 @@ def test_parse_frontmatter_requires_yaml_mapping(tmp_path: Path) -> None:
         parse_frontmatter("---\n- one\n- two\n---\nBody\n", source, "Page")
 
 
+def test_parse_frontmatter_reports_invalid_yaml_calendar_date(tmp_path: Path) -> None:
+    source = tmp_path / "bad-date.md"
+
+    with pytest.raises(SystemExit, match="YAML front matter is invalid"):
+        parse_frontmatter(
+            "---\ntitle: Bad\ndue_date: 2026-02-30\n---\nBody\n",
+            source,
+            "Assignment",
+        )
+
+
 def test_parse_toml_frontmatter_round_trips_body(tmp_path: Path) -> None:
     source = tmp_path / "page.md"
 

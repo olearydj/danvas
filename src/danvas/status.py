@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from danvas.authored_content import DATETIME, comparison_check
+from danvas.authored_content import BOOLEAN, DATE_OR_DATETIME, DATETIME, comparison_check
 from danvas.config import (
     COURSE_SNAPSHOT_NAME,
     PARTIAL_SNAPSHOT_EXIT_CODE,
@@ -33,7 +33,14 @@ from danvas.sources import scan_sources
 from danvas.utils import write_json
 
 DEFAULT_MAX_SNAPSHOT_AGE_HOURS = 24.0
-DATE_FIELDS = {"due_at", "unlock_at", "lock_at", "posted_at", "delayed_post_at"}
+DATE_FIELDS = {
+    "due_at",
+    "unlock_at",
+    "lock_at",
+    "posted_at",
+    "delayed_post_at",
+    "publish_at",
+}
 FILE_CLASSIFICATIONS = {
     "present_by_name_and_size": "exact",
     "present_by_name": "filename-only match",
@@ -567,10 +574,15 @@ def values_equal(field: str, local_value: Any, canvas_value: Any) -> bool:
             field,
             local_value,
             canvas_value,
-            policy=DATETIME,
+            policy=DATE_OR_DATETIME if field == "publish_at" else DATETIME,
         )["matches"]
     if isinstance(local_value, bool) or isinstance(canvas_value, bool):
-        return bool(local_value) == bool(canvas_value)
+        return comparison_check(
+            field,
+            local_value,
+            canvas_value,
+            policy=BOOLEAN,
+        )["matches"]
     if isinstance(local_value, (int, float)) and isinstance(canvas_value, (int, float)):
         return float(local_value) == float(canvas_value)
     return local_value == canvas_value

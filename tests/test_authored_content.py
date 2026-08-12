@@ -6,6 +6,7 @@ import pytest
 
 from danvas.authored_content import (
     ALLOWED_EXTENSIONS,
+    BOOLEAN,
     DATE_OR_DATETIME,
     DATETIME,
     EXACT,
@@ -43,6 +44,23 @@ def test_text_policies_do_not_coerce_numeric_looking_text(
 
 def test_normalized_text_keeps_nan_as_text() -> None:
     assert comparison_check("title", "nan", "nan", policy=NORMALIZED_TEXT)["matches"] is True
+
+
+@pytest.mark.parametrize(
+    ("local", "canvas", "matches"),
+    [
+        (False, None, True),
+        ("false", False, True),
+        ("false", True, False),
+        ("true", True, True),
+        ("no", True, False),
+        ("0", True, False),
+    ],
+)
+def test_boolean_policy_uses_closed_textual_vocabulary(
+    local: object, canvas: object, matches: bool
+) -> None:
+    assert comparison_check("published", local, canvas, policy=BOOLEAN)["matches"] is matches
 
 
 def test_datetime_comparison_uses_absolute_instant_and_standard_row() -> None:

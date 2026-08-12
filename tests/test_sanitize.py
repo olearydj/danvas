@@ -60,3 +60,36 @@ def test_recursive_public_sanitizer_drops_keys_and_cleans_strings() -> None:
 def test_sensitive_detector_supports_whole_value_hashing_without_near_matches() -> None:
     assert contains_sensitive_text("comment contains secret=abc")
     assert not contains_sensitive_text("the secretive assignment is complete")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "access_token: eyJabc123",
+        "x-amz-signature: abc123",
+        "secret: hunter2",
+        'token="abc123"',
+        "token='abc123'",
+        "Bearer abc123",
+        "Authorization: Bearer abc123",
+    ],
+)
+def test_sensitive_detector_catches_credential_shaped_text(value: str) -> None:
+    assert contains_sensitive_text(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Policy: late work is accepted through Friday.",
+        "This accommodation expires: Friday.",
+        "The bearer of the group report should submit it.",
+    ],
+)
+def test_sensitive_detector_preserves_benign_prose(value: str) -> None:
+    assert not contains_sensitive_text(value)
+
+
+@pytest.mark.parametrize("value", ['token="abc123"', "token='abc123'"])
+def test_sanitize_error_redacts_quoted_credentials(value: str) -> None:
+    assert "abc123" not in sanitize_error(value)

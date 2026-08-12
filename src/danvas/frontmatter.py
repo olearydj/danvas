@@ -33,7 +33,7 @@ def parse_frontmatter(text: str, source: Path, label: str) -> tuple[dict[str, An
     else:
         try:
             metadata = yaml.safe_load(metadata_text) or {}
-        except yaml.YAMLError as exc:
+        except (yaml.YAMLError, ValueError) as exc:
             raise SystemExit(f"{label} YAML front matter is invalid: {source}") from exc
         if not isinstance(metadata, dict):
             raise SystemExit(f"{label} YAML front matter must be a mapping: {source}")

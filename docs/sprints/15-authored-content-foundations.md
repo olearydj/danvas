@@ -249,11 +249,13 @@ be attributed to one boundary.
 - Page date-only `publish_at` remains supported;
 - booleans, numeric strings, whitespace, and order-insensitive extension lists
   retain current intended semantics;
-- exact Page/status text and normalized announcement text do not acquire numeric
-  coercion from assignment/discussion scalar policies;
+- normalized Page/announcement text and exact general status text do not acquire
+  numeric coercion from assignment/discussion scalar policies;
+- Page and status booleans use a closed `true`/`false` textual vocabulary;
 - every accepted comparable field has an explicit policy;
-- announcement verify retains its pre-0.12 fixed field scope and does not require
-  title front matter, while update still requires a title;
+- announcement verify checks its pre-0.12 fixed field scope plus every declared
+  supported field and does not require title front matter, while update still
+  requires a title;
 - section-specific announcement update requests compare against IDs adapted from
   Canvas `include[]=sections` readback;
 - a live-update report and terminal summary are derived from the same readback
@@ -273,6 +275,8 @@ be attributed to one boundary.
   historical token, URL, and verifier markers;
 - benign grading-comment prose containing words such as `policy`, `expires`, or
   `bearer` is retained unless it uses a credential-shaped marker.
+- colon-delimited, quoted, and bare-Bearer credentials remain sensitive for
+  whole-value grade recovery hashing.
 
 ### Snapshot behavior
 
@@ -335,15 +339,16 @@ nested boundaries. `init`, `refresh`, and `status` expose
 `--require-complete`; partial strict runs exit `3` according to the write timing
 defined above, warnings use stderr, and partial reports use partial manifests.
 
-The post-review compatibility pass preserves the domain-specific behavior that
-preceded consolidation: exact Page/status text, normalized announcement text,
-coercive assignment/discussion scalars, announcement verify scope and optional
-title handling, conservative upload-key suppression, benign grade-comment
-prose, structured invalid-date errors, and ordering lint after timezone
-findings. Announcement `specific_sections` readback now requests Canvas section
-data and maps returned section objects to stable IDs.
+The post-review compatibility passes preserve domain-specific behavior around
+consolidation: normalized Page/announcement text, exact general status text,
+closed boolean coercion, coercive assignment/discussion scalars, fixed-plus-
+declared announcement verification with optional title handling, conservative
+upload-key suppression, bidirectional grade-comment sensitivity, centralized
+structured YAML/date errors, and conservative ordering lint after timezone
+findings. Announcement `specific_sections` readback requests Canvas section data
+and maps returned section objects to stable IDs.
 
-Local verification on 2026-08-12 passes Ruff, ty, and all 497 tests in a clean
+Local verification on 2026-08-12 passes Ruff, ty, and all 521 tests in a clean
 frozen environment. The package and lock metadata are synchronized at 0.12.0;
 isolated editable and wheel release smoke also passes for that exact version. A
 bounded acceptance in sandbox course 1576638 created announcement 10917561 for

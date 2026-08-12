@@ -38,17 +38,26 @@ EMBEDDED_SENSITIVE_NAMES = {
 
 URLISH_RE = re.compile(r"https?://\S+|[A-Za-z]+://\S+")
 AUTHORIZATION_RE = re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer|bearer)\s+[^\s,;]+")
+SENSITIVE_NAME_PATTERN = (
+    r"(?:access_)?token|verifier|secret|api[_-]?key|secure[_-]?params|signature|policy|"
+    r"expires|key[_-]?pair[_-]?id|awsaccesskeyid|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+"
+)
+CREDENTIAL_NAME_PATTERN = (
+    r"(?:access_)?token|verifier|secret|api[_-]?key|secure[_-]?params|signature|"
+    r"key[_-]?pair[_-]?id|awsaccesskeyid|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+"
+)
+ASSIGNED_VALUE_PATTERN = r'(?:"[^"\r\n]+"|\'[^\'\r\n]+\'|[^&\s,;"\']+)'
 SENSITIVE_VALUE_RE = re.compile(
     r"(?i)(?<![A-Za-z0-9])"
-    r"((?:access_)?token|verifier|secret|api[_-]?key|secure[_-]?params|signature|policy|"
-    r"expires|key[_-]?pair[_-]?id|awsaccesskeyid|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+)"
-    r"\s*([=:])\s*([^&\s,;\"']+)"
+    rf"({SENSITIVE_NAME_PATTERN})"
+    rf"\s*([=:])\s*({ASSIGNED_VALUE_PATTERN})"
 )
 SENSITIVE_TEXT_RE = re.compile(
-    r"(?i)(?:access[_-]?token|token|verifier|secret|api[_-]?key|secure[_-]?params|"
-    r"signature|policy|expires|key[_-]?pair[_-]?id|awsaccesskeyid|"
-    r"x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+)\s*=\s*[^&\s,;\"']+"
-    r"|authorization\s*[:=]\s*bearer\s+[^\s,;]+"
+    rf"(?i)(?<![A-Za-z0-9])(?:{CREDENTIAL_NAME_PATTERN})\s*[:=]\s*"
+    rf"{ASSIGNED_VALUE_PATTERN}"
+    rf"|(?<![A-Za-z0-9])(?:policy|expires)\s*=\s*{ASSIGNED_VALUE_PATTERN}"
+    r"|\bauthorization\s*[:=]\s*bearer\s+[^\s,;]+"
+    r"|\bbearer\s+(?!of\b)[^\s,;]+"
 )
 
 

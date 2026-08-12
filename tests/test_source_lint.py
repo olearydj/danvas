@@ -86,6 +86,30 @@ def test_naive_timestamps_still_receive_ordering_lint(tmp_path: Path) -> None:
     assert "date-order" in rule_ids(record)
 
 
+def test_mixed_timezone_ordering_lints_only_beyond_offset_uncertainty(
+    tmp_path: Path,
+) -> None:
+    clear_violation = write(
+        tmp_path / "clear.md",
+        "---\ntitle: Clear\nunlock_at: 2026-07-13T17:00:00\n"
+        "due_at: 2026-07-10T17:00:00Z\n---\nComplete the work.\n",
+    )
+    uncertain = write(
+        tmp_path / "uncertain.md",
+        "---\ntitle: Uncertain\nunlock_at: 2026-07-11T01:00:00\n"
+        "due_at: 2026-07-10T17:00:00Z\n---\nComplete the work.\n",
+    )
+
+    clear_record = lint_source(clear_violation, kind="assignment", project_root=tmp_path)
+    uncertain_record = lint_source(uncertain, kind="assignment", project_root=tmp_path)
+
+    assert "date-order" in rule_ids(clear_record)
+    assert "written wall-clock values" in next(
+        item["message"] for item in clear_record["findings"] if item["rule_id"] == "date-order"
+    )
+    assert "date-order" not in rule_ids(uncertain_record)
+
+
 def test_page_rules_catch_unsafe_html_and_publication_conflict(tmp_path: Path) -> None:
     source = write(
         tmp_path / "page.html",

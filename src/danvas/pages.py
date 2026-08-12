@@ -25,9 +25,11 @@ from markdown.treeprocessors import Treeprocessor
 
 from danvas.auth import canvas_from_args
 from danvas.authored_content import (
+    BOOLEAN,
     DATE_OR_DATETIME,
-    EXACT,
+    NORMALIZED_TEXT,
     ComparisonPolicy,
+    comparable_value,
     comparison_check,
     datetime_values_match,
     require_valid_datetimes,
@@ -54,8 +56,11 @@ PAGE_METADATA_COMPARE_FIELDS = {
     "publish_at",
 }
 PAGE_METADATA_FIELD_POLICIES: dict[str, ComparisonPolicy] = {
-    field: (DATE_OR_DATETIME if field == "publish_at" else EXACT)
-    for field in PAGE_METADATA_COMPARE_FIELDS
+    "title": NORMALIZED_TEXT,
+    "published": BOOLEAN,
+    "front_page": BOOLEAN,
+    "editing_roles": NORMALIZED_TEXT,
+    "publish_at": DATE_OR_DATETIME,
 }
 
 ALLOWED_TAGS = {
@@ -363,6 +368,11 @@ def normalize_page_metadata(metadata: dict[str, Any], source: Path) -> dict[str,
     result.setdefault("published", False)
     result.setdefault("front_page", False)
     result.setdefault("notify_of_update", False)
+    for field in ("published", "front_page", "notify_of_update"):
+        normalized = comparable_value(result[field], BOOLEAN)
+        if not isinstance(normalized, bool):
+            raise SystemExit(f"Page {field} must be true or false: {source}")
+        result[field] = normalized
     if result.get("css_policy", "strict") != "strict":
         raise SystemExit("Only css_policy: strict is supported.")
     return result

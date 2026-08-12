@@ -175,16 +175,20 @@ partial-snapshot usability. Initial implementation verification passed Ruff, ty,
 and all 482 tests in a clean frozen environment. No Canvas mutation or new
 command family is included.
 
-A post-review correction pass adds characterization coverage for the 0.11
-contracts that the initial consolidation did not pin. Exact Page/status text no
-longer receives numeric coercion; announcement verification retains its fixed
-field scope and optional title; section-specific updates adapt IDs from Canvas
-section-inclusive readback; upload failures retain conservative compound-key
-suppression; benign grading prose is not over-redacted; and invalid date aliases
-and timezone-naive ordering lint remain structured. Ruff, ty, and all 497 tests
-pass after the corrections, as does isolated editable/wheel release smoke. A
-disposable section-specific announcement in sandbox course 1576638 read back
-the requested section ID and was confirmed absent after cleanup.
+Post-review correction passes add characterization coverage for the surrounding
+contracts that the initial consolidation did not pin. Field-specific Page,
+announcement, and status text/boolean policies avoid both over-coercion and
+over-literal comparison. Announcement verification checks the legacy fixed set
+plus declared supported fields while retaining optional title and datetime
+validation. Section-specific reads adapt IDs from Canvas section-inclusive
+responses. Upload failures retain conservative compound-key suppression, while
+grade recovery detects colon-delimited, quoted, and bare-Bearer credentials
+without treating benign policy/expires/bearer prose as secret. YAML calendar
+errors are centralized and mixed-timezone ordering lint is conservative. Ruff,
+ty, and all 521 tests pass after the corrections. Isolated editable/wheel
+release smoke also passes. A disposable section-specific announcement in
+sandbox course 1576638 read back the requested section ID and was confirmed
+absent after cleanup.
 
 ## Delivered Baseline
 

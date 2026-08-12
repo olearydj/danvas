@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 ComparisonPolicy = Literal[
     "scalar",
+    "boolean",
     "exact",
     "normalized-text",
     "datetime",
@@ -19,6 +20,7 @@ ComparisonPolicy = Literal[
 ]
 
 SCALAR: ComparisonPolicy = "scalar"
+BOOLEAN: ComparisonPolicy = "boolean"
 EXACT: ComparisonPolicy = "exact"
 NORMALIZED_TEXT: ComparisonPolicy = "normalized-text"
 DATETIME: ComparisonPolicy = "datetime"
@@ -58,6 +60,18 @@ def normalized_text(value: str) -> str:
 
 def comparable_value(value: Any, policy: ComparisonPolicy = SCALAR) -> Any:
     """Return a stable evidence value under an explicit field policy."""
+    if policy == BOOLEAN:
+        if value is None:
+            return False
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = normalized_text(value).casefold()
+            if normalized == "true":
+                return True
+            if normalized == "false":
+                return False
+        return value
     if policy == EXACT:
         return value
     if policy == NORMALIZED_TEXT:
