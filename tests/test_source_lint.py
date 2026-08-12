@@ -73,6 +73,19 @@ def test_page_date_only_passes_but_discussion_date_only_fails_timezone_lint(
     assert "date-timezone" not in rule_ids(page_record)
 
 
+def test_naive_timestamps_still_receive_ordering_lint(tmp_path: Path) -> None:
+    source = write(
+        tmp_path / "assignment.md",
+        "---\ntitle: Work\nunlock_at: 2026-07-12T17:00:00\n"
+        "due_at: 2026-07-10T17:00:00\n---\nComplete the work.\n",
+    )
+
+    record = lint_source(source, kind="assignment", project_root=tmp_path)
+
+    assert "date-timezone" in rule_ids(record)
+    assert "date-order" in rule_ids(record)
+
+
 def test_page_rules_catch_unsafe_html_and_publication_conflict(tmp_path: Path) -> None:
     source = write(
         tmp_path / "page.html",

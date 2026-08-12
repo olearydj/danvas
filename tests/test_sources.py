@@ -112,6 +112,27 @@ def test_scan_sources_expands_assignment_date_alias_for_status_comparison(
     assert records[0]["metadata"]["due_at"] == "2026-09-01T23:59:00-05:00"
 
 
+def test_scan_sources_records_invalid_assignment_date_alias_without_raising(
+    tmp_path: Path,
+) -> None:
+    write(
+        tmp_path / ".danvas" / "config.toml",
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+    )
+    write(
+        tmp_path / "content" / "assignments" / "work.md",
+        '---\ntitle: Work\ndue_date: "2026-02-30"\n---\n\nSubmit.\n',
+    )
+
+    records = scan_sources(
+        tmp_path,
+        source_config={"assignments": {"include": ["content/assignments/*.md"]}},
+    )
+
+    assert len(records) == 1
+    assert "due_date must be a valid date" in records[0]["error"]
+
+
 def test_scan_sources_can_report_unmarked_configured_assignment_errors(
     tmp_path: Path,
 ) -> None:

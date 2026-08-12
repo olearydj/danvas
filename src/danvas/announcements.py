@@ -14,6 +14,7 @@ from canvasapi.exceptions import ResourceDoesNotExist
 from danvas.auth import canvas_from_args
 from danvas.authored_content import (
     DATETIME,
+    NORMALIZED_TEXT,
     SCALAR,
     UNORDERED_SEQUENCE,
     ComparisonPolicy,
@@ -56,6 +57,14 @@ ANNOUNCEMENT_PROVENANCE_FIELDS = {
     "posted_at",
 }
 ANNOUNCEMENT_COMPARE_FIELDS = ANNOUNCEMENT_METADATA_FIELDS | {"body_text", "canvas_url"}
+ANNOUNCEMENT_VERIFY_FIELDS = (
+    "title",
+    "canvas_url",
+    "published",
+    "delayed_post_at",
+    "lock_at",
+    "body_text",
+)
 ANNOUNCEMENT_DATETIME_FIELDS = {"delayed_post_at", "lock_at"}
 ANNOUNCEMENT_FIELD_POLICIES: dict[str, ComparisonPolicy] = {
     field: SCALAR for field in ANNOUNCEMENT_COMPARE_FIELDS
@@ -63,6 +72,10 @@ ANNOUNCEMENT_FIELD_POLICIES: dict[str, ComparisonPolicy] = {
 ANNOUNCEMENT_FIELD_POLICIES.update(
     {
         **{field: DATETIME for field in ANNOUNCEMENT_DATETIME_FIELDS},
+        **{
+            field: NORMALIZED_TEXT
+            for field in {"body_text", "canvas_url", "discussion_type", "title"}
+        },
         "specific_sections": UNORDERED_SEQUENCE,
     }
 )
@@ -247,7 +260,7 @@ def command_announcements_update(args: Any) -> None:
     )
     updated = topic.update(**update_payload)
     updated_id = int(first_value(updated, canvas_object_to_dict(updated), "id") or report["canvas_id"])
-    readback = course.get_discussion_topic(updated_id)
+    readback = course.get_discussion_topic(updated_id, include=["sections"])
     canvas_after = announcement_update_canvas_record(course, readback)
     final_report = build_announcement_update_report(
         course=course,
@@ -384,6 +397,7 @@ def announcement_record(course: Any, topic: Any, reply_user_id: int) -> dict[str
         "lock_at": first_value(topic, topic_payload, "lock_at"),
         "locked": first_value(topic, topic_payload, "locked"),
         "published": first_value(topic, topic_payload, "published"),
+        "specific_sections": announcement_specific_sections(topic_payload),
         "last_reply_at": first_value(topic, topic_payload, "last_reply_at"),
         "html_url": first_value(topic, topic_payload, "html_url"),
         "author": announcement_author(topic, topic_payload, full_topic),
@@ -398,6 +412,21 @@ def announcement_update_canvas_record(course: Any, topic: Any) -> dict[str, Any]
     return announcement_record(course, topic, reply_user_id=0)
 
 
+def announcement_specific_sections(payload: dict[str, Any]) -> Any:
+    direct = payload.get("specific_sections")
+    if direct not in (None, ""):
+        return direct
+    sections = payload.get("sections")
+    if isinstance(sections, list):
+        return [
+            section.get("id") if isinstance(section, dict) else getattr(section, "id", section)
+            for section in sections
+        ]
+    if payload.get("is_section_specific") is False:
+        return []
+    return None
+
+
 def resolve_announcement_for_update(
     course: Any, resolved: dict[str, Any]
 ) -> tuple[Any | None, dict[str, Any]]:
@@ -409,7 +438,7 @@ def resolve_announcement_for_update(
             "reason": "Announcement update requires --announcement-id, canvas_id front matter, or source-map entry.",
         }
     try:
-        topic = course.get_discussion_topic(canvas_id)
+        topic = course.get_discussion_topic(canvas_id, include=["sections"])
     except (ResourceDoesNotExist, KeyError):
         return None, {
             "method": resolved["source"],
@@ -705,17 +734,26 @@ def render_announcement_source_markdown(record: dict[str, Any]) -> str:
 def announcement_verify_local_source(
     source: Path, announcement_id: int | None = None
 ) -> dict[str, Any]:
-    parsed = announcement_update_local_source(source)
-    metadata, _body = parse_frontmatter(
+    metadata, body = parse_frontmatter(
         source.read_text(encoding="utf-8-sig"), source, "Announcement"
     )
-    canvas_id = announcement_id if announcement_id is not None else parsed["frontmatter_id"]
+    unknown = sorted(
+        set(metadata) - ANNOUNCEMENT_METADATA_FIELDS - ANNOUNCEMENT_PROVENANCE_FIELDS
+    )
+    if unknown:
+        raise SystemExit(f"Unsupported announcement metadata field(s): {', '.join(unknown)}")
+    validate_announcement_datetimes(metadata)
+    canvas_id = announcement_id if announcement_id is not None else metadata.get("canvas_id")
     if canvas_id is None or str(canvas_id).strip() == "":
         raise SystemExit("Announcement verification requires --announcement-id or canvas_id front matter.")
-    return announcement_update_local_compare_record(parsed) | {
+    return {
         "canvas_id": int(canvas_id),
         "canvas_url": str(metadata.get("canvas_url") or ""),
-        "declared_fields": parsed["declared_fields"],
+        "title": str(metadata.get("title") or ""),
+        "published": metadata.get("published"),
+        "delayed_post_at": str(metadata.get("delayed_post_at") or ""),
+        "lock_at": str(metadata.get("lock_at") or ""),
+        "body_text": normalized_text(html_to_text(markdown_to_html(body))),
     }
 
 
@@ -814,7 +852,10 @@ def announcement_canvas_compare_record(canvas_record: dict[str, Any]) -> dict[st
     result = {}
     for field in ANNOUNCEMENT_METADATA_FIELDS:
         value = canvas_record.get(field)
-        result[field] = raw.get(field) if value is None or value == "" else value
+        if field == "specific_sections" and (value is None or value == ""):
+            result[field] = announcement_specific_sections(raw)
+        else:
+            result[field] = raw.get(field) if value is None or value == "" else value
     result["canvas_url"] = canvas_record.get("html_url") or ""
     result["body_text"] = normalized_text(str(canvas_record.get("message") or ""))
     return result
@@ -882,19 +923,36 @@ def write_announcement_source_map_entry(
 def announcement_verify_checks(
     local: dict[str, Any], canvas_record: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    fields = set(local.get("declared_fields") or []) & ANNOUNCEMENT_COMPARE_FIELDS
     canvas_compare = announcement_canvas_compare_record(canvas_record)
-    checks = [verify_check(field, local.get(field), canvas_compare.get(field)) for field in sorted(fields)]
+    checks = [
+        verify_check(field, local.get(field), canvas_compare.get(field))
+        for field in ANNOUNCEMENT_VERIFY_FIELDS
+    ]
     return [check for check in checks if check["local"] != "" or check["canvas"] != ""]
 
 
 def verify_check(field: str, local_value: Any, canvas_value: Any) -> dict[str, Any]:
+    if field == "specific_sections":
+        local_value = canonical_specific_sections(local_value)
+        canvas_value = canonical_specific_sections(canvas_value)
     return comparison_check(
         field,
         local_value,
         canvas_value,
         policy=ANNOUNCEMENT_FIELD_POLICIES[field],
     )
+
+
+def canonical_specific_sections(value: Any) -> list[Any]:
+    if value is None or value == "" or str(value).strip().casefold() == "all":
+        return []
+    values = value.split(",") if isinstance(value, str) else value
+    if not isinstance(values, (list, tuple, set)):
+        values = [values]
+    return [
+        item.get("id") if isinstance(item, dict) else getattr(item, "id", item)
+        for item in values
+    ]
 
 
 def make_announcement_verify_report_run(args: Any, report: dict[str, Any]) -> ReportRun | None:

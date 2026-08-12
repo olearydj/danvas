@@ -26,7 +26,7 @@ from markdown.treeprocessors import Treeprocessor
 from danvas.auth import canvas_from_args
 from danvas.authored_content import (
     DATE_OR_DATETIME,
-    SCALAR,
+    EXACT,
     ComparisonPolicy,
     comparison_check,
     datetime_values_match,
@@ -54,7 +54,7 @@ PAGE_METADATA_COMPARE_FIELDS = {
     "publish_at",
 }
 PAGE_METADATA_FIELD_POLICIES: dict[str, ComparisonPolicy] = {
-    field: (DATE_OR_DATETIME if field == "publish_at" else SCALAR)
+    field: (DATE_OR_DATETIME if field == "publish_at" else EXACT)
     for field in PAGE_METADATA_COMPARE_FIELDS
 }
 

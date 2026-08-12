@@ -8,6 +8,8 @@ from danvas.authored_content import (
     ALLOWED_EXTENSIONS,
     DATE_OR_DATETIME,
     DATETIME,
+    EXACT,
+    NORMALIZED_TEXT,
     UNORDERED_SEQUENCE,
     comparable_value,
     comparison_check,
@@ -26,6 +28,21 @@ def test_scalar_and_sequence_policies_are_explicit() -> None:
         "docx",
         "pdf",
     ]
+
+
+@pytest.mark.parametrize(
+    ("local", "canvas"),
+    [("3.10", "3.1"), ("0100", "100")],
+)
+def test_text_policies_do_not_coerce_numeric_looking_text(
+    local: str, canvas: str
+) -> None:
+    assert comparison_check("title", local, canvas, policy=NORMALIZED_TEXT)["matches"] is False
+    assert comparison_check("title", local, canvas, policy=EXACT)["matches"] is False
+
+
+def test_normalized_text_keeps_nan_as_text() -> None:
+    assert comparison_check("title", "nan", "nan", policy=NORMALIZED_TEXT)["matches"] is True
 
 
 def test_datetime_comparison_uses_absolute_instant_and_standard_row() -> None:

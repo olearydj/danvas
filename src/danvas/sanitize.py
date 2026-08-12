@@ -25,6 +25,16 @@ SENSITIVE_NAMES = {
     "url",
     "verifier",
 }
+EMBEDDED_SENSITIVE_NAMES = {
+    "download_url",
+    "error_url",
+    "file_param",
+    "file_url",
+    "token",
+    "upload_url",
+    "url",
+    "verifier",
+}
 
 URLISH_RE = re.compile(r"https?://\S+|[A-Za-z]+://\S+")
 AUTHORIZATION_RE = re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer|bearer)\s+[^\s,;]+")
@@ -37,8 +47,8 @@ SENSITIVE_VALUE_RE = re.compile(
 SENSITIVE_TEXT_RE = re.compile(
     r"(?i)(?:access[_-]?token|token|verifier|secret|api[_-]?key|secure[_-]?params|"
     r"signature|policy|expires|key[_-]?pair[_-]?id|awsaccesskeyid|"
-    r"x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+)\s*[=:]"
-    r"|authorization\s*[:=]\s*bearer\s+|\bbearer\s+"
+    r"x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+)\s*=\s*[^&\s,;\"']+"
+    r"|authorization\s*[:=]\s*bearer\s+[^\s,;]+"
 )
 
 
@@ -46,13 +56,14 @@ def normalize_sensitive_name(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.casefold()).strip("_")
 
 
-def is_sensitive_key(key: str) -> bool:
-    """Recognize canonical sensitive keys and signed-cloud key families."""
+def is_sensitive_key(key: str, *, embedded: bool = False) -> bool:
+    """Recognize canonical keys, optionally including upload-style embedded names."""
     normalized = normalize_sensitive_name(key)
     return (
         normalized in SENSITIVE_NAMES
         or normalized.startswith("x_amz_")
         or normalized.startswith("x_goog_")
+        or (embedded and any(name in normalized for name in EMBEDDED_SENSITIVE_NAMES))
     )
 
 
@@ -72,18 +83,33 @@ def sanitize_error(value: Any, *, url_marker: str = "[url]") -> str:
     return URLISH_RE.sub(url_marker, text)
 
 
-def sanitize_public(value: Any, *, url_marker: str = "[url]") -> Any:
+def sanitize_public(
+    value: Any,
+    *,
+    url_marker: str = "[url]",
+    embedded_keys: bool = False,
+) -> Any:
     """Drop sensitive keys and recursively sanitize public retained evidence."""
     if isinstance(value, dict):
         return {
-            str(key): sanitize_public(item, url_marker=url_marker)
+            str(key): sanitize_public(
+                item,
+                url_marker=url_marker,
+                embedded_keys=embedded_keys,
+            )
             for key, item in value.items()
-            if not is_sensitive_key(str(key))
+            if not is_sensitive_key(str(key), embedded=embedded_keys)
         }
     if isinstance(value, list):
-        return [sanitize_public(item, url_marker=url_marker) for item in value]
+        return [
+            sanitize_public(item, url_marker=url_marker, embedded_keys=embedded_keys)
+            for item in value
+        ]
     if isinstance(value, tuple):
-        return [sanitize_public(item, url_marker=url_marker) for item in value]
+        return [
+            sanitize_public(item, url_marker=url_marker, embedded_keys=embedded_keys)
+            for item in value
+        ]
     if isinstance(value, str):
         return sanitize_error(value, url_marker=url_marker)
     return value

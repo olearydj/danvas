@@ -16,6 +16,7 @@ from danvas.files import (
     content_type_for,
     download_relative_path,
     local_files,
+    scrub_sensitive_upload_payload,
     write_missing_report,
 )
 
@@ -67,6 +68,17 @@ class FakeCanvas:
     def get_course(self, course_id: int) -> FakeCourse:
         assert course_id == 101
         return FakeCourse()
+
+
+def test_upload_payload_scrubber_drops_embedded_sensitive_key_names() -> None:
+    payload = {
+        "oauth_token_hint": "secret-token",
+        "callback_url_metadata": "https://canvas.example/upload",
+        "challenge_verifier_copy": "secret-verifier",
+        "message": "safe",
+    }
+
+    assert scrub_sensitive_upload_payload(payload) == {"message": "safe"}
 
 
 class FakeUploadFolder(SimpleNamespace):

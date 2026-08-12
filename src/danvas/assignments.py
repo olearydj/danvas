@@ -1149,7 +1149,10 @@ def parse_date_only_value(field: str, value: Any) -> date:
     text = str(value).strip()
     if not DATE_ONLY_RE.match(text):
         raise SystemExit(f"{field} must be a date-only value in YYYY-MM-DD format.")
-    return date.fromisoformat(text)
+    try:
+        return date.fromisoformat(text)
+    except ValueError as exc:
+        raise SystemExit(f"{field} must be a valid date in YYYY-MM-DD format.") from exc
 
 
 def validate_assignment_datetimes(metadata: dict[str, Any]) -> None:

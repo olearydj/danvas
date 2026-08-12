@@ -171,8 +171,20 @@ announcement, discussion, and Page comparison/datetime primitives; moves
 divergent redaction vocabularies into one dependency-free sanitizer; makes
 `InvalidAccessToken` a fatal credential-wide snapshot failure; and adds opt-in
 `--require-complete` process-level signaling while preserving default
-partial-snapshot usability. Ruff, ty, and all 482 tests pass in a clean frozen
-environment. No Canvas mutation or new command family is included.
+partial-snapshot usability. Initial implementation verification passed Ruff, ty,
+and all 482 tests in a clean frozen environment. No Canvas mutation or new
+command family is included.
+
+A post-review correction pass adds characterization coverage for the 0.11
+contracts that the initial consolidation did not pin. Exact Page/status text no
+longer receives numeric coercion; announcement verification retains its fixed
+field scope and optional title; section-specific updates adapt IDs from Canvas
+section-inclusive readback; upload failures retain conservative compound-key
+suppression; benign grading prose is not over-redacted; and invalid date aliases
+and timezone-naive ordering lint remain structured. Ruff, ty, and all 497 tests
+pass after the corrections, as does isolated editable/wheel release smoke. A
+disposable section-specific announcement in sandbox course 1576638 read back
+the requested section ID and was confirmed absent after cleanup.
 
 ## Delivered Baseline
 

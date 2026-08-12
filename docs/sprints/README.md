@@ -199,4 +199,7 @@ Sprint 15 consolidates authored scalar/datetime comparisons, adds one shared
 sanitization vocabulary, makes `InvalidAccessToken` fatal across snapshot
 collection boundaries, and adds opt-in `--require-complete` exit signaling for
 automation. It adds no Canvas mutation or new authored-content type. Target
-release: 0.12.0. Ruff, ty, and all 482 tests pass in a clean frozen environment.
+release: 0.12.0. A post-review compatibility pass pins pre-consolidation text,
+announcement verify, upload-key, grade-comment, source-error, and lint-ordering
+contracts. Section-specific announcement readback passed a bounded disposable
+sandbox case. Ruff, ty, and all 497 tests pass in a clean frozen environment.

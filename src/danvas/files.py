@@ -989,11 +989,15 @@ def safe_upload_error(payload: dict[str, Any]) -> str:
 
 
 def scrub_sensitive_upload_payload(value: Any) -> Any:
-    return sanitize_public(value, url_marker="[redacted-url]")
+    return sanitize_public(
+        value,
+        url_marker="[redacted-url]",
+        embedded_keys=True,
+    )
 
 
 def is_sensitive_upload_key(key: str) -> bool:
-    return is_sensitive_key(key)
+    return is_sensitive_key(key, embedded=True)
 
 
 def safe_upload_error_text(value: Any) -> str:

@@ -144,6 +144,18 @@ def test_recovery_text_redacts_sensitive_url_parameters() -> None:
     assert "secret-value" not in str(result)
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Policy: late work is accepted through Friday.",
+        "This accommodation expires: Friday.",
+        "The bearer of the group report should submit it.",
+    ],
+)
+def test_recovery_text_preserves_benign_sensitive_vocabulary(text: str) -> None:
+    assert recovery_text(text) == text
+
+
 def test_forward_recovery_requires_representable_grade_baseline() -> None:
     action = {
         "canvas_id": 1,

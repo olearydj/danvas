@@ -235,6 +235,8 @@ def source_record(
             record["source_metadata"] = normalize_canvas_value(metadata)
     except SystemExit as exc:
         record["error"] = str(exc)
+    except ValueError as exc:
+        record["error"] = f"ValueError: {exc}"
     except OSError as exc:
         record["error"] = f"{type(exc).__name__}: {exc}"
     if not record["error"] and not record["title"]:

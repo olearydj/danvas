@@ -25,6 +25,7 @@ from danvas.pages import (
     install_source_no_clobber,
     load_page_source,
     normalize_html_fragment,
+    page_metadata_values_match,
     page_plan,
     page_target_plan,
     publish_at_values_match,
@@ -42,6 +43,10 @@ def write_source(path: Path, body: str, *, published: bool = False, extra: str =
 
 def test_every_supported_page_metadata_field_has_explicit_comparison_policy() -> None:
     assert set(PAGE_METADATA_FIELD_POLICIES) == PAGE_METADATA_COMPARE_FIELDS
+
+
+def test_page_title_comparison_preserves_exact_text_semantics() -> None:
+    assert page_metadata_values_match("title", "3.1", "3.10") is False
 
 
 def test_page_source_rejects_offset_free_publish_timestamp(tmp_path: Path) -> None:

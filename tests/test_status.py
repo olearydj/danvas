@@ -17,11 +17,17 @@ from danvas.status import (
     command_status,
     render_status_lines,
     render_status_markdown,
+    values_equal,
 )
 
 runner = CliRunner()
 
 NOW = dt.datetime(2026, 6, 12, 1, 0, tzinfo=dt.UTC)
+
+
+def test_status_comparison_preserves_legacy_scalar_semantics() -> None:
+    assert values_equal("published", False, None) is True
+    assert values_equal("title", "3.10", "3.1") is False
 
 
 def build_snapshot() -> dict[str, Any]:

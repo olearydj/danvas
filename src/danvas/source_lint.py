@@ -173,6 +173,7 @@ def lint_dates(
                         line=line_for(text, field),
                     )
                 )
+                continue
             else:
                 findings.append(
                     finding(
@@ -184,7 +185,6 @@ def lint_dates(
                         line=line_for(text, field),
                     )
                 )
-            continue
         try:
             date = datetime.fromisoformat(raw.replace("Z", "+00:00"))
         except ValueError:

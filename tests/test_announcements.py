@@ -42,13 +42,37 @@ def test_announcement_source_rejects_offset_free_at_value(tmp_path: Path) -> Non
 def test_every_supported_announcement_field_change_is_compared() -> None:
     for field in ANNOUNCEMENT_METADATA_FIELDS:
         local = {field: "local"}
-        canvas = {"topic": {field: "canvas"}}
+        canvas = (
+            {
+                "topic": {
+                    "is_section_specific": True,
+                    "sections": [{"id": "canvas"}],
+                }
+            }
+            if field == "specific_sections"
+            else {"topic": {field: "canvas"}}
+        )
 
         checks = announcement_update_checks(local, canvas, {field: "local"})
 
         assert len(checks) == 1, field
         assert checks[0]["field"] == field
         assert checks[0]["matches"] is False
+
+
+def test_specific_sections_comparison_uses_canvas_section_readback_shape() -> None:
+    checks = announcement_update_checks(
+        {"specific_sections": [11, 12]},
+        {
+            "topic": {
+                "is_section_specific": True,
+                "sections": [{"id": 12}, {"id": 11}],
+            }
+        },
+        {"specific_sections": [11, 12]},
+    )
+
+    assert checks[0]["matches"] is True
 
 
 class FakeTopic(SimpleNamespace):
@@ -132,12 +156,14 @@ class FakeCourse:
                 "view": [],
             },
         }
+        self.discussion_topic_kwargs: list[dict[str, object]] = []
 
     def get_discussion_topics(self, **kwargs: object) -> list[Any]:
         assert kwargs == {"only_announcements": True}
         return self.topics
 
-    def get_discussion_topic(self, topic_id: int) -> Any:
+    def get_discussion_topic(self, topic_id: int, **kwargs: object) -> Any:
+        self.discussion_topic_kwargs.append(dict(kwargs))
         for topic in self.topics:
             if int(topic.id) == int(topic_id):
                 return topic
@@ -597,6 +623,64 @@ Different body
     assert {"title", "published", "body_text"} <= set(mismatches)
 
 
+def test_command_announcements_verify_retains_legacy_undeclared_field_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "announcement.md"
+    source.write_text(
+        "---\ntitle: First Update\ncanvas_id: 1\n---\n\nFirst body\n",
+        encoding="utf-8",
+    )
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        source=str(source),
+        announcement_id=None,
+        no_report=False,
+        report_root=None,
+        report_dir=str(report_dir),
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        command_announcements_verify(args)
+
+    assert exc.value.code == 1
+    report = json.loads((report_dir / "announcements-verify.json").read_text("utf-8"))
+    mismatches = {check["field"] for check in report["checks"] if not check["matches"]}
+    assert {"canvas_url", "published"} <= mismatches
+
+
+def test_command_announcements_verify_allows_source_without_title(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "announcement.md"
+    source.write_text("---\ncanvas_id: 1\n---\n\nFirst body\n", encoding="utf-8")
+    report_dir = tmp_path / "report"
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=None,
+        source=str(source),
+        announcement_id=None,
+        no_report=False,
+        report_root=None,
+        report_dir=str(report_dir),
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        command_announcements_verify(args)
+
+    assert exc.value.code == 1
+    report = json.loads((report_dir / "announcements-verify.json").read_text("utf-8"))
+    assert "title" in {
+        check["field"] for check in report["checks"] if not check["matches"]
+    }
+
+
 def test_command_announcements_verify_requires_canvas_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -750,6 +834,30 @@ def test_command_announcements_update_uses_source_map_id(
     assert report["status"] == "no_change"
     assert report["id_resolution"]["source"] == "source_map"
     assert report["canvas_id"] == 1
+
+
+def test_command_announcements_update_reads_back_specific_sections(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "announcements" / "first.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "---\ncanvas_id: 1\ntitle: First Update\nspecific_sections: [11, 12]\n"
+        "---\n\nFirst body\n",
+        encoding="utf-8",
+    )
+    fake_canvas = FakeCanvas()
+    topic = next(topic for topic in fake_canvas.course.topics if topic.id == 1)
+    topic.is_section_specific = True
+    topic.sections = [{"id": 12}, {"id": 11}]
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: fake_canvas)
+
+    command_announcements_update(update_args(source, tmp_path / "report"))
+
+    report = json.loads((tmp_path / "report" / "announcements-update.json").read_text("utf-8"))
+    assert report["status"] == "no_change"
+    assert {"include": ["sections"]} in fake_canvas.course.discussion_topic_kwargs
 
 
 def test_command_announcements_update_requires_id(

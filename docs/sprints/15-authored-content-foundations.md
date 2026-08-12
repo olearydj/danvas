@@ -249,7 +249,13 @@ be attributed to one boundary.
 - Page date-only `publish_at` remains supported;
 - booleans, numeric strings, whitespace, and order-insensitive extension lists
   retain current intended semantics;
+- exact Page/status text and normalized announcement text do not acquire numeric
+  coercion from assignment/discussion scalar policies;
 - every accepted comparable field has an explicit policy;
+- announcement verify retains its pre-0.12 fixed field scope and does not require
+  title front matter, while update still requires a title;
+- section-specific announcement update requests compare against IDs adapted from
+  Canvas `include[]=sections` readback;
 - a live-update report and terminal summary are derived from the same readback
   checks.
 
@@ -262,7 +268,11 @@ be attributed to one boundary.
   recovery use the same vocabulary;
 - raw exception URLs, tokens, verifier values, and signed request material never
   appear in terminal output, JSON, Markdown, CSV, or manifests;
-- stable canonical Canvas object links remain available where explicitly safe.
+- stable canonical Canvas object links remain available where explicitly safe;
+- upload-failure projections conservatively drop compound keys containing the
+  historical token, URL, and verifier markers;
+- benign grading-comment prose containing words such as `policy`, `expires`, or
+  `bearer` is retained unless it uses a credential-shaped marker.
 
 ### Snapshot behavior
 
@@ -325,6 +335,18 @@ nested boundaries. `init`, `refresh`, and `status` expose
 `--require-complete`; partial strict runs exit `3` according to the write timing
 defined above, warnings use stderr, and partial reports use partial manifests.
 
-Local verification on 2026-08-12 passes Ruff, ty, and all 482 tests in a clean
+The post-review compatibility pass preserves the domain-specific behavior that
+preceded consolidation: exact Page/status text, normalized announcement text,
+coercive assignment/discussion scalars, announcement verify scope and optional
+title handling, conservative upload-key suppression, benign grade-comment
+prose, structured invalid-date errors, and ordering lint after timezone
+findings. Announcement `specific_sections` readback now requests Canvas section
+data and maps returned section objects to stable IDs.
+
+Local verification on 2026-08-12 passes Ruff, ty, and all 497 tests in a clean
 frozen environment. The package and lock metadata are synchronized at 0.12.0;
-isolated editable and wheel release smoke also passes for that exact version.
+isolated editable and wheel release smoke also passes for that exact version. A
+bounded acceptance in sandbox course 1576638 created announcement 10917561 for
+section 1703367, read the same section ID back through `include[]=sections`,
+reported a matching comparison, and confirmed the disposable announcement no
+longer existed after cleanup.

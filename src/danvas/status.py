@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from danvas.authored_content import DATETIME, SCALAR, comparison_check
+from danvas.authored_content import DATETIME, comparison_check
 from danvas.config import (
     COURSE_SNAPSHOT_NAME,
     PARTIAL_SNAPSHOT_EXIT_CODE,
@@ -562,12 +562,18 @@ def field_diffs(local_metadata: dict[str, Any], canvas_row: dict[str, Any]) -> l
 
 
 def values_equal(field: str, local_value: Any, canvas_value: Any) -> bool:
-    return comparison_check(
-        field,
-        local_value,
-        canvas_value,
-        policy=DATETIME if field in DATE_FIELDS else SCALAR,
-    )["matches"]
+    if field in DATE_FIELDS:
+        return comparison_check(
+            field,
+            local_value,
+            canvas_value,
+            policy=DATETIME,
+        )["matches"]
+    if isinstance(local_value, bool) or isinstance(canvas_value, bool):
+        return bool(local_value) == bool(canvas_value)
+    if isinstance(local_value, (int, float)) and isinstance(canvas_value, (int, float)):
+        return float(local_value) == float(canvas_value)
+    return local_value == canvas_value
 
 
 def normalize_title(value: str) -> str:
