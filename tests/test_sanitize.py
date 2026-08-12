@@ -94,6 +94,7 @@ OPAQUE_CREDENTIAL_VALUES = (
     '"abc123xyz"',
     "'abc123xyz'",
 )
+COLON_RESERVED_NAMES = ("policy", "expires")
 AMBIGUOUS_PROSE_NAMES = ("token", "signature", "policy", "expires", "bearer")
 AMBIGUOUS_PROSE_SEPARATORS = (": ", " ")
 ORDINARY_PROSE_VALUES = (
@@ -104,16 +105,49 @@ ORDINARY_PROSE_VALUES = (
     "n/a",
     "page 3",
 )
+SCHEDULING_PROSE_VALUES = (
+    "2026-09-01",
+    "2026-09-01T23:59:00Z",
+    "11:59pm",
+    "10-point deduction",
+)
 
 
 def credential_assignment_cases() -> list[str]:
     return [
         f"{prefix}{name}{separator}{value}"
+        # Colon-form "policy"/"expires" is deliberately excluded: it collides with
+        # ordinary scheduling prose, so it is reserved for error sanitizing and
+        # asserted by test_colon_reserved_names_are_error_sanitized instead.
         for prefix, name, separator, value in itertools.product(
             CREDENTIAL_PREFIXES,
             DETECTOR_CREDENTIAL_NAMES,
             CREDENTIAL_SEPARATORS,
             OPAQUE_CREDENTIAL_VALUES,
+        )
+        if not (name in COLON_RESERVED_NAMES and ":" in separator)
+    ]
+
+
+def colon_reserved_credential_cases() -> list[str]:
+    return [
+        f"{prefix}{name}{separator}{value}"
+        for prefix, name, separator, value in itertools.product(
+            CREDENTIAL_PREFIXES,
+            COLON_RESERVED_NAMES,
+            (":", " : "),
+            OPAQUE_CREDENTIAL_VALUES,
+        )
+    ]
+
+
+def scheduling_prose_cases() -> list[str]:
+    return [
+        f"{name}{separator}{value}"
+        for name, separator, value in itertools.product(
+            COLON_RESERVED_NAMES,
+            AMBIGUOUS_PROSE_SEPARATORS,
+            SCHEDULING_PROSE_VALUES,
         )
     ]
 
@@ -150,8 +184,26 @@ def test_sensitive_detector_preserves_ambiguous_prose_cross_product() -> None:
     assert not over_redacted, f"ordinary prose detected: {over_redacted[:10]}"
 
 
+def test_colon_reserved_names_are_error_sanitized() -> None:
+    failures = [
+        value
+        for value in colon_reserved_credential_cases()
+        if contains_sensitive_text(value) or "[redacted]" not in sanitize_error(value)
+    ]
+
+    assert not failures, f"colon-reserved handling changed: {failures[:10]}"
+
+
+def test_sensitive_detector_preserves_scheduling_prose() -> None:
+    over_redacted = [value for value in scheduling_prose_cases() if contains_sensitive_text(value)]
+
+    assert not over_redacted, f"scheduling prose detected: {over_redacted[:10]}"
+
+
 def test_sensitive_detector_preserves_embedded_ordinary_vocabulary() -> None:
     prose = (
+        "Your extension expires: 2026-09-01.",
+        "Policy: 2026-09-01 is the cutoff.",
         "This accommodation expires: Friday.",
         "The bearer of the group report should submit it.",
         "Please give this feedback to the bearer directly.",

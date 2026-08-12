@@ -277,15 +277,25 @@ be attributed to one boundary.
   `token`, `signature`, or `bearer` is retained unless it uses a
   credential-shaped marker;
 - explicit equals assignments, unambiguous credential names, and authorization
-  headers remain sensitive, while prose-capable colon fields and bare `Bearer`
-  markers require a credential-shaped payload for whole-value grade recovery
-  hashing;
+  headers remain sensitive, while colon-form `token`/`signature` and bare
+  `Bearer` markers require a credential-shaped payload for whole-value grade
+  recovery hashing;
+- colon-form `policy` and `expires` are reserved for error sanitizing and never
+  trigger whole-comment hashing because they collide with ordinary scheduling
+  prose such as `your extension expires: 2026-09-01`. Equals form still triggers
+  the detector, signed-request error fields are redacted, and signed URLs are
+  removed whole;
 - compound names such as `client_secret`, `refresh_token`, and
   `aws_secret_access_key` remain sensitive even when the recognized credential
   name follows an underscore or hyphen;
 - generated contract matrices cross 14 sensitive names, eight prefixes, four
-  assignment separators, and six opaque value shapes, and separately cross five
-  ambiguous names with two prose separators and six ordinary prose shapes;
+  assignment separators, and six opaque value shapes, excluding colon-form
+  `policy`/`expires`, which a separate matrix asserts are error-sanitized but not
+  detector-flagged;
+- prose matrices cross five ambiguous names with two prose separators and six
+  ordinary prose shapes, plus `policy`/`expires` against date, timestamp,
+  clock-time, and hyphenated-number values so scheduling prose cannot regress
+  into the detector;
 - alpha-only ambiguous colon and bare-Bearer payloads are an accepted limitation
   of grade-evidence detection. The error sanitizer still redacts those markers,
   but grade-comment preservation wins when there is no digit, token punctuation,
@@ -361,7 +371,7 @@ structured YAML/date errors, and conservative ordering lint after timezone
 findings. Announcement `specific_sections` readback requests Canvas section data
 and maps returned section objects to stable IDs.
 
-Local verification on 2026-08-12 passes Ruff, ty, and all 527 tests in a clean
+Local verification on 2026-08-12 passes Ruff, ty, and all 529 tests in a clean
 frozen environment. The package and lock metadata are synchronized at 0.12.0;
 isolated editable and wheel release smoke also passes for that exact version. A
 bounded acceptance in sandbox course 1576638 created announcement 10917561 for

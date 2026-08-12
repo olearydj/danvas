@@ -60,8 +60,12 @@ AMBIGUOUS_EQUALS_RE = re.compile(
     rf"(?i)(?<![A-Za-z0-9])(?:token|signature|policy|expires)\s*=\s*"
     rf"{ASSIGNED_VALUE_PATTERN}"
 )
+# "policy" and "expires" are omitted here on purpose: colon forms commonly read
+# as grading prose ("your extension expires: 2026-09-01"). Signed-request forms
+# stay covered by SENSITIVE_VALUE_RE for error sanitizing instead of making the
+# whole-comment guard discard prose-capable recovery rows.
 AMBIGUOUS_COLON_RE = re.compile(
-    rf"(?i)(?<![A-Za-z0-9])(?:token|signature|policy|expires)\s*:\s*"
+    rf"(?i)(?<![A-Za-z0-9])(?:token|signature)\s*:\s*"
     rf"(?P<value>{ASSIGNED_VALUE_PATTERN})"
 )
 AUTHORIZATION_BEARER_RE = re.compile(
