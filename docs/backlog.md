@@ -163,9 +163,9 @@ values. The same review pass hardens grade evidence preflight: nonblank
 malformed rows and duplicate normalized Canvas IDs now fail before Canvas
 access, so verification and recovery cannot silently omit or mispair intent.
 
-## 0.12.0 Structural Foundations Implementation
+## 0.12.0 Structural Foundations Release
 
-Sprint 15 is implemented locally in
+Sprint 15 shipped in 0.12.0 and is documented in
 `docs/sprints/15-authored-content-foundations.md`. It consolidates assignment,
 announcement, discussion, and Page comparison/datetime primitives; moves
 divergent redaction vocabularies into one dependency-free sanitizer; makes
@@ -191,14 +191,14 @@ prose such as `your extension expires: 2026-09-01` keeps its recovery row.
 Generated matrices cover 2,496 credential name/prefix/separator/value
 combinations, 192 colon-reserved combinations, 60 ambiguous prose combinations,
 and 16 scheduling-prose combinations. Compound credential names and
-`aws_secret_access_key` remain
-sensitive across both grade-evidence and error-sanitization paths. Alpha-only
+`aws_secret_access_key` remain sensitive across both grade-evidence and
+error-sanitization paths. Alpha-only
 ambiguous colon and bare-Bearer payloads remain an accepted detector limitation:
 preserving ordinary prose takes priority when no digit or token marker is
 present. YAML calendar errors are centralized and mixed-timezone ordering lint
 is conservative. Ruff, ty, and all 529 tests pass after the corrections.
-Isolated editable/wheel
-release smoke also passes. A disposable section-specific announcement in
+Isolated editable/wheel release smoke also passes. A disposable
+section-specific announcement in
 sandbox course 1576638 read back the requested section ID and was confirmed
 absent after cleanup.
 
@@ -1502,11 +1502,9 @@ initiating its native instructor gradebook CSV export.
 
 ### Current Priority Order
 
-Complete the structural release before opening another authored-content command
-family:
+Sprint 15 shipped in 0.12.0. Before opening another major command family:
 
-1. Review and close the locally implemented Sprint 15 / 0.12.0 release.
-2. Reassess grouped case setup versus Markdown asset rewriting for the next
+1. Reassess grouped case setup versus Markdown asset rewriting for the next
    sprint; neither is pulled into Sprint 15.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the

@@ -1,6 +1,6 @@
 # Sprint 15: Authored-Content Foundations And Snapshot Signaling
 
-Status: implemented locally on 2026-08-12. Target release: 0.12.0.
+Status: released as 0.12.0 on 2026-08-12.
 
 ## Outcome
 

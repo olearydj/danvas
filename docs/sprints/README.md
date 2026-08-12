@@ -198,8 +198,8 @@ The implemented structural slice is:
 Sprint 15 consolidates authored scalar/datetime comparisons, adds one shared
 sanitization vocabulary, makes `InvalidAccessToken` fatal across snapshot
 collection boundaries, and adds opt-in `--require-complete` exit signaling for
-automation. It adds no Canvas mutation or new authored-content type. Target
-release: 0.12.0. Post-review compatibility passes pin field-specific text and
+automation. It adds no Canvas mutation or new authored-content type. Released as
+0.12.0. Post-review compatibility passes pin field-specific text and
 boolean semantics, fixed-plus-declared announcement verification, upload-key and
 bidirectional grade-comment protection, centralized source errors, and
 timezone-aware lint-ordering contracts. Section-specific announcement readback
