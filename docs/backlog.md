@@ -185,9 +185,15 @@ responses. Upload failures retain conservative compound-key suppression, while
 grade recovery detects colon-delimited, quoted, and bare-Bearer credentials
 without treating benign policy/expires/token/signature/bearer prose as secret.
 Prose-capable colon fields and bare `Bearer` markers require a credential-shaped
-payload, while explicit equals assignments remain sensitive. YAML calendar
-errors are centralized and mixed-timezone ordering lint is conservative. Ruff,
-ty, and all 540 tests pass after the corrections. Isolated editable/wheel
+payload, while explicit equals assignments remain sensitive. Generated matrices
+cover 2,688 credential name/prefix/separator/value combinations and 60 ambiguous
+prose combinations. Compound credential names and `aws_secret_access_key` remain
+sensitive across both grade-evidence and error-sanitization paths. Alpha-only
+ambiguous colon and bare-Bearer payloads remain an accepted detector limitation:
+preserving ordinary prose takes priority when no digit or token marker is
+present. YAML calendar errors are centralized and mixed-timezone ordering lint
+is conservative. Ruff, ty, and all 527 tests pass after the corrections.
+Isolated editable/wheel
 release smoke also passes. A disposable section-specific announcement in
 sandbox course 1576638 read back the requested section ID and was confirmed
 absent after cleanup.

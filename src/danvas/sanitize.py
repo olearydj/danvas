@@ -10,6 +10,7 @@ SENSITIVE_NAMES = {
     "api_key",
     "authorization",
     "awsaccesskeyid",
+    "aws_secret_access_key",
     "download_url",
     "error_url",
     "expires",
@@ -40,7 +41,8 @@ URLISH_RE = re.compile(r"https?://\S+|[A-Za-z]+://\S+")
 AUTHORIZATION_RE = re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer|bearer)\s+[^\s,;]+")
 SENSITIVE_NAME_PATTERN = (
     r"(?:access_)?token|verifier|secret|api[_-]?key|secure[_-]?params|signature|policy|"
-    r"expires|key[_-]?pair[_-]?id|awsaccesskeyid|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+"
+    r"expires|key[_-]?pair[_-]?id|awsaccesskeyid|aws[_-]?secret[_-]?access[_-]?key|"
+    r"x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+"
 )
 ASSIGNED_VALUE_PATTERN = r'(?:"[^"\r\n]+"|\'[^\'\r\n]+\'|[^&\s,;"\']+)'
 SENSITIVE_VALUE_RE = re.compile(
@@ -49,22 +51,24 @@ SENSITIVE_VALUE_RE = re.compile(
     rf"\s*([=:])\s*({ASSIGNED_VALUE_PATTERN})"
 )
 UNAMBIGUOUS_CREDENTIAL_RE = re.compile(
-    rf"(?i)(?<![A-Za-z0-9_-])(?:access[_-]?token|verifier|secret|api[_-]?key|"
-    rf"secure[_-]?params|key[_-]?pair[_-]?id|awsaccesskeyid|x-amz-[a-z0-9-]+|"
-    rf"x-goog-[a-z0-9-]+)\s*[:=]\s*{ASSIGNED_VALUE_PATTERN}"
+    rf"(?i)(?<![A-Za-z0-9])(?:access[_-]?token|verifier|secret|api[_-]?key|"
+    rf"secure[_-]?params|key[_-]?pair[_-]?id|awsaccesskeyid|"
+    rf"aws[_-]?secret[_-]?access[_-]?key|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+)"
+    rf"\s*[:=]\s*{ASSIGNED_VALUE_PATTERN}"
 )
 AMBIGUOUS_EQUALS_RE = re.compile(
-    rf"(?i)(?<![A-Za-z0-9_-])(?:token|signature|policy|expires)\s*=\s*"
+    rf"(?i)(?<![A-Za-z0-9])(?:token|signature|policy|expires)\s*=\s*"
     rf"{ASSIGNED_VALUE_PATTERN}"
 )
 AMBIGUOUS_COLON_RE = re.compile(
-    rf"(?i)(?<![A-Za-z0-9_-])(?:token|signature)\s*:\s*"
+    rf"(?i)(?<![A-Za-z0-9])(?:token|signature|policy|expires)\s*:\s*"
     rf"(?P<value>{ASSIGNED_VALUE_PATTERN})"
 )
 AUTHORIZATION_BEARER_RE = re.compile(
     r"(?i)\bauthorization\s*[:=]\s*bearer\s+[^\s,;]+"
 )
 BARE_BEARER_RE = re.compile(r"(?i)\bbearer\s+(?P<value>[^\s,;]+)")
+SK_STYLE_CREDENTIAL_RE = re.compile(r"(?i)^sk-[a-z]+-[a-z0-9_-]{6,}$")
 
 
 def normalize_sensitive_name(value: str) -> str:
@@ -101,8 +105,11 @@ def contains_sensitive_text(value: Any) -> bool:
 def _credential_shaped_payload(value: str) -> bool:
     """Distinguish opaque credential values from ordinary comment prose."""
     payload = value.strip().strip("\"'").rstrip(".,!?)]}")
-    return len(payload) >= 6 and any(
-        character.isdigit() or character in "._~+/=-" for character in payload
+    return bool(SK_STYLE_CREDENTIAL_RE.fullmatch(payload)) or (
+        len(payload) >= 6
+        and any(
+            character.isdigit() or character in "._~+/=" for character in payload
+        )
     )
 
 
