@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
-import re
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from danvas.reports import ReportRun, create_report_run, safe_error, should_write_report_run
+from danvas.sanitize import contains_sensitive_text
 from danvas.utils import mark_private, write_json, write_rows
 
 SUCCESS_OUTCOMES = {"verified_applied", "already_applied"}
@@ -32,11 +32,6 @@ CLEAR_RECOVERY_FIELDS = [
     "CommentID",
     "Comment",
 ]
-SENSITIVE_TEXT_RE = re.compile(
-    r"(?i)(?:access_token|token|verifier|secure_params|signature|policy|key-pair-id|"
-    r"expires|x-amz-credential|x-amz-signature|awsaccesskeyid|secret)="
-    r"|authorization\s*[:=]\s*bearer\s+"
-)
 
 
 def classify_effect_outcome(
@@ -498,10 +493,6 @@ def recovery_text(value: Any) -> str | dict[str, Any]:
         "status": "redacted_sensitive_value",
         "sha256": hash_text(text),
     }
-
-
-def contains_sensitive_text(value: Any) -> bool:
-    return bool(SENSITIVE_TEXT_RE.search(str(value or "")))
 
 
 def print_recovery_paths(paths: list[Path]) -> None:

@@ -12,6 +12,16 @@ import yaml
 from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.auth import canvas_from_args
+from danvas.authored_content import (
+    DATETIME,
+    SCALAR,
+    UNORDERED_SEQUENCE,
+    ComparisonPolicy,
+    comparison_check,
+    first_value,
+    normalized_text,
+    require_valid_datetimes,
+)
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
@@ -45,6 +55,17 @@ ANNOUNCEMENT_PROVENANCE_FIELDS = {
     "canvas_url",
     "posted_at",
 }
+ANNOUNCEMENT_COMPARE_FIELDS = ANNOUNCEMENT_METADATA_FIELDS | {"body_text", "canvas_url"}
+ANNOUNCEMENT_DATETIME_FIELDS = {"delayed_post_at", "lock_at"}
+ANNOUNCEMENT_FIELD_POLICIES: dict[str, ComparisonPolicy] = {
+    field: SCALAR for field in ANNOUNCEMENT_COMPARE_FIELDS
+}
+ANNOUNCEMENT_FIELD_POLICIES.update(
+    {
+        **{field: DATETIME for field in ANNOUNCEMENT_DATETIME_FIELDS},
+        "specific_sections": UNORDERED_SEQUENCE,
+    }
+)
 
 
 def command_announcements_export(args: Any) -> None:
@@ -265,6 +286,7 @@ def load_announcement_markdown(source: Path) -> dict[str, Any]:
     unknown = sorted(set(metadata) - ANNOUNCEMENT_METADATA_FIELDS - ANNOUNCEMENT_PROVENANCE_FIELDS)
     if unknown:
         raise SystemExit(f"Unsupported announcement metadata field(s): {', '.join(unknown)}")
+    validate_announcement_datetimes(metadata)
     announcement = {
         key: normalize_canvas_value(value)
         for key, value in metadata.items()
@@ -285,6 +307,13 @@ def announcement_update_local_source(source: Path) -> dict[str, Any]:
     unknown = sorted(set(metadata) - ANNOUNCEMENT_METADATA_FIELDS - ANNOUNCEMENT_PROVENANCE_FIELDS)
     if unknown:
         raise SystemExit(f"Unsupported announcement metadata field(s): {', '.join(unknown)}")
+    validate_announcement_datetimes(metadata)
+    declared_fields = (set(metadata) - ANNOUNCEMENT_PROVENANCE_FIELDS) | {
+        "body_text",
+        "title",
+    }
+    if "canvas_url" in metadata:
+        declared_fields.add("canvas_url")
     announcement = {
         key: normalize_canvas_value(value)
         for key, value in metadata.items()
@@ -294,9 +323,19 @@ def announcement_update_local_source(source: Path) -> dict[str, Any]:
     return {
         "frontmatter_id": int(frontmatter_id) if frontmatter_id not in {None, ""} else None,
         "announcement": announcement,
+        "canvas_url": str(metadata.get("canvas_url") or ""),
         "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
         "body_text": normalized_text(html_to_text(announcement.get("message") or "")),
+        "declared_fields": sorted(declared_fields),
     }
+
+
+def validate_announcement_datetimes(metadata: dict[str, Any]) -> None:
+    require_valid_datetimes(
+        metadata,
+        {field: DATETIME for field in ANNOUNCEMENT_DATETIME_FIELDS},
+        source_type="Announcement",
+    )
 
 
 def announcement_update_payload(announcement: dict[str, Any]) -> dict[str, Any]:
@@ -386,17 +425,6 @@ def resolve_announcement_for_update(
             "reason": f"Canvas discussion topic ID {canvas_id} is not an announcement.",
         }
     return topic, {"method": resolved["source"], "status": "matched", "reason": ""}
-
-
-def first_value(obj: Any, payload: dict[str, Any], *names: str) -> Any:
-    for name in names:
-        value = getattr(obj, name, None)
-        if value is not None and value != "":
-            return value
-        value = payload.get(name)
-        if value is not None and value != "":
-            return value
-    return ""
 
 
 def announcement_author(
@@ -677,18 +705,17 @@ def render_announcement_source_markdown(record: dict[str, Any]) -> str:
 def announcement_verify_local_source(
     source: Path, announcement_id: int | None = None
 ) -> dict[str, Any]:
-    metadata, body = parse_frontmatter(source.read_text(encoding="utf-8-sig"), source, "Announcement")
-    canvas_id = announcement_id if announcement_id is not None else metadata.get("canvas_id")
+    parsed = announcement_update_local_source(source)
+    metadata, _body = parse_frontmatter(
+        source.read_text(encoding="utf-8-sig"), source, "Announcement"
+    )
+    canvas_id = announcement_id if announcement_id is not None else parsed["frontmatter_id"]
     if canvas_id is None or str(canvas_id).strip() == "":
         raise SystemExit("Announcement verification requires --announcement-id or canvas_id front matter.")
-    return {
+    return announcement_update_local_compare_record(parsed) | {
         "canvas_id": int(canvas_id),
         "canvas_url": str(metadata.get("canvas_url") or ""),
-        "title": str(metadata.get("title") or ""),
-        "published": metadata.get("published"),
-        "delayed_post_at": str(metadata.get("delayed_post_at") or ""),
-        "lock_at": str(metadata.get("lock_at") or ""),
-        "body_text": normalized_text(html_to_text(markdown_to_html(body))),
+        "declared_fields": parsed["declared_fields"],
     }
 
 
@@ -775,12 +802,22 @@ def build_announcement_update_report(
 def announcement_update_local_compare_record(local: dict[str, Any]) -> dict[str, Any]:
     announcement = local["announcement"]
     return {
-        "title": announcement.get("title"),
-        "published": announcement.get("published"),
-        "delayed_post_at": announcement.get("delayed_post_at"),
-        "lock_at": announcement.get("lock_at"),
+        **{field: announcement.get(field) for field in ANNOUNCEMENT_METADATA_FIELDS},
+        "canvas_url": local.get("canvas_url") or "",
         "body_text": local["body_text"],
+        "declared_fields": local.get("declared_fields") or [],
     }
+
+
+def announcement_canvas_compare_record(canvas_record: dict[str, Any]) -> dict[str, Any]:
+    raw = canvas_record.get("topic") or {}
+    result = {}
+    for field in ANNOUNCEMENT_METADATA_FIELDS:
+        value = canvas_record.get(field)
+        result[field] = raw.get(field) if value is None or value == "" else value
+    result["canvas_url"] = canvas_record.get("html_url") or ""
+    result["body_text"] = normalized_text(str(canvas_record.get("message") or ""))
+    return result
 
 
 def announcement_update_checks(
@@ -788,26 +825,17 @@ def announcement_update_checks(
     canvas_record: dict[str, Any],
     update_payload: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    fields = []
-    if "title" in update_payload:
-        fields.append("title")
-    if "published" in update_payload:
-        fields.append("published")
-    if "delayed_post_at" in update_payload:
-        fields.append("delayed_post_at")
-    if "lock_at" in update_payload:
-        fields.append("lock_at")
+    fields = set(update_payload) & ANNOUNCEMENT_METADATA_FIELDS
     if "message" in update_payload:
-        fields.append("body_text")
+        fields.add("body_text")
+    canvas_compare = announcement_canvas_compare_record(canvas_record)
     checks = [
         verify_check(
             field,
             local_record.get(field),
-            normalized_text(str(canvas_record.get("message") or ""))
-            if field == "body_text"
-            else canvas_record.get(field),
+            canvas_compare.get(field),
         )
-        for field in fields
+        for field in sorted(fields)
     ]
     return [check for check in checks if check["local"] != "" or check["canvas"] != ""]
 
@@ -816,7 +844,7 @@ def announcement_source_map_fields(local: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in announcement_update_local_compare_record(local).items()
-        if value is not None and value != ""
+        if key in ANNOUNCEMENT_COMPARE_FIELDS and value is not None and value != ""
     }
 
 
@@ -854,49 +882,19 @@ def write_announcement_source_map_entry(
 def announcement_verify_checks(
     local: dict[str, Any], canvas_record: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    checks = [
-        verify_check("title", local.get("title"), canvas_record.get("title")),
-        verify_check("canvas_url", local.get("canvas_url"), canvas_record.get("html_url")),
-        verify_check("published", local.get("published"), canvas_record.get("published")),
-        verify_check(
-            "delayed_post_at",
-            local.get("delayed_post_at"),
-            canvas_record.get("delayed_post_at"),
-        ),
-        verify_check("lock_at", local.get("lock_at"), canvas_record.get("lock_at")),
-        verify_check(
-            "body_text",
-            local.get("body_text"),
-            normalized_text(str(canvas_record.get("message") or "")),
-        ),
-    ]
+    fields = set(local.get("declared_fields") or []) & ANNOUNCEMENT_COMPARE_FIELDS
+    canvas_compare = announcement_canvas_compare_record(canvas_record)
+    checks = [verify_check(field, local.get(field), canvas_compare.get(field)) for field in sorted(fields)]
     return [check for check in checks if check["local"] != "" or check["canvas"] != ""]
 
 
 def verify_check(field: str, local_value: Any, canvas_value: Any) -> dict[str, Any]:
-    local = comparable_value(local_value)
-    canvas = comparable_value(canvas_value)
-    return {
-        "field": field,
-        "matches": local == canvas,
-        "local": local,
-        "canvas": canvas,
-    }
-
-
-def comparable_value(value: Any) -> Any:
-    if isinstance(value, bool) or value is None:
-        return value
-    text = str(value)
-    if text.lower() == "true":
-        return True
-    if text.lower() == "false":
-        return False
-    return normalized_text(text)
-
-
-def normalized_text(value: str) -> str:
-    return " ".join(value.split())
+    return comparison_check(
+        field,
+        local_value,
+        canvas_value,
+        policy=ANNOUNCEMENT_FIELD_POLICIES[field],
+    )
 
 
 def make_announcement_verify_report_run(args: Any, report: dict[str, Any]) -> ReportRun | None:

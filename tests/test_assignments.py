@@ -7,6 +7,8 @@ import pytest
 from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.assignments import (
+    ASSIGNMENT_FIELD_POLICIES,
+    ASSIGNMENT_VERIFY_SUPPORTED_FIELDS,
     command_assignments_create,
     command_assignments_export,
     command_assignments_update,
@@ -15,6 +17,7 @@ from danvas.assignments import (
     comparable_field_value,
     load_assignment_markdown,
     resolve_format,
+    verify_check,
 )
 
 
@@ -22,6 +25,31 @@ def test_allowed_extension_comparison_normalizes_empty_and_case() -> None:
     assert comparable_field_value("allowed_extensions", None) == []
     assert comparable_field_value("allowed_extensions", []) == []
     assert comparable_field_value("allowed_extensions", [".PDF", "docx"]) == ["docx", "pdf"]
+
+
+def test_every_supported_assignment_field_has_explicit_comparison_policy() -> None:
+    assert set(ASSIGNMENT_FIELD_POLICIES) == ASSIGNMENT_VERIFY_SUPPORTED_FIELDS
+
+
+def test_assignment_datetime_comparison_matches_equivalent_offsets() -> None:
+    check = verify_check(
+        "due_at",
+        "2026-09-01T18:00:00-05:00",
+        "2026-09-01T23:00:00Z",
+    )
+
+    assert check["matches"] is True
+
+
+def test_assignment_source_rejects_offset_free_at_value(tmp_path: Path) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        "---\ntitle: Work\ndue_at: 2026-09-01T23:59:00\n---\n\nSubmit.\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="requires Z or an explicit UTC offset"):
+        load_assignment_markdown(source)
 
 
 def write_config(root: Path, timezone: str = "America/Chicago") -> None:

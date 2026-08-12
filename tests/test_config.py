@@ -3,7 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from canvasapi.exceptions import Forbidden, RateLimitExceeded
+from canvasapi.exceptions import Forbidden, InvalidAccessToken, RateLimitExceeded
 
 from danvas import config
 from danvas.assignments import command_assignments_create
@@ -336,6 +336,69 @@ def test_build_course_snapshot_classifies_rate_limit_before_forbidden() -> None:
     assert metadata["error_type"] == "RateLimitExceeded"
 
 
+def test_invalid_token_is_fatal_in_optional_collection_and_stops_later_calls() -> None:
+    class InvalidTokenCourse(FakeCourse):
+        group_categories_called = False
+
+        def get_pages(self):
+            raise InvalidAccessToken("token=secret-value")
+
+        def get_group_categories(self):
+            self.group_categories_called = True
+            return super().get_group_categories()
+
+    course = InvalidTokenCourse()
+
+    with pytest.raises(SystemExit, match="access token is invalid") as exc_info:
+        config.build_course_snapshot(course)
+
+    assert "secret-value" not in str(exc_info.value)
+    assert course.group_categories_called is False
+
+
+def test_invalid_token_is_fatal_at_nested_collection_boundary() -> None:
+    class NestedInvalidTokenCourse(FakeCourse):
+        def get_group_categories(self):
+            category = SimpleNamespace(id=700, name="Case 1 Groups", self_signup=None)
+
+            def invalid_groups():
+                raise InvalidAccessToken("access_token=secret-value")
+
+            category.get_groups = invalid_groups
+            return [category]
+
+    with pytest.raises(SystemExit, match="access token is invalid") as exc_info:
+        config.build_course_snapshot(NestedInvalidTokenCourse())
+
+    assert "secret-value" not in str(exc_info.value)
+
+
+def test_invalid_token_preserves_existing_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+    snapshot_path = tmp_path / ".danvas" / "course.json"
+    previous = b'{"sentinel": "previous snapshot"}\n'
+    snapshot_path.write_bytes(previous)
+
+    class InvalidTokenCourse(FakeCourse):
+        def get_pages(self):
+            raise InvalidAccessToken("access_token=secret-value")
+
+    class FakeCanvas:
+        def get_course(self, course_id: int):
+            return InvalidTokenCourse()
+
+    monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
+
+    with pytest.raises(SystemExit, match="access token is invalid"):
+        config.command_refresh(
+            SimpleNamespace(project_root=str(tmp_path), course_id=1742717, diff=False)
+        )
+
+    assert snapshot_path.read_bytes() == previous
+
+
 def test_folder_failure_blocks_files_without_calling_file_endpoint() -> None:
     class ForbiddenFoldersCourse(FakeCourse):
         files_called = False
@@ -418,15 +481,107 @@ def test_command_refresh_writes_partial_snapshot_with_bounded_warning(
 
     config.command_refresh(args)
 
-    output = capsys.readouterr().out
-    assert "group_categories is unavailable (forbidden)" in output
-    assert "sentinel" not in output
-    assert "verifier" not in output
+    captured = capsys.readouterr()
+    assert "group_categories is unavailable (forbidden)" in captured.err
+    assert "group_categories is unavailable" not in captured.out
+    assert "sentinel" not in captured.err
+    assert "verifier" not in captured.err
     snapshot = json.loads(
         (tmp_path / ".danvas" / "course.json").read_text(encoding="utf-8")
     )
     assert snapshot["snapshot_status"] == "partial"
     assert snapshot["collections"]["group_categories"]["authoritative"] is False
+
+
+def test_refresh_require_complete_preserves_previous_snapshot_and_skips_report(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+    snapshot_path = tmp_path / ".danvas" / "course.json"
+    previous = b'{"sentinel": "previous snapshot"}\n'
+    snapshot_path.write_bytes(previous)
+
+    class ForbiddenCategoriesCourse(FakeCourse):
+        def get_group_categories(self):
+            raise Forbidden("private response")
+
+    class FakeCanvas:
+        def get_course(self, course_id: int):
+            return ForbiddenCategoriesCourse()
+
+    monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        project_root=str(tmp_path),
+        course_id=1742717,
+        diff=True,
+        require_complete=True,
+        report_root=None,
+        report_dir=str(tmp_path / "report"),
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        config.command_refresh(args)
+
+    assert exc_info.value.code == config.PARTIAL_SNAPSHOT_EXIT_CODE
+    assert snapshot_path.read_bytes() == previous
+    assert not (tmp_path / "report").exists()
+    assert "prevents refresh state from being written" in capsys.readouterr().err
+
+
+def test_complete_refresh_succeeds_with_require_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+
+    class FakeCanvas:
+        def get_course(self, course_id: int):
+            return FakeCourse()
+
+    monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
+    config.command_refresh(
+        SimpleNamespace(
+            project_root=str(tmp_path),
+            course_id=1742717,
+            diff=False,
+            require_complete=True,
+        )
+    )
+
+    snapshot = json.loads(
+        (tmp_path / ".danvas" / "course.json").read_text(encoding="utf-8")
+    )
+    assert snapshot["snapshot_status"] == "complete"
+
+
+def test_init_require_complete_writes_no_project_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ForbiddenCategoriesCourse(FakeCourse):
+        def get_group_categories(self):
+            raise Forbidden("private response")
+
+    class FakeCanvas:
+        def get_course(self, course_id: int):
+            return ForbiddenCategoriesCourse()
+
+    monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
+    args = SimpleNamespace(
+        project_root=str(tmp_path),
+        course_id=1742717,
+        force=False,
+        require_complete=True,
+        api_url="https://canvas.test/",
+        timezone="America/Chicago",
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        config.command_init(args)
+
+    assert exc_info.value.code == config.PARTIAL_SNAPSHOT_EXIT_CODE
+    assert not (tmp_path / ".danvas").exists()
 
 
 def test_diff_snapshots_reports_added_removed_changed() -> None:

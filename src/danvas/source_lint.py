@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
+from danvas.authored_content import datetime_validation_issue
 from danvas.frontmatter import parse_frontmatter
 from danvas.pages import load_page_source
 from danvas.source_map import find_source_entry, load_source_map, source_path_key
@@ -19,7 +20,16 @@ from danvas.utils import write_json
 
 LintKind = Literal["assignment", "announcement", "discussion", "page"]
 SEVERITY_ORDER = {"warning": 1, "error": 2}
-DATE_FIELDS = {"due_at", "unlock_at", "lock_at", "delayed_post_at", "publish_at"}
+DATE_FIELDS = {
+    "due_at",
+    "due_date",
+    "unlock_at",
+    "unlock_date",
+    "lock_at",
+    "lock_date",
+    "delayed_post_at",
+    "publish_at",
+}
 ASSIGNMENT_ONLY = {
     "allowed_attempts", "allowed_extensions", "assignment_group", "assignment_group_id",
     "grading_type", "group_category_id", "peer_reviews", "points_possible", "submission_types",
@@ -143,17 +153,42 @@ def lint_dates(
         if value in (None, ""):
             continue
         raw = value.isoformat() if hasattr(value, "isoformat") else str(value)
+        date_only_supported = (kind == "page" and field == "publish_at") or (
+            kind == "assignment" and field in {"due_date", "unlock_date", "lock_date"}
+        )
+        issue = datetime_validation_issue(
+            field,
+            value,
+            allow_date_only=date_only_supported,
+        )
+        if issue:
+            if issue.reason == "invalid":
+                findings.append(
+                    finding(
+                        "date-invalid",
+                        "error",
+                        path,
+                        f"{field} is not a valid ISO 8601 date.",
+                        "Use an ISO 8601 timestamp with a timezone offset.",
+                        line=line_for(text, field),
+                    )
+                )
+            else:
+                findings.append(
+                    finding(
+                        "date-timezone",
+                        "error",
+                        path,
+                        f"{field} has no timezone offset.",
+                        "Add Z or an explicit offset such as -05:00.",
+                        line=line_for(text, field),
+                    )
+                )
+            continue
         try:
             date = datetime.fromisoformat(raw.replace("Z", "+00:00"))
         except ValueError:
-            findings.append(finding("date-invalid", "error", path, f"{field} is not a valid ISO 8601 date.", "Use an ISO 8601 timestamp with a timezone offset.", line=line_for(text, field)))
             continue
-        date_only = re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw) is not None
-        date_only_supported = kind == "page" and field == "publish_at"
-        if (date.tzinfo is None or date.utcoffset() is None) and not (
-            date_only and date_only_supported
-        ):
-            findings.append(finding("date-timezone", "error", path, f"{field} has no timezone offset.", "Add Z or an explicit offset such as -05:00.", line=line_for(text, field)))
         parsed[field] = date
     for earlier, later in (("unlock_at", "due_at"), ("due_at", "lock_at"), ("unlock_at", "lock_at")):
         if earlier in parsed and later in parsed:

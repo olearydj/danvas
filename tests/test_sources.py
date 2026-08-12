@@ -92,6 +92,26 @@ def test_scan_sources_uses_configured_assignment_patterns(tmp_path: Path) -> Non
     assert records[0]["metadata"] == {"points_possible": 10, "published": True}
 
 
+def test_scan_sources_expands_assignment_date_alias_for_status_comparison(
+    tmp_path: Path,
+) -> None:
+    write(
+        tmp_path / ".danvas" / "config.toml",
+        '[canvas]\ncourse_id = 101\ntimezone = "America/Chicago"\n',
+    )
+    write(
+        tmp_path / "content" / "assignments" / "work.md",
+        "---\ntitle: Work\ndue_date: 2026-09-01\n---\n\nSubmit.\n",
+    )
+
+    records = scan_sources(
+        tmp_path,
+        source_config={"assignments": {"include": ["content/assignments/*.md"]}},
+    )
+
+    assert records[0]["metadata"]["due_at"] == "2026-09-01T23:59:00-05:00"
+
+
 def test_scan_sources_can_report_unmarked_configured_assignment_errors(
     tmp_path: Path,
 ) -> None:

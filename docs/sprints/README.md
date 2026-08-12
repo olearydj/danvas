@@ -149,8 +149,8 @@ Canvas command or Python package module. It was originally targeted for 0.10.1;
 the untagged line is included in the 0.10.2 maintenance release.
 Frozen sync, Ruff, ty, all 400 tests, and the complete local editable/wheel
 smoke passed on 2026-08-11. The published v0.10.2 tag passed both CI jobs on the
-exact release commit; replacing and checking the user's global installation
-remains an explicitly authorized acceptance step.
+exact release commit. Its pending global-install check was superseded by the
+exact tagged v0.11.0 installation and validation completed on 2026-08-12.
 
 ## 0.10.2 Assignment Release Maintenance
 
@@ -188,3 +188,15 @@ update, seed preservation, and guarded cleanup. Ruff, ty, all 439 tests, and
 isolated editable/wheel release smoke pass locally. A
 post-review evidence hardening pass also rejects malformed nonblank grade rows
 and duplicate normalized Canvas IDs before Canvas access.
+
+## 0.12.0 Structural Foundations
+
+The implemented structural slice is:
+
+- Sprint 15: [Authored-Content Foundations And Snapshot Signaling](15-authored-content-foundations.md)
+
+Sprint 15 consolidates authored scalar/datetime comparisons, adds one shared
+sanitization vocabulary, makes `InvalidAccessToken` fatal across snapshot
+collection boundaries, and adds opt-in `--require-complete` exit signaling for
+automation. It adds no Canvas mutation or new authored-content type. Target
+release: 0.12.0. Ruff, ty, and all 482 tests pass in a clean frozen environment.

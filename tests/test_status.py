@@ -261,6 +261,44 @@ def test_build_status_skips_unavailable_section_without_false_local_only_claims(
     assert "Unavailable from this snapshot (`forbidden`)." in markdown
 
 
+def test_command_status_require_complete_writes_evidence_then_exits_three(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text("[canvas]\ncourse_id = 101\n", encoding="utf-8")
+    snapshot = as_schema_five(build_snapshot())
+    snapshot["snapshot_status"] = "partial"
+    snapshot["collections"]["group_categories"] = {
+        "status": "unavailable",
+        "authoritative": False,
+        "item_count": 0,
+        "reason": "forbidden",
+        "error_type": "Forbidden",
+    }
+    (config_dir / "course.json").write_text(json.dumps(snapshot), encoding="utf-8")
+    output = tmp_path / "status.json"
+    report_dir = tmp_path / "status-report"
+    args = SimpleNamespace(
+        project_root=str(tmp_path),
+        max_age_hours=None,
+        output=str(output),
+        report_md=None,
+        report_root=None,
+        report_dir=str(report_dir),
+        report_slug=None,
+        require_complete=True,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        command_status(args)
+
+    assert exc_info.value.code == 3
+    assert output.is_file()
+    manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "partial"
+
+
 def test_build_status_does_not_scan_local_files_when_files_are_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

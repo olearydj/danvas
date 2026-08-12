@@ -163,6 +163,17 @@ values. The same review pass hardens grade evidence preflight: nonblank
 malformed rows and duplicate normalized Canvas IDs now fail before Canvas
 access, so verification and recovery cannot silently omit or mispair intent.
 
+## 0.12.0 Structural Foundations Implementation
+
+Sprint 15 is implemented locally in
+`docs/sprints/15-authored-content-foundations.md`. It consolidates assignment,
+announcement, discussion, and Page comparison/datetime primitives; moves
+divergent redaction vocabularies into one dependency-free sanitizer; makes
+`InvalidAccessToken` a fatal credential-wide snapshot failure; and adds opt-in
+`--require-complete` process-level signaling while preserving default
+partial-snapshot usability. Ruff, ty, and all 482 tests pass in a clean frozen
+environment. No Canvas mutation or new command family is included.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as
@@ -1455,23 +1466,20 @@ Items 3 and 4 shipped in 0.6.0, and item 5 is now reflected in the external
 skill docs. A CASS transcript review covering the preceding 100 days on
 2026-08-09 confirmed the relevance of items 1, 2, and 6 through 9, and added
 items 10 and 11 below. Items 6, 8, 9, 10, and 11 are implemented and have passed
-their bounded live or read-only field cases. Items 1 and 2 are implemented
-locally together as Sprint 14 and passed bounded live acceptance; item 11 shipped
-in v0.10.2 and its exact-install acceptance is superseded by the verified
-v0.11.0 installation.
+their bounded live or read-only field cases. Items 1 and 2 shipped together in
+v0.11.0 after bounded live acceptance; item 11 shipped in v0.10.2 and its
+exact-install acceptance is superseded by the verified v0.11.0 installation.
 Item 7 is explicitly deferred because Canvas does not expose a supported API for
 initiating its native instructor gradebook CSV export.
 
 ### Current Priority Order
 
-Prioritize structural consolidation before opening another authored-content
-command family:
+Complete the structural release before opening another authored-content command
+family:
 
-1. Consolidate authored-content comparison and sanitization primitives, reject
-   ambiguous timestamps consistently, and resolve the parked snapshot
-   credential/signaling findings.
+1. Review and close the locally implemented Sprint 15 / 0.12.0 release.
 2. Reassess grouped case setup versus Markdown asset rewriting for the next
-   sprint; neither is pulled into Sprint 14.
+   sprint; neither is pulled into Sprint 15.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas
@@ -1513,8 +1521,8 @@ ordering.
 
 2. Add safe discussion source update and verification.
 
-   Status: implemented locally in Sprint 14. `--body-only` sends only the root
-   topic message, and neither update scope mutates discussion entries.
+   Status: shipped in v0.11.0 through Sprint 14. `--body-only` sends only the
+   root topic message, and neither update scope mutates discussion entries.
 
    ```bash
    danvas discussions verify content/discussions/unit-4.md --discussion-id 10819092
@@ -1928,8 +1936,8 @@ ordering.
 11. Add installed-CLI health coverage to the release workflow.
 
    Status: shipped in v0.10.2 on 2026-08-11. Main and exact-tag CI passed,
-   including both isolated install lanes; replacing/checking the user's global
-   installation remains an explicitly authorized acceptance step. See
+   including both isolated install lanes. An exact tagged v0.11.0 global
+   installation was subsequently validated on 2026-08-12. See
    `docs/sprints/13-installed-cli-release-health.md` for the bounded script,
    CI, version-matching, documentation, and acceptance contract.
 

@@ -10,6 +10,8 @@ from bs4 import BeautifulSoup
 
 from danvas.pages import (
     COMPATIBILITY_PROFILE,
+    PAGE_METADATA_COMPARE_FIELDS,
+    PAGE_METADATA_FIELD_POLICIES,
     RENDERER_VERSION,
     build_pages_sync_plan,
     canonicalize_page_html,
@@ -36,6 +38,21 @@ def write_source(path: Path, body: str, *, published: bool = False, extra: str =
         encoding="utf-8",
     )
     return path
+
+
+def test_every_supported_page_metadata_field_has_explicit_comparison_policy() -> None:
+    assert set(PAGE_METADATA_FIELD_POLICIES) == PAGE_METADATA_COMPARE_FIELDS
+
+
+def test_page_source_rejects_offset_free_publish_timestamp(tmp_path: Path) -> None:
+    source = write_source(
+        tmp_path / "page.md",
+        "Help.",
+        extra="publish_at: 2026-09-01T09:00:00\n",
+    )
+
+    with pytest.raises(SystemExit, match="requires Z or an explicit UTC offset"):
+        load_page_source(source)
 
 
 class FakePage:

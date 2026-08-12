@@ -10,6 +10,7 @@ import pytest
 from danvas.discussion_sources import (
     DISCUSSION_ASSIGNMENT_FIELDS,
     DISCUSSION_COMPARE_FIELDS,
+    DISCUSSION_FIELD_POLICIES,
     DISCUSSION_TOPIC_FIELDS,
     command_discussions_create,
     command_discussions_update,
@@ -187,6 +188,7 @@ def test_every_supported_discussion_field_has_comparison_coverage() -> None:
     )
 
     assert expected <= DISCUSSION_COMPARE_FIELDS
+    assert set(DISCUSSION_FIELD_POLICIES) == DISCUSSION_COMPARE_FIELDS
 
 
 def test_load_discussion_source_splits_root_and_seed_replies(tmp_path: Path) -> None:

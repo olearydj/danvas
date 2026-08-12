@@ -14,6 +14,20 @@ import yaml
 from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.auth import canvas_from_args
+from danvas.authored_content import (
+    ALLOWED_EXTENSIONS,
+    DATETIME,
+    SCALAR,
+    UNORDERED_SEQUENCE,
+    ComparisonPolicy,
+    comparison_check,
+    first_value,
+    normalized_text,
+    require_valid_datetimes,
+)
+from danvas.authored_content import (
+    comparable_value as shared_comparable_value,
+)
 from danvas.canvas_links import (
     canonical_canvas_object_url,
     extract_canvas_file_references,
@@ -22,7 +36,8 @@ from danvas.canvas_links import (
 from danvas.config import resolve_assignment_group_id, resolve_course_timezone
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
 from danvas.overrides import private_assignment_overrides
-from danvas.reports import ReportRun, create_report_run, safe_error, should_write_report_run
+from danvas.reports import ReportRun, create_report_run, should_write_report_run
+from danvas.sanitize import sanitize_error, sanitize_public
 from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
 from danvas.utils import (
     canvas_object_to_dict,
@@ -102,12 +117,18 @@ ASSIGNMENT_VERIFY_SUPPORTED_FIELDS = {
     "allowed_extensions",
     "body_text",
 }
-ASSIGNMENT_PROVENANCE_FIELDS = {"assignment_id", "canvas_id", "id"}
-SENSITIVE_ASSIGNMENT_TEXT_RE = re.compile(
-    r"(?i)\b(?:secure_params|verifier|access_token|api_key|authorization|bearer|"
-    r"signature|policy|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+)\b"
-    r"(?:\s*[=:]\s*[^\s&\"']+)?"
+ASSIGNMENT_DATETIME_FIELDS = {"due_at", "unlock_at", "lock_at"}
+ASSIGNMENT_FIELD_POLICIES: dict[str, ComparisonPolicy] = {
+    field: SCALAR for field in ASSIGNMENT_VERIFY_SUPPORTED_FIELDS
+}
+ASSIGNMENT_FIELD_POLICIES.update(
+    {
+        **{field: DATETIME for field in ASSIGNMENT_DATETIME_FIELDS},
+        "allowed_extensions": ALLOWED_EXTENSIONS,
+        "submission_types": UNORDERED_SEQUENCE,
+    }
 )
+ASSIGNMENT_PROVENANCE_FIELDS = {"assignment_id", "canvas_id", "id"}
 
 
 def command_assignments_verify(args: Any) -> None:
@@ -624,6 +645,7 @@ def load_assignment_markdown(source: Path) -> dict[str, Any]:
             raise SystemExit("Use either 'name' or 'title', not both.")
         metadata["name"] = metadata.pop("title")
     expand_date_only_metadata(metadata, source)
+    validate_assignment_datetimes(metadata)
     if not str(metadata.get("name", "")).strip():
         raise SystemExit("Assignment metadata must include 'name' or 'title'.")
     unknown = sorted(set(metadata) - ASSIGNMENT_METADATA_FIELDS - ASSIGNMENT_LOCAL_FIELDS)
@@ -696,6 +718,7 @@ def assignment_payload_from_metadata(
     source: Path, metadata: dict[str, Any], body: str, *, default_published: bool
 ) -> dict[str, Any]:
     expand_date_only_metadata(metadata, source)
+    validate_assignment_datetimes(metadata)
     if not str(metadata.get("name", "")).strip():
         raise SystemExit("Assignment metadata must include 'name' or 'title'.")
     provenance_fields = {
@@ -940,25 +963,11 @@ def safe_assignment_export_extended(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def safe_assignment_text(value: Any) -> str:
-    return SENSITIVE_ASSIGNMENT_TEXT_RE.sub(
-        "[redacted-sensitive-value]", safe_error(str(value or ""))
-    )
+    return sanitize_error(value or "")
 
 
 def safe_assignment_value(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            str(key): safe_assignment_value(item)
-            for key, item in value.items()
-            if not SENSITIVE_ASSIGNMENT_TEXT_RE.search(str(key))
-        }
-    if isinstance(value, list):
-        return [safe_assignment_value(item) for item in value]
-    if isinstance(value, tuple):
-        return [safe_assignment_value(item) for item in value]
-    if isinstance(value, str):
-        return safe_assignment_text(value)
-    return value
+    return sanitize_public(value)
 
 
 def safe_assignment_mutation_projection(
@@ -1097,17 +1106,6 @@ def assignment_group_name(course: Any, group_id: Any) -> str:
     return ""
 
 
-def first_value(obj: Any, payload: dict[str, Any], *names: str) -> Any:
-    for name in names:
-        value = getattr(obj, name, None)
-        if value is not None and value != "":
-            return value
-        value = payload.get(name)
-        if value is not None and value != "":
-            return value
-    return ""
-
-
 def metadata_text(value: Any) -> str:
     if value is None:
         return ""
@@ -1152,6 +1150,14 @@ def parse_date_only_value(field: str, value: Any) -> date:
     if not DATE_ONLY_RE.match(text):
         raise SystemExit(f"{field} must be a date-only value in YYYY-MM-DD format.")
     return date.fromisoformat(text)
+
+
+def validate_assignment_datetimes(metadata: dict[str, Any]) -> None:
+    require_valid_datetimes(
+        metadata,
+        {field: DATETIME for field in ASSIGNMENT_DATETIME_FIELDS},
+        source_type="Assignment",
+    )
 
 
 def is_blank_metadata_value(value: Any) -> bool:
@@ -1568,52 +1574,18 @@ def assignment_verify_checks(
 
 
 def verify_check(field: str, local_value: Any, canvas_value: Any) -> dict[str, Any]:
-    local = comparable_field_value(field, local_value)
-    canvas = comparable_field_value(field, canvas_value)
-    matches = local == canvas
-    return {
-        "field": field,
-        "status": "matches" if matches else "mismatch",
-        "matches": matches,
-        "local": safe_assignment_value(local),
-        "canvas": safe_assignment_value(canvas),
-    }
+    return comparison_check(
+        field,
+        local_value,
+        canvas_value,
+        policy=ASSIGNMENT_FIELD_POLICIES[field],
+        project=safe_assignment_value,
+    )
 
 
 def comparable_field_value(field: str, value: Any) -> Any:
-    if field == "allowed_extensions":
-        if value is None or value == "":
-            return []
-        if isinstance(value, str):
-            value = [item for item in value.split(",") if item.strip()]
-        if isinstance(value, (list, tuple)):
-            return sorted({str(item).strip().removeprefix(".").casefold() for item in value})
-    return comparable_value(value)
-
-
-def comparable_value(value: Any) -> Any:
-    if isinstance(value, bool) or value is None:
-        return value
-    if isinstance(value, list):
-        return sorted(str(item) for item in value)
-    if isinstance(value, tuple):
-        return sorted(str(item) for item in value)
-    if isinstance(value, (int, float)):
-        return value
-    text = normalized_text(str(value)).replace("+00:00", "Z")
-    if text.lower() == "true":
-        return True
-    if text.lower() == "false":
-        return False
-    try:
-        number = float(text)
-    except ValueError:
-        return text
-    return int(number) if number.is_integer() else number
-
-
-def normalized_text(value: str) -> str:
-    return " ".join(value.split())
+    """Compatibility wrapper around the shared authored field policy."""
+    return shared_comparable_value(value, ASSIGNMENT_FIELD_POLICIES.get(field, SCALAR))
 
 
 def make_assignment_verify_report_run(args: Any, report: dict[str, Any]) -> ReportRun | None:

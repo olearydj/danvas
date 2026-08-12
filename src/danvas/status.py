@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from danvas.authored_content import DATETIME, SCALAR, comparison_check
 from danvas.config import (
     COURSE_SNAPSHOT_NAME,
+    PARTIAL_SNAPSHOT_EXIT_CODE,
     find_config_dir,
     load_project_config,
 )
@@ -65,7 +68,7 @@ def command_status(args: Any) -> None:
     )
     payload["snapshot"]["path"] = str(snapshot_path)
     for line in render_status_lines(payload):
-        print(line)
+        print(line, file=sys.stderr if line.startswith("WARNING:") else sys.stdout)
     if args.output:
         write_json(Path(args.output), payload)
         print(f"Wrote {args.output}")
@@ -93,7 +96,9 @@ def command_status(args: Any) -> None:
         try:
             json_path = report_run.write_json("status.json", payload)
             md_path = report_run.write_text("status.md", render_status_markdown(payload))
-            manifest_path = report_run.finish()
+            manifest_path = report_run.finish(
+                "partial" if payload["snapshot"]["status"] == "partial" else "success"
+            )
             print(f"Wrote {json_path}")
             print(f"Wrote {md_path}")
             print(f"Wrote {manifest_path}")
@@ -101,6 +106,8 @@ def command_status(args: Any) -> None:
         except Exception as exc:
             report_run.finish("failed", error=str(exc))
             raise
+    if getattr(args, "require_complete", False) and payload["snapshot"]["status"] == "partial":
+        raise SystemExit(PARTIAL_SNAPSHOT_EXIT_CODE)
 
 
 def resolve_max_age_hours(explicit: float | None, config_dir: Path) -> float:
@@ -555,26 +562,12 @@ def field_diffs(local_metadata: dict[str, Any], canvas_row: dict[str, Any]) -> l
 
 
 def values_equal(field: str, local_value: Any, canvas_value: Any) -> bool:
-    if field in DATE_FIELDS:
-        return canonical_datetime(local_value) == canonical_datetime(canvas_value)
-    if isinstance(local_value, bool) or isinstance(canvas_value, bool):
-        return bool(local_value) == bool(canvas_value)
-    if isinstance(local_value, (int, float)) and isinstance(canvas_value, (int, float)):
-        return float(local_value) == float(canvas_value)
-    return local_value == canvas_value
-
-
-def canonical_datetime(value: Any) -> str:
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    try:
-        parsed = dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return text
-    if parsed.tzinfo is None:
-        return parsed.isoformat()
-    return parsed.astimezone(dt.UTC).isoformat()
+    return comparison_check(
+        field,
+        local_value,
+        canvas_value,
+        policy=DATETIME if field in DATE_FIELDS else SCALAR,
+    )["matches"]
 
 
 def normalize_title(value: str) -> str:

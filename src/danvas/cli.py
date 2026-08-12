@@ -442,6 +442,13 @@ def init_project(
     force: Annotated[
         bool, typer.Option("--force", help="Replace an existing .danvas/config.toml.")
     ] = False,
+    require_complete: Annotated[
+        bool,
+        typer.Option(
+            "--require-complete",
+            help="Exit 3 without writing project state if any snapshot collection is partial.",
+        ),
+    ] = False,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -454,6 +461,7 @@ def init_project(
             project_root=str(project_root),
             timezone=timezone,
             force=force,
+            require_complete=require_complete,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
@@ -508,6 +516,13 @@ def refresh_project(
         bool,
         typer.Option("--diff", help="Summarize changes since the previous snapshot."),
     ] = False,
+    require_complete: Annotated[
+        bool,
+        typer.Option(
+            "--require-complete",
+            help="Exit 3 without replacing snapshot state if any collection is partial.",
+        ),
+    ] = False,
     report_root: Annotated[
         Path | None,
         typer.Option("--report-root", help="Root for a dated refresh diff report run."),
@@ -530,6 +545,7 @@ def refresh_project(
             course_id=course_id,
             project_root=str(project_root),
             diff=diff,
+            require_complete=require_complete,
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
@@ -571,6 +587,13 @@ def status(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    require_complete: Annotated[
+        bool,
+        typer.Option(
+            "--require-complete",
+            help="Write requested evidence, then exit 3 when the source snapshot is partial.",
+        ),
+    ] = False,
 ) -> None:
     run_command(
         command_status,
@@ -582,6 +605,7 @@ def status(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            require_complete=require_complete,
         ),
     )
 

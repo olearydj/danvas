@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ CONFIG_DIR_NAME = ".danvas"
 CONFIG_FILE_NAME = "config.toml"
 COURSE_SNAPSHOT_NAME = "course.json"
 SNAPSHOT_SCHEMA_VERSION = 5
+PARTIAL_SNAPSHOT_EXIT_CODE = 3
 
 
 def project_dir(root: Path | None = None) -> Path:
@@ -141,7 +143,8 @@ def command_init(args: Any) -> None:
         course, canvas_origin=getattr(args, "api_url", None)
     )
     for warning in snapshot_collection_warnings(payload):
-        print(warning)
+        print(warning, file=sys.stderr)
+    require_complete_snapshot(payload, args, action="initialize")
     write_project_config(
         config,
         course_snapshot=payload,
@@ -172,7 +175,8 @@ def command_refresh(args: Any) -> None:
         course, canvas_origin=getattr(args, "api_url", None)
     )
     for warning in snapshot_collection_warnings(payload):
-        print(warning)
+        print(warning, file=sys.stderr)
+    require_complete_snapshot(payload, args, action="refresh")
     snapshot = course_snapshot_path(root)
     diff_report = None
     if getattr(args, "diff", False):
@@ -203,7 +207,9 @@ def command_refresh(args: Any) -> None:
             md_path = report_run.write_text(
                 "refresh-diff.md", render_refresh_diff_markdown(diff_report)
             )
-            manifest_path = report_run.finish()
+            manifest_path = report_run.finish(
+                "partial" if payload.get("snapshot_status") == "partial" else "success"
+            )
             print(f"Wrote {json_path}")
             print(f"Wrote {md_path}")
             print(f"Wrote {manifest_path}")
@@ -211,6 +217,18 @@ def command_refresh(args: Any) -> None:
         except Exception as exc:
             report_run.finish("failed", error=str(exc))
             raise
+
+
+def require_complete_snapshot(payload: dict[str, Any], args: Any, *, action: str) -> None:
+    if not getattr(args, "require_complete", False):
+        return
+    if payload.get("snapshot_status") != "partial":
+        return
+    print(
+        f"Snapshot is partial; --require-complete prevents {action} state from being written.",
+        file=sys.stderr,
+    )
+    raise SystemExit(PARTIAL_SNAPSHOT_EXIT_CODE)
 
 
 def build_course_snapshot(

@@ -24,7 +24,14 @@ from markdown.extensions import Extension
 from markdown.treeprocessors import Treeprocessor
 
 from danvas.auth import canvas_from_args
-from danvas.authored_content import datetime_values_match
+from danvas.authored_content import (
+    DATE_OR_DATETIME,
+    SCALAR,
+    ComparisonPolicy,
+    comparison_check,
+    datetime_values_match,
+    require_valid_datetimes,
+)
 from danvas.frontmatter import normalize_canvas_value, parse_frontmatter
 from danvas.reports import create_report_run, should_write_report_run
 from danvas.source_map import (
@@ -39,6 +46,17 @@ from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_jso
 RENDERER_VERSION = "pages-markdown-v2"
 COMPATIBILITY_PROFILE = "canvas-page-v1"
 BODY_NORMALIZER_VERSION = "pages-html-v4"
+PAGE_METADATA_COMPARE_FIELDS = {
+    "title",
+    "published",
+    "front_page",
+    "editing_roles",
+    "publish_at",
+}
+PAGE_METADATA_FIELD_POLICIES: dict[str, ComparisonPolicy] = {
+    field: (DATE_OR_DATETIME if field == "publish_at" else SCALAR)
+    for field in PAGE_METADATA_COMPARE_FIELDS
+}
 
 ALLOWED_TAGS = {
     "a", "abbr", "blockquote", "br", "caption", "code", "col", "colgroup", "dd", "del",
@@ -336,6 +354,11 @@ def normalize_page_metadata(metadata: dict[str, Any], source: Path) -> dict[str,
     unknown = sorted(set(metadata) - allowed)
     if unknown:
         raise SystemExit(f"Unsupported Page front matter in {source}: {', '.join(unknown)}")
+    require_valid_datetimes(
+        metadata,
+        {"publish_at": DATE_OR_DATETIME},
+        source_type="Page",
+    )
     result = {key: normalize_canvas_value(value) for key, value in metadata.items()}
     result.setdefault("published", False)
     result.setdefault("front_page", False)
@@ -697,11 +720,17 @@ def compare_page(
         differences.append("volatile_urls")
     elif expected_body != actual_body:
         differences.append("body")
-    if str(canvas_page.get("title") or "") != str(local.metadata["title"]):
+    if not page_metadata_values_match(
+        "title", canvas_page.get("title") or "", local.metadata["title"]
+    ):
         differences.append("title")
-    if "published" in local.metadata and bool(canvas_page.get("published")) != bool(local.metadata["published"]):
+    if "published" in local.metadata and not page_metadata_values_match(
+        "published", canvas_page.get("published"), local.metadata["published"]
+    ):
         differences.append("published")
-    if bool(canvas_page.get("front_page")) != bool(local.metadata["front_page"]):
+    if not page_metadata_values_match(
+        "front_page", canvas_page.get("front_page"), local.metadata["front_page"]
+    ):
         differences.append("front_page")
     for field in ("editing_roles", "publish_at"):
         if field in local.metadata and not page_metadata_values_match(
@@ -722,9 +751,12 @@ def compare_page(
 
 
 def page_metadata_values_match(field: str, canvas_value: Any, local_value: Any) -> bool:
-    if field != "publish_at":
-        return canvas_value == local_value
-    return publish_at_values_match(canvas_value, local_value)
+    return comparison_check(
+        field,
+        local_value,
+        canvas_value,
+        policy=PAGE_METADATA_FIELD_POLICIES[field],
+    )["matches"]
 
 
 def publish_at_values_match(canvas_value: Any, local_value: Any) -> bool:

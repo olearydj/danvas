@@ -18,6 +18,7 @@ from urllib.parse import unquote
 from danvas.auth import canvas_from_args
 from danvas.canvas_links import stable_course_file_url
 from danvas.reports import ReportRun, create_report_run, find_config_dir, should_write_report_run
+from danvas.sanitize import is_sensitive_key, sanitize_error, sanitize_public
 from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_json, write_rows
 
 GENERATED_INVENTORY_NAMES = {
@@ -72,19 +73,7 @@ OFFICE_CONTENT_TYPES = {
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
-SENSITIVE_UPLOAD_KEYS = {
-    "download_url",
-    "error_url",
-    "file_param",
-    "file_url",
-    "token",
-    "upload_url",
-    "url",
-    "verifier",
-}
 SAFE_UPLOAD_ERROR_KEYS = ("error", "message", "errors", "status", "status_code")
-URLISH_RE = re.compile(r"https?://\S+|[A-Za-z]+://\S+")
-VERIFIER_RE = re.compile(r"(?i)(verifier|token|secret)=([^&\s]+)")
 
 
 def command_files_inventory(args: Any) -> None:
@@ -1000,31 +989,15 @@ def safe_upload_error(payload: dict[str, Any]) -> str:
 
 
 def scrub_sensitive_upload_payload(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            str(key): scrub_sensitive_upload_payload(item)
-            for key, item in value.items()
-            if not is_sensitive_upload_key(str(key))
-        }
-    if isinstance(value, list):
-        return [scrub_sensitive_upload_payload(item) for item in value]
-    if isinstance(value, tuple):
-        return [scrub_sensitive_upload_payload(item) for item in value]
-    if isinstance(value, str):
-        return safe_upload_error_text(value)
-    return value
+    return sanitize_public(value, url_marker="[redacted-url]")
 
 
 def is_sensitive_upload_key(key: str) -> bool:
-    normalized = key.lower().replace("-", "_")
-    return any(part in normalized for part in SENSITIVE_UPLOAD_KEYS)
+    return is_sensitive_key(key)
 
 
 def safe_upload_error_text(value: Any) -> str:
-    text = str(value)
-    text = URLISH_RE.sub("[redacted-url]", text)
-    text = VERIFIER_RE.sub("[redacted-sensitive-value]", text)
-    return text
+    return sanitize_error(value, url_marker="[redacted-url]")
 
 
 def download_relative_path(record: dict[str, Any]) -> Path:

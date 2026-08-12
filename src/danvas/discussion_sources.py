@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +12,15 @@ from bs4 import BeautifulSoup
 from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.auth import canvas_from_args
-from danvas.authored_content import datetime_values_match
+from danvas.authored_content import (
+    DATETIME,
+    SCALAR,
+    ComparisonPolicy,
+    comparison_check,
+    first_value,
+    normalized_text,
+    require_valid_datetimes,
+)
 from danvas.canvas_links import canonical_canvas_object_url
 from danvas.config import resolve_assignment_group_id
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
@@ -83,6 +91,10 @@ DISCUSSION_COMPARE_FIELDS = DISCUSSION_TOPIC_FIELDS | {
     "body_text",
 }
 DISCUSSION_DATETIME_FIELDS = {"delayed_post_at", "due_at", "lock_at", "unlock_at"}
+DISCUSSION_FIELD_POLICIES: dict[str, ComparisonPolicy] = {
+    field: (DATETIME if field in DISCUSSION_DATETIME_FIELDS else SCALAR)
+    for field in DISCUSSION_COMPARE_FIELDS
+}
 
 
 def command_discussions_create(args: Any) -> None:
@@ -451,25 +463,11 @@ def load_discussion_source(source: Path, *, canvas_origin: str | None = None) ->
 
 
 def validate_discussion_datetimes(metadata: dict[str, Any]) -> None:
-    for field in DISCUSSION_DATETIME_FIELDS & set(metadata):
-        value = metadata.get(field)
-        if value in (None, ""):
-            continue
-        if isinstance(value, date) and not isinstance(value, datetime):
-            raise SystemExit(
-                f"Discussion {field} requires an ISO 8601 timestamp with Z or an explicit "
-                "UTC offset; date-only values are not accepted by Canvas."
-            )
-        raw = value.isoformat() if hasattr(value, "isoformat") else str(value).strip()
-        try:
-            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError as exc:
-            raise SystemExit(f"Discussion {field} must be a valid ISO 8601 timestamp.") from exc
-        if parsed.tzinfo is None or parsed.utcoffset() is None:
-            raise SystemExit(
-                f"Discussion {field} requires Z or an explicit UTC offset; "
-                "offset-free timestamps are ambiguous."
-            )
+    require_valid_datetimes(
+        metadata,
+        {field: DATETIME for field in DISCUSSION_DATETIME_FIELDS},
+        source_type="Discussion",
+    )
 
 
 def split_discussion_body(body: str) -> tuple[str, list[str]]:
@@ -1099,53 +1097,12 @@ def print_discussion_summary(action: str, report: dict[str, Any]) -> None:
 
 
 def verify_check(field: str, local_value: Any, canvas_value: Any) -> dict[str, Any]:
-    local = comparable_value(local_value)
-    canvas = comparable_value(canvas_value)
-    matches = (
-        datetime_values_match(canvas_value, local_value)
-        if field in DISCUSSION_DATETIME_FIELDS
-        else local == canvas
+    return comparison_check(
+        field,
+        local_value,
+        canvas_value,
+        policy=DISCUSSION_FIELD_POLICIES.get(field, SCALAR),
     )
-    return {
-        "field": field,
-        "status": "matches" if matches else "mismatch",
-        "matches": matches,
-        "local": local,
-        "canvas": canvas,
-    }
-
-
-def comparable_value(value: Any) -> Any:
-    if isinstance(value, bool) or value is None:
-        return value
-    if isinstance(value, (int, float)):
-        return value
-    text = normalized_text(str(value)).replace("+00:00", "Z")
-    if text.lower() == "true":
-        return True
-    if text.lower() == "false":
-        return False
-    try:
-        number = float(text)
-    except ValueError:
-        return text
-    return int(number) if number.is_integer() else number
-
-
-def normalized_text(value: str) -> str:
-    return " ".join(value.split())
-
-
-def first_value(obj: Any, payload: dict[str, Any], *names: str) -> Any:
-    for name in names:
-        if obj is not None:
-            value = getattr(obj, name, None)
-            if value is not None and value != "":
-                return value
-        value = payload.get(name)
-        if value is not None and value != "":
-            return value
-    return ""
 
 
 def optional_int(value: Any, field: str) -> int | None:

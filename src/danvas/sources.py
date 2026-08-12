@@ -7,6 +7,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
+from danvas.authored_content import DATE_OR_DATETIME, DATETIME, require_valid_datetimes
 from danvas.frontmatter import normalize_canvas_value, parse_frontmatter
 
 SOURCE_KINDS = ("announcement", "discussion", "quiz", "assignment", "page")
@@ -44,14 +45,17 @@ ASSIGNMENT_SOURCE_MARKER_FIELDS = {
     "assignment_group_id",
     "assignment_group_name",
     "due_at",
+    "due_date",
     "grading_type",
     "group_category_id",
     "lock_at",
+    "lock_date",
     "peer_reviews",
     "points_possible",
     "published",
     "submission_types",
     "unlock_at",
+    "unlock_date",
 }
 
 
@@ -215,6 +219,11 @@ def source_record(
             metadata, _body = parse_frontmatter(
                 text, path, kind.capitalize()
             )
+            if kind == "assignment":
+                from danvas.assignments import expand_date_only_metadata
+
+                expand_date_only_metadata(metadata, path)
+            validate_source_datetimes(kind, metadata)
             if (
                 kind == "assignment"
                 and require_assignment_metadata
@@ -248,6 +257,24 @@ def comparable_metadata(kind: str, metadata: dict[str, Any]) -> dict[str, Any]:
         for field in COMPARABLE_FIELDS.get(kind, [])
         if field in metadata
     }
+
+
+def validate_source_datetimes(kind: str, metadata: dict[str, Any]) -> None:
+    policies = {
+        field: DATETIME
+        for field in ("due_at", "unlock_at", "lock_at", "delayed_post_at")
+    }
+    if kind == "assignment":
+        policies.update(
+            {
+                "due_date": DATE_OR_DATETIME,
+                "unlock_date": DATE_OR_DATETIME,
+                "lock_date": DATE_OR_DATETIME,
+            }
+        )
+    if kind == "page":
+        policies["publish_at"] = DATE_OR_DATETIME
+    require_valid_datetimes(metadata, policies, source_type=kind.capitalize())
 
 
 def quiz_source_title(text: str) -> str:

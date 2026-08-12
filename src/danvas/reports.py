@@ -13,16 +13,12 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from danvas import __version__
+from danvas.sanitize import sanitize_error
 from danvas.utils import mark_private, slugify, write_json, write_rows
 
 CONFIG_DIR_NAME = ".danvas"
 CONFIG_FILE_NAME = "config.toml"
 REPORTS_DIR_NAME = "reports"
-URLISH_RE = re.compile(r"https?://\S+|[A-Za-z]+://\S+")
-SENSITIVE_VALUE_RE = re.compile(
-    r"(?i)(?<![A-Za-z0-9])((?:access_)?token|verifier|secret)=([^&\s]+)"
-)
-AUTHORIZATION_RE = re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer|bearer)\s+[^\s,;]+")
 REPORT_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(\d{3})-(.+)$")
 
 
@@ -337,7 +333,5 @@ def course_id_for_config(config_dir: Path | None) -> int | None:
 
 
 def safe_error(error: str) -> str:
-    text = " ".join(str(error).split())
-    text = SENSITIVE_VALUE_RE.sub(lambda match: f"{match.group(1)}=[redacted]", text)
-    text = AUTHORIZATION_RE.sub(lambda match: f"{match.group(1)} [redacted]", text)
-    return URLISH_RE.sub("[url]", text)
+    """Compatibility export for the shared public error sanitizer."""
+    return sanitize_error(error)

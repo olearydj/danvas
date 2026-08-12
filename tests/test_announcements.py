@@ -9,7 +9,11 @@ from typing import Any
 import pytest
 
 from danvas.announcements import (
+    ANNOUNCEMENT_COMPARE_FIELDS,
+    ANNOUNCEMENT_FIELD_POLICIES,
+    ANNOUNCEMENT_METADATA_FIELDS,
     announcement_records,
+    announcement_update_checks,
     command_announcements_create,
     command_announcements_latest,
     command_announcements_sync,
@@ -18,6 +22,33 @@ from danvas.announcements import (
     load_announcement_markdown,
     write_announcements_csv,
 )
+
+
+def test_every_supported_announcement_field_has_explicit_comparison_policy() -> None:
+    assert set(ANNOUNCEMENT_FIELD_POLICIES) == ANNOUNCEMENT_COMPARE_FIELDS
+
+
+def test_announcement_source_rejects_offset_free_at_value(tmp_path: Path) -> None:
+    source = tmp_path / "announcement.md"
+    source.write_text(
+        "---\ntitle: News\ndelayed_post_at: 2026-09-01T09:00:00\n---\n\nHello.\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="requires Z or an explicit UTC offset"):
+        load_announcement_markdown(source)
+
+
+def test_every_supported_announcement_field_change_is_compared() -> None:
+    for field in ANNOUNCEMENT_METADATA_FIELDS:
+        local = {field: "local"}
+        canvas = {"topic": {field: "canvas"}}
+
+        checks = announcement_update_checks(local, canvas, {field: "local"})
+
+        assert len(checks) == 1, field
+        assert checks[0]["field"] == field
+        assert checks[0]["matches"] is False
 
 
 class FakeTopic(SimpleNamespace):

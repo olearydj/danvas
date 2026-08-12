@@ -111,6 +111,18 @@ An optional gap produces a schema-v5 partial snapshot, a concise warning, and a
 successful command exit because the core snapshot remains usable. The warning
 names the collection, status, and bounded reason without raw server detail.
 
+Sprint 15 preserves that default and adds `--require-complete` to `init`,
+`refresh`, and `status`. Strict init/refresh exits `3` before writing or
+replacing state; strict status writes requested evidence and then exits `3`.
+Partial warnings are written to stderr, and report manifests derived from
+partial evidence use status `partial`.
+
+Sprint 15 also distinguishes `InvalidAccessToken` from endpoint-local
+`Unauthorized`: an invalid token aborts collection at required, optional, and
+nested boundaries, calls no later collectors, and cannot write or replace a
+snapshot. `Forbidden` and endpoint-local `Unauthorized` retain the partial
+snapshot behavior documented here.
+
 Folders and files retain their two existing top-level arrays. If folder
 enumeration is unavailable or failed, neither array is authoritative and file
 collection is not attempted. If folders succeed but file enumeration fails,

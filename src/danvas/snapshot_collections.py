@@ -91,14 +91,14 @@ def available(items: list[dict[str, Any]]) -> CollectionResult:
 
 def classify_collection_exception(exc: Exception) -> ExceptionClassification | None:
     """Return a bounded classification for expected Canvas/request failures."""
+    if isinstance(exc, InvalidAccessToken):
+        return ExceptionClassification("failed", "invalid_access_token", "InvalidAccessToken")
     if isinstance(exc, RateLimitExceeded):
         return ExceptionClassification("failed", "rate_limited", "RateLimitExceeded")
     if isinstance(exc, Unauthorized):
         return ExceptionClassification("unavailable", "unauthorized", "Unauthorized")
     if isinstance(exc, Forbidden):
         return ExceptionClassification("unavailable", "forbidden", "Forbidden")
-    if isinstance(exc, InvalidAccessToken):
-        return ExceptionClassification("unavailable", "invalid_access_token", "InvalidAccessToken")
     if isinstance(exc, RequestException):
         return ExceptionClassification("failed", "network_error", "RequestException")
     if isinstance(exc, CanvasException):
@@ -141,6 +141,10 @@ def collect_snapshot_collections(
                 classification = classify_collection_exception(exc)
                 if classification is None:
                     raise
+                if classification.reason == "invalid_access_token":
+                    raise SystemExit(
+                        "Canvas access token is invalid; snapshot collection stopped and no snapshot was written."
+                    ) from exc
                 if spec.required:
                     raise SystemExit(
                         f"Required snapshot collection {spec.name!r} "
@@ -407,6 +411,10 @@ def collect_group_categories(
             classification = classify_collection_exception(exc)
             if classification is None:
                 raise
+            if classification.reason == "invalid_access_token":
+                raise SystemExit(
+                    "Canvas access token is invalid; snapshot collection stopped and no snapshot was written."
+                ) from exc
             nested_failures.append(classification)
             rows.append(
                 {

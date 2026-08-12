@@ -8,6 +8,8 @@ from typing import Any
 from canvasapi import Canvas
 from secretpath import SecretMiss, SecretPathError, doctor_report, resolve_named_secret
 
+from danvas.sanitize import sanitize_error
+
 DEFAULT_API_URL = "https://auburn.instructure.com/"
 
 
@@ -163,8 +165,5 @@ def print_auth_doctor_report(payload: dict[str, Any]) -> None:
 
 
 def safe_auth_error(error: Exception) -> str:
-    text = " ".join(str(error).split())
-    for marker in ("token=", "verifier=", "access_token="):
-        if marker in text:
-            text = text.split(marker, 1)[0] + marker + "[redacted]"
-    return text
+    """Compatibility export for the shared public error sanitizer."""
+    return sanitize_error(error)

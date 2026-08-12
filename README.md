@@ -74,6 +74,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 
 - lint Canvas-facing local sources
   - assignment, announcement, discussion, and Page validation without Canvas access
+  - rejects ambiguous offset-free authored timestamps before Canvas access
   - stable rule IDs, narrow documented suppressions, JSON output, and warning-strict CI mode
 
 - check and audit gradebook exports
@@ -173,6 +174,9 @@ danvas
 │   └── verify
 ├── discussions
 │   ├── export
+│   ├── create
+│   ├── verify
+│   ├── update
 │   ├── sync-prompts
 │   └── score
 ├── announcements
@@ -225,7 +229,7 @@ temporary uv tool directories:
 
 ```bash
 scripts/release-smoke.sh
-scripts/release-smoke.sh --expected-version 0.11.0
+scripts/release-smoke.sh --expected-version 0.12.0
 ```
 
 The smoke script honors normal uv configuration and freshness rules, never
@@ -321,7 +325,9 @@ schema version 5 records whether each collection is authoritative, unavailable,
 failed, or partial. Optional endpoint failures leave an explicitly partial but
 usable snapshot; `refresh --diff` and `status` do not claim removals or
 local/Canvas drift from non-authoritative collections. Required assignment and
-assignment-group reads still fail without replacing the previous snapshot.
+assignment-group reads still fail without replacing the previous snapshot. An
+`InvalidAccessToken` from any top-level or nested collection stops collection,
+exits nonzero, and does not write or replace snapshot state.
 Snapshots never store Page bodies, download verifier URLs, raw Canvas error
 responses, or student data. Page hashing also ignores non-authorable account stylesheet/script
 decorators that Canvas injects around API readback while continuing to reject
@@ -337,7 +343,14 @@ changed since the previous snapshot:
 danvas refresh
 danvas refresh --diff
 danvas refresh --diff --report-root .danvas/reports
+danvas refresh --require-complete
 ```
+
+Optional collection gaps still exit zero by default and print bounded warnings
+to stderr. Automation can pass `--require-complete` to `init`, `refresh`, or
+`status`. Strict init/refresh exits `3` before writing project or snapshot state;
+strict status writes requested evidence and then exits `3`. Report manifests
+derived from partial evidence use status `partial`.
 
 The first refresh from schema 4 to schema 5 reports a schema change instead of
 making cross-schema change claims. Later schema-v5 diffs compare authoritative
@@ -361,7 +374,10 @@ Use `assignment_group_id` when you want to bypass project-local name resolution.
 Date-only assignment fields `due_date`, `unlock_date`, and `lock_date` expand to
 Canvas `*_at` datetimes using the course timezone in `.danvas/config.toml`.
 `due_date` and `lock_date` use 23:59; `unlock_date` uses 00:00. Use explicit
-`due_at`, `unlock_at`, or `lock_at` when a different time is needed.
+`due_at`, `unlock_at`, or `lock_at` with `Z` or an explicit UTC offset when a
+different time is needed. Offset-free timestamps are rejected before Canvas
+access. Announcement and discussion scheduling fields use the same aware-time
+requirement; Page `publish_at` additionally accepts a date-only value.
 
 `danvas status` has default local-source conventions:
 
