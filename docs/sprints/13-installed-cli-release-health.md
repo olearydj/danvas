@@ -232,7 +232,10 @@ No live Canvas call or course mutation is required for this sprint.
 
 Steps 1 through 4 passed for `v0.10.2` on 2026-08-11. Its pending global-install
 check was superseded by the explicitly authorized exact-tag `v0.11.0`
-installation and startup validation on 2026-08-12.
+installation and startup validation on 2026-08-12. A `--force`-only invocation
+exited successfully but retained the existing 0.10.0 tool; the verified
+replacement required `--upgrade --reinstall`, and the README now records that
+exact-tag upgrade form plus the mandatory installed-version check.
 
 ## Exclusions
 

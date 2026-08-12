@@ -234,7 +234,7 @@ contacts Canvas, and never changes the global danvas installation.
 Install the latest exact tagged release:
 
 ```bash
-uv tool install --force \
+uv tool install --force --upgrade --reinstall \
   "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.11.0"
 ```
 
@@ -248,13 +248,15 @@ danvas auth doctor
 ```
 
 If danvas fails before command parsing, `auth doctor` cannot start either. Use
-`uv tool list` to inspect the installed version/source, then force an exact-tag
-reinstall and repeat all startup checks. If a machine-wide uv `exclude-newer`
-cutoff predates a required release artifact, keep the global policy unchanged
-and use an explicitly audited cutoff for this install command only:
+`uv tool list` to inspect the installed version/source, then upgrade/reinstall
+from the exact tag and repeat all startup checks. `--force` alone may exit 0
+while retaining the older same-package tool environment. If a machine-wide uv
+`exclude-newer` cutoff predates a required release artifact, keep the global
+policy unchanged and use an explicitly audited cutoff for this install command
+only:
 
 ```bash
-uv tool install --force \
+uv tool install --force --upgrade --reinstall \
   --exclude-newer YYYY-MM-DDTHH:MM:SSZ \
   "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.11.0"
 ```

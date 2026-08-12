@@ -138,7 +138,10 @@ and indeterminate upload identity. The full frozen suite, Ruff, ty, isolated
 editable/wheel smoke, and exact-tag CI passed for published tag `v0.10.2`; its
 pending global replacement check was superseded by the explicitly authorized
 exact-tag `v0.11.0` installation. No new Canvas command or live field mutation
-is needed.
+is needed. The field install also showed that uv's `--force` alone can exit 0
+while retaining an older same-package tool environment; exact-tag replacement
+guidance now includes `--upgrade --reinstall` and requires a post-install version
+check.
 
 ## 0.11.0 Authored Discussion Release
 
