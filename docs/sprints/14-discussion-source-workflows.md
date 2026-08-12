@@ -1,6 +1,6 @@
 # Sprint 14: Authored Discussion Creation And Safe Updates
 
-Status: implemented and locally verified on 2026-08-11. Target release: 0.11.0.
+Status: released in 0.11.0 after local and bounded live verification on 2026-08-12.
 
 ## Outcome
 
@@ -115,9 +115,11 @@ root body. Supported evidence includes title, stable URL, discussion type,
 initial-post requirement, due/unlock/lock dates, points, publication state,
 assignment linkage and identity, assignment group, grading type, and group
 category, every accepted rating/podcast/pinning/section field, and assignment
-override visibility. Date-only values and timezone-equivalent ISO timestamps
-compare semantically. Seed count and headings are checked only when stable entry
-IDs are available from front matter, source-map provenance, or the current
+override visibility. Discussion timestamps require `Z` or an explicit UTC
+offset because Canvas silently ignores date-only graded-discussion dates;
+timezone-equivalent ISO timestamps compare semantically. Seed count and headings
+are checked only when stable entry IDs are available from front matter,
+source-map provenance, or the current
 create run; otherwise terminal and report output explicitly say seed verification
 was not available. Student top-level posts are never guessed to be instructor
 prompts.
@@ -166,13 +168,23 @@ duplicate the full root body or reply bodies.
 ## Acceptance
 
 Automated coverage includes parsing, seed confirmation, offline dry-run,
-graded creation payloads, every accepted compare field, timezone/date-only
-equivalence, reverse posting, source-order and interrupted-create provenance,
-duplicate retry blocking, visible unavailable-seed verification, body-only
-update isolation, and declared-field-only full updates.
+graded creation payloads, every accepted compare field, timezone equivalence,
+ambiguous/date-only timestamp rejection, reverse posting, source-order and
+interrupted-create provenance, duplicate retry blocking, visible
+unavailable-seed verification, body-only update isolation, and
+declared-field-only full updates.
 
-Ruff, ty, and all 437 tests pass. The 0.11.0 isolated release smoke also passes
+Ruff, ty, and all 439 tests pass. The 0.11.0 isolated release smoke also passes
 for both editable and built-wheel installs, including version, help, and local
-auth-doctor checks. Live Canvas acceptance is intentionally separate because it
-creates and updates Canvas objects; it requires an explicitly authorized
-disposable discussion target and must clean that target up afterward.
+auth-doctor checks.
+
+Bounded live acceptance passed on 2026-08-12 in sandbox course 1576638. A draft
+graded topic with two instructor seed replies passed offline planning, clean
+create/readback, stable topic/assignment/entry provenance, full verification,
+the already-bound create guard, body-only update/readback, and seed-ID
+preservation. The disposable topic and linked assignment were independently
+confirmed absent after cleanup. The field run found that Canvas silently ignores
+a date-only graded-discussion `due_at`; danvas now rejects date-only and
+offset-free discussion timestamps before Canvas access while retaining semantic
+comparison for timezone-equivalent values. It also confirmed final live-update
+terminal output now reports fresh readback checks instead of the pre-update diff.

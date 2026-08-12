@@ -53,6 +53,26 @@ def test_common_rules_catch_timezone_points_assets_and_duplicate_h1(tmp_path: Pa
     assert {"date-timezone", "points-prose-mismatch", "asset-missing", "title-duplicate-h1"} <= rule_ids(record)
 
 
+def test_page_date_only_passes_but_discussion_date_only_fails_timezone_lint(
+    tmp_path: Path,
+) -> None:
+    discussion = write(
+        tmp_path / "content/discussions/week.md",
+        "---\ntitle: Week\ndiscussion_type: threaded\ndue_at: 2026-09-30\n"
+        "lock_at: 2026-10-01\n---\nDiscuss.\n",
+    )
+    page = write(
+        tmp_path / "content/pages/help.md",
+        "---\ntitle: Help\npublished: false\npublish_at: 2026-09-30\n---\nHelp.\n",
+    )
+
+    discussion_record = lint_source(discussion, kind=None, project_root=tmp_path)
+    page_record = lint_source(page, kind=None, project_root=tmp_path)
+
+    assert "date-timezone" in rule_ids(discussion_record)
+    assert "date-timezone" not in rule_ids(page_record)
+
+
 def test_page_rules_catch_unsafe_html_and_publication_conflict(tmp_path: Path) -> None:
     source = write(
         tmp_path / "page.html",

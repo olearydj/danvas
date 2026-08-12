@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -398,6 +398,7 @@ def load_discussion_source(source: Path, *, canvas_origin: str | None = None) ->
     )
     if unknown:
         raise SystemExit(f"Unsupported discussion metadata field(s): {', '.join(unknown)}")
+    validate_discussion_datetimes(metadata)
     root_body, seed_bodies = split_discussion_body(authored_body)
     if not root_body.strip():
         raise SystemExit("Discussion topic body must not be empty.")
@@ -447,6 +448,28 @@ def load_discussion_source(source: Path, *, canvas_origin: str | None = None) ->
         "body_sha256": hashlib.sha256(root_body.strip().encode("utf-8")).hexdigest(),
         "seed_replies": seed_replies,
     }
+
+
+def validate_discussion_datetimes(metadata: dict[str, Any]) -> None:
+    for field in DISCUSSION_DATETIME_FIELDS & set(metadata):
+        value = metadata.get(field)
+        if value in (None, ""):
+            continue
+        if isinstance(value, date) and not isinstance(value, datetime):
+            raise SystemExit(
+                f"Discussion {field} requires an ISO 8601 timestamp with Z or an explicit "
+                "UTC offset; date-only values are not accepted by Canvas."
+            )
+        raw = value.isoformat() if hasattr(value, "isoformat") else str(value).strip()
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise SystemExit(f"Discussion {field} must be a valid ISO 8601 timestamp.") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise SystemExit(
+                f"Discussion {field} requires Z or an explicit UTC offset; "
+                "offset-free timestamps are ambiguous."
+            )
 
 
 def split_discussion_body(body: str) -> tuple[str, list[str]]:
@@ -1060,7 +1083,12 @@ def render_discussion_report(action: str, report: dict[str, Any]) -> str:
 
 def print_discussion_summary(action: str, report: dict[str, Any]) -> None:
     print(f"Discussion {action}: {report['status']}")
-    for check in report.get("checks", report.get("diff", [])):
+    checks = report.get("checks")
+    if checks is None and report.get("canvas_after"):
+        checks = (report.get("readback") or {}).get("checks")
+    if checks is None:
+        checks = report.get("diff", [])
+    for check in checks:
         print(f"  {check['field']}: {'OK' if check['matches'] else 'MISMATCH'}")
     for check in report.get("seed_checks", []):
         print(f"  {check['field']}: {'OK' if check['matches'] else 'MISMATCH'}")

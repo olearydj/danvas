@@ -202,6 +202,19 @@ def test_load_discussion_source_splits_root_and_seed_replies(tmp_path: Path) -> 
     assert local["assignment"]["points_possible"] == 10
 
 
+@pytest.mark.parametrize("due_at", ["2026-09-01", "2026-09-01T23:59:00"])
+def test_discussion_source_rejects_date_only_and_offset_free_due_at(
+    tmp_path: Path, due_at: str
+) -> None:
+    source = write_source(
+        tmp_path,
+        SOURCE.replace("2026-09-01T04:59:00Z", due_at),
+    )
+
+    with pytest.raises(SystemExit, match="requires .*offset|requires an ISO"):
+        load_discussion_source(source)
+
+
 def test_create_requires_seed_confirmation_before_canvas_call(tmp_path: Path) -> None:
     source = write_source(tmp_path)
 
@@ -285,7 +298,9 @@ def test_verify_uses_source_map_seed_ids_and_checks_headings(
 
 
 def test_body_only_update_does_not_touch_entries_or_metadata(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     source = write_source(tmp_path)
     course = FakeCourse()
@@ -303,6 +318,10 @@ def test_body_only_update_does_not_touch_entries_or_metadata(
 
     command_discussions_update(args(source, body_only=True))
 
+    output = capsys.readouterr().out
+    assert "Discussion update: updated" in output
+    assert "body_text: OK" in output
+    assert "body_text: MISMATCH" not in output.split("Discussion update: updated", 1)[1]
     assert topic.update_calls[-1].keys() == {"message"}
     assert topic.published is False
     assert topic.entries == original_entries
@@ -447,10 +466,7 @@ Discuss the unit.
 
 @pytest.mark.parametrize(
     ("source_due_at", "canvas_due_at"),
-    [
-        ("2026-09-01T00:00:00-05:00", "2026-09-01T05:00:00Z"),
-        ("2026-09-01", "2026-09-01T23:59:00Z"),
-    ],
+    [("2026-09-01T00:00:00-05:00", "2026-09-01T05:00:00Z")],
 )
 def test_update_treats_equivalent_assignment_datetimes_as_no_change(
     tmp_path: Path,

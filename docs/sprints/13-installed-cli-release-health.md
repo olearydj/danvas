@@ -230,8 +230,9 @@ For an exact tagged release:
 
 No live Canvas call or course mutation is required for this sprint.
 
-Steps 1 through 4 passed for `v0.10.2` on 2026-08-11. Step 5 remains pending
-explicit authorization.
+Steps 1 through 4 passed for `v0.10.2` on 2026-08-11. Its pending global-install
+check was superseded by the explicitly authorized exact-tag `v0.11.0`
+installation and startup validation on 2026-08-12.
 
 ## Exclusions
 

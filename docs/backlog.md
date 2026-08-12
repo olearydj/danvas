@@ -1,6 +1,6 @@
 # danvas Backlog
 
-Last consolidated: 2026-08-11.
+Last consolidated: 2026-08-12.
 
 This document is the planning backlog for `danvas`. It distinguishes the shipped
 0.7.0 surface from genuine follow-on work. The lightweight implementation specs
@@ -135,11 +135,12 @@ release:
 Focused regression tests cover alias no-change behavior, successful update
 readback and provenance, same-origin report projection, partial upload evidence,
 and indeterminate upload identity. The full frozen suite, Ruff, ty, isolated
-editable/wheel smoke, and exact-tag CI passed for published tag `v0.10.2`; only
-the explicitly authorized replacement/check of the user's global installation
-remains. No new Canvas command or live field mutation is needed.
+editable/wheel smoke, and exact-tag CI passed for published tag `v0.10.2`; its
+pending global replacement check was superseded by the explicitly authorized
+exact-tag `v0.11.0` installation. No new Canvas command or live field mutation
+is needed.
 
-## 0.11.0 Discussion Source Development Line
+## 0.11.0 Authored Discussion Release
 
 Sprint 14 is implemented in
 `docs/sprints/14-discussion-source-workflows.md`. It adds authored discussion
@@ -147,10 +148,15 @@ create, verify, and safe update commands; graded-assignment preservation;
 explicit seeded-reply confirmation; reverse posting with source-order entry
 provenance; complete topic/assignment/seed readback; and a body-only update
 scope that never mutates entries. The implementation uses the new
-`danvas.discussion_sources` module and targets 0.11.0. Local verification is
-complete with Ruff, ty, all 437 tests, and isolated editable/wheel smoke;
-bounded live Canvas acceptance remains a separate, explicitly authorized
-release gate. The same review pass hardens grade evidence preflight: nonblank
+`danvas.discussion_sources` module and ships in 0.11.0. Ruff, ty, all 439 tests,
+and isolated editable/wheel smoke pass. Bounded live acceptance passed in
+sandbox course 1576638 on 2026-08-12: clean create/readback, stable assignment
+and seed-entry provenance, full verify, local duplicate guard, body-only update,
+seed preservation, and guarded topic/assignment cleanup all passed. Field
+acceptance also established that discussion `*_at` fields need `Z` or an
+explicit UTC offset because Canvas silently ignores date-only graded-discussion
+dates; source loading and lint now fail before Canvas access for ambiguous
+values. The same review pass hardens grade evidence preflight: nonblank
 malformed rows and duplicate normalized Canvas IDs now fail before Canvas
 access, so verification and recovery cannot silently omit or mispair intent.
 
@@ -169,7 +175,7 @@ closed.
 | Assignment release evidence | `danvas assignments verify/export`, `danvas files upload` | Stable upload links, duplicate-action plans, exact file-ID verification, and safe projections passed bounded live acceptance and shipped in `v0.10.0`. |
 | Canvas Pages bounded workflow | `danvas pages list/export/sync/render/css-check/create/update/verify`, schema-v4 status | Assets, rename/delete, broad upsert, and broader compatibility profiles remain deferred. |
 | Canvas-facing source lint | `danvas sources lint` | External HTTP checking and automatic rewriting remain deferred. |
-| Authored discussion workflow | `danvas discussions create/verify/update` | Sprint 14 is locally implemented; bounded disposable-topic Canvas acceptance remains before release. |
+| Authored discussion workflow | `danvas discussions create/verify/update` | Sprint 14 passed bounded disposable-topic Canvas acceptance and shipped in `v0.11.0`. |
 | Read-only Canvas/local status | `danvas status` | Continue refining next-action hints as new source workflows land. |
 | Refresh diff | `danvas refresh --diff` | Plain diff remains terminal-first; report output is available through explicit report options. |
 | Local source discovery | `danvas.sources` plus `[sources.<kind>]` config | Continue reusing in future source-aware commands. |
@@ -211,7 +217,7 @@ sprint sequence as canonical.
 | Sprint 3 overall: safe updates and round-trip verification | Partial | Core update/readback work is split across Sprint Candidates C and D; report foundations are delivered; file compare/report follow-ons are Candidate B. |
 | Sprint 2: groups categories/import/verify | Not started | Sprint Candidate E. |
 | Sprint 2: group planning from roster | Not started | Sprint Candidate E. |
-| Sprint 2: seeded discussion creation | Done locally | Sprint 14 generalizes creation beyond grouped cases with dry-run, graded metadata, readback, seed IDs, and provenance; live acceptance remains. |
+| Sprint 2: seeded discussion creation | Done | Sprint 14 generalizes creation beyond grouped cases with dry-run, graded metadata, readback, seed IDs, provenance, and bounded live acceptance. |
 | Sprint 2: basic `files upload` | Done | Delivered Baseline; future work is Markdown asset rewriting and optional explicit folder creation. |
 | Sprint 2: due-date ergonomics | Done | Smaller Backlog Items; date-only assignment fields are delivered. |
 | Sprint 2 stretch: transcript filing helper | Not started | Smaller Backlog Items. |
@@ -1447,21 +1453,21 @@ skill docs. A CASS transcript review covering the preceding 100 days on
 2026-08-09 confirmed the relevance of items 1, 2, and 6 through 9, and added
 items 10 and 11 below. Items 6, 8, 9, 10, and 11 are implemented and have passed
 their bounded live or read-only field cases. Items 1 and 2 are implemented
-locally together as Sprint 14 and await bounded live acceptance; item 11 shipped
-in v0.10.2, with only the explicitly authorized global-install check pending.
+locally together as Sprint 14 and passed bounded live acceptance; item 11 shipped
+in v0.10.2 and its exact-install acceptance is superseded by the verified
+v0.11.0 installation.
 Item 7 is explicitly deferred because Canvas does not expose a supported API for
 initiating its native instructor gradebook CSV export.
 
 ### Current Priority Order
 
-Prioritize finishing the implemented release lines before opening another
+Prioritize structural consolidation before opening another authored-content
 command family:
 
-1. Run Sprint 14's explicitly authorized disposable-topic Canvas acceptance,
-   reconcile any field differences, and close the 0.11.0 release.
-2. Run Sprint 13's exact-tag global-install check when explicitly authorized;
-   v0.10.2 tag CI and both isolated install lanes have passed.
-3. Reassess grouped case setup versus Markdown asset rewriting for the next
+1. Consolidate authored-content comparison and sanitization primitives, reject
+   ambiguous timestamps consistently, and resolve the parked snapshot
+   credential/signaling findings.
+2. Reassess grouped case setup versus Markdown asset rewriting for the next
    sprint; neither is pulled into Sprint 14.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
@@ -1494,8 +1500,7 @@ ordering.
 
 1. Generalize seeded discussion creation beyond grouped cases.
 
-   Status: implemented locally in Sprint 14. Live disposable-topic acceptance
-   remains before release.
+   Status: shipped in v0.11.0 after bounded disposable-topic acceptance.
 
    Existing related item: Sprint Candidate E.3. The new evidence is that seeded
    prompts are useful for ordinary course discussions, not just grouped-case

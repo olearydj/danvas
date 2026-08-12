@@ -182,8 +182,9 @@ offline create planning, stable topic/assignment/entry provenance, readback
 verification, and declared-field or body-only update scopes. The new
 `danvas.discussion_sources` module owns these mutation and evidence concerns;
 the existing `danvas.discussions` module remains focused on export, local prompt
-sync, scoring, and grade upload. Target release: 0.11.0. Bounded live Canvas
-acceptance requires separate authorization and remains a release gate. Ruff,
-ty, all 437 tests, and isolated editable/wheel release smoke pass locally. A
+sync, scoring, and grade upload. Released in 0.11.0 after bounded sandbox Canvas
+acceptance passed create/readback, verify, duplicate prevention, body-only
+update, seed preservation, and guarded cleanup. Ruff, ty, all 439 tests, and
+isolated editable/wheel release smoke pass locally. A
 post-review evidence hardening pass also rejects malformed nonblank grade rows
 and duplicate normalized Canvas IDs before Canvas access.

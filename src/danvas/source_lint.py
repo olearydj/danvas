@@ -110,7 +110,7 @@ def lint_source(path: Path, *, kind: str | None, project_root: Path) -> dict[str
     title = str(metadata.get("title") or metadata.get("name") or "").strip()
     if not title:
         findings.append(finding("title-required", "error", path, "Source front matter has no title.", "Add a non-empty title field."))
-    findings.extend(lint_dates(path, text, metadata))
+    findings.extend(lint_dates(path, text, metadata, kind=resolved_kind))
     findings.extend(lint_structure(path, body, title))
     findings.extend(lint_links(path, body))
     findings.extend(lint_point_total(path, body, metadata))
@@ -129,7 +129,13 @@ def lint_source(path: Path, *, kind: str | None, project_root: Path) -> dict[str
     return {"path": str(path), "kind": resolved_kind, "findings": kept, "suppressed_rules": suppressed}
 
 
-def lint_dates(path: Path, text: str, metadata: dict[str, Any]) -> list[dict[str, Any]]:
+def lint_dates(
+    path: Path,
+    text: str,
+    metadata: dict[str, Any],
+    *,
+    kind: LintKind,
+) -> list[dict[str, Any]]:
     findings = []
     parsed: dict[str, datetime] = {}
     for field in DATE_FIELDS & set(metadata):
@@ -142,7 +148,11 @@ def lint_dates(path: Path, text: str, metadata: dict[str, Any]) -> list[dict[str
         except ValueError:
             findings.append(finding("date-invalid", "error", path, f"{field} is not a valid ISO 8601 date.", "Use an ISO 8601 timestamp with a timezone offset.", line=line_for(text, field)))
             continue
-        if date.tzinfo is None or date.utcoffset() is None:
+        date_only = re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw) is not None
+        date_only_supported = kind == "page" and field == "publish_at"
+        if (date.tzinfo is None or date.utcoffset() is None) and not (
+            date_only and date_only_supported
+        ):
             findings.append(finding("date-timezone", "error", path, f"{field} has no timezone offset.", "Add Z or an explicit offset such as -05:00.", line=line_for(text, field)))
         parsed[field] = date
     for earlier, later in (("unlock_at", "due_at"), ("due_at", "lock_at"), ("unlock_at", "lock_at")):

@@ -231,12 +231,11 @@ scripts/release-smoke.sh --expected-version 0.11.0
 The smoke script honors normal uv configuration and freshness rules, never
 contacts Canvas, and never changes the global danvas installation.
 
-Install the latest exact tagged release (the 0.11.0 development line is not yet
-tagged):
+Install the latest exact tagged release:
 
 ```bash
 uv tool install --force \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.10.2"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.11.0"
 ```
 
 Verify the installed environment outside the checkout:
@@ -257,7 +256,7 @@ and use an explicitly audited cutoff for this install command only:
 ```bash
 uv tool install --force \
   --exclude-newer YYYY-MM-DDTHH:MM:SSZ \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.10.2"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.11.0"
 ```
 
 Do not remove or loosen the global cutoff merely to make resolution succeed.
@@ -462,9 +461,10 @@ matter or the source map. Live creation records the returned topic ID before
 seed posting, then reads the topic, linked assignment, and returned seed-entry
 IDs back before completing source-map provenance. Verify and update resolve only
 by `--discussion-id`, `canvas_id` front matter, or the source map; they never
-title-match. Date-only and timezone-equivalent discussion/assignment timestamps
-compare semantically. If stable seed entry IDs are unavailable, verification
-prints and records that seed headings/count were not checked. `discussions
+title-match. Discussion timestamps require `Z` or an explicit UTC offset;
+timezone-equivalent values compare semantically. If stable seed entry IDs are
+unavailable, verification prints and records that seed headings/count were not
+checked. `discussions
 update --body-only` updates only the root topic message and never deletes,
 reorders, edits, or reposts instructor or student entries.
 
