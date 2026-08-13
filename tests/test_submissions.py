@@ -505,6 +505,46 @@ def test_submissions_feedback_ambiguous_remote_state_blocks_before_banner(
     assert "manual" in evidence["blockers"][0].lower()
 
 
+def test_submissions_feedback_second_submission_fetch_failure_is_pre_acceptance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    roster = tmp_path / "roster.csv"
+    write_roster(roster)
+    feedback_dir = tmp_path / "feedback"
+    feedback_dir.mkdir()
+    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"feedback")
+
+    class FetchFailureAssignment(FakeFeedbackAssignment):
+        def __init__(self) -> None:
+            super().__init__()
+            self.fetches = 0
+
+        def get_submission(
+            self, canvas_id: int, include: list[str] | None = None
+        ) -> FakeFeedbackSubmission:
+            self.fetches += 1
+            if self.fetches == 2:
+                raise RuntimeError("submission unavailable")
+            return super().get_submission(canvas_id, include=include)
+
+    assignment = FetchFailureAssignment()
+    monkeypatch.setattr(
+        "danvas.submissions.canvas_from_args",
+        lambda args: FakeFeedbackCanvas(assignment),
+    )
+
+    with pytest.raises(SystemExit):
+        command_submissions_feedback(feedback_args(roster, feedback_dir))
+
+    assert assignment.uploads == []
+    evidence = json.loads(
+        (feedback_dir / "feedback-results.json").read_text(encoding="utf-8")
+    )
+    result = evidence["results"][0]
+    assert result["status"] == "failed_before_acceptance"
+    assert result["response_status"] == "not_sent"
+
+
 class FakeAttachment:
     id = 700
     filename = "workbook.xlsx"

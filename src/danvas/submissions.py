@@ -531,7 +531,17 @@ def execute_feedback_action(
     *,
     mutation_mode: MutationMode,
 ) -> dict[str, Any]:
-    submission = assignment.get_submission(action["canvas_user_id"])
+    try:
+        submission = assignment.get_submission(action["canvas_user_id"])
+    except Exception as exc:  # noqa: BLE001 - no write primitive was reached.
+        return feedback_result(
+            action,
+            status="failed_before_acceptance",
+            error=safe_error(f"{type(exc).__name__}: {exc}"),
+            safe_next_action="Regenerate the plan after Canvas becomes readable, then retry.",
+            response_status="not_sent",
+            readback_status="not_attempted",
+        )
     try:
         response = upload_feedback_comment(
             submission,

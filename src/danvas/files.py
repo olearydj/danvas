@@ -440,6 +440,20 @@ def execute_file_upload(
 
     intended_name = str(local_row["name"])
     observed_name = str(result.get("display_name") or result.get("filename") or "")
+    if on_duplicate == "error" and not result["returned_name_available"]:
+        result.update(
+            {
+                "status": "indeterminate",
+                "mutation_status": "indeterminate",
+                "observed_outcome": "accepted_name_unverified",
+                "error": (
+                    "Canvas accepted the upload and returned a file ID without a filename; "
+                    "the error policy outcome cannot be verified."
+                ),
+                "safe_next_action": "Inspect Canvas manually; do not retry this upload blindly.",
+            }
+        )
+        return result
     if on_duplicate == "error" and observed_name != intended_name:
         result.update(
             {
@@ -1053,7 +1067,8 @@ def upload_result_row(
         "content_type"
     ]
     canvas_id = payload.get("id")
-    display_name = payload.get("display_name") or payload.get("filename") or local_row["name"]
+    returned_name = payload.get("display_name") or payload.get("filename")
+    display_name = returned_name or local_row["name"]
     folder_name = str(getattr(folder, "full_name", "") or "").rstrip("/")
     canvas_path = f"{folder_name}/{display_name}" if folder_name else str(display_name)
     stable_url = ""
@@ -1081,6 +1096,7 @@ def upload_result_row(
         "evidence_status": evidence_status,
         "canvas_id": canvas_id,
         "display_name": display_name,
+        "returned_name_available": returned_name is not None,
         "filename": payload.get("filename") or local_row["name"],
         "folder_id": payload.get("folder_id") or getattr(folder, "id", None),
         "canvas_path": canvas_path,

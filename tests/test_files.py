@@ -1304,6 +1304,52 @@ def test_command_files_upload_error_policy_classifies_renamed_race_as_conflict(
     assert "do not retry" in row["safe_next_action"].lower()
 
 
+def test_command_files_upload_error_policy_requires_returned_filename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class MissingNameFolder(FakeUploadFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            assert on_duplicate == "rename"
+            return True, {
+                "id": 1001,
+                "folder_id": self.id,
+                "size": Path(source).stat().st_size,
+                "content_type": content_type,
+            }
+
+    class MissingNameCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.slides = MissingNameFolder(id=20, full_name="course files/slides")
+
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"slides")
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(MissingNameCourse())
+    )
+
+    with pytest.raises(SystemExit):
+        command_files_upload(
+            SimpleNamespace(
+                course_id=101,
+                files=[str(source)],
+                folder="course files/slides",
+                folder_id=None,
+                on_duplicate="error",
+                dry_run=False,
+                mutation_mode="apply",
+                api_url="https://canvas.example/",
+                output=str(output),
+            )
+        )
+
+    row = json.loads(output.read_text(encoding="utf-8"))["files"][0]
+    assert row["status"] == "indeterminate"
+    assert row["observed_outcome"] == "accepted_name_unverified"
+    assert "do not retry" in row["safe_next_action"].lower()
+
+
 def test_command_files_upload_live_writes_legacy_and_report_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
