@@ -96,6 +96,8 @@ class FakeFeedbackSubmission:
                     ],
                 }
             )
+        if behavior == "edit_exception_after_apply":
+            raise RuntimeError("comment response failed after Canvas accepted the edit")
         return self
 
 
@@ -433,7 +435,13 @@ def test_submissions_feedback_rejection_stops_and_checkpoints_remaining_rows(
             "edit_exception",
             "accepted_unverified",
             "unknown_after_exception",
-            "not_available",
+            "mismatch",
+        ),
+        (
+            "edit_exception_after_apply",
+            "applied_verified",
+            "unknown_after_exception",
+            "verified",
         ),
     ],
 )
@@ -456,8 +464,11 @@ def test_submissions_feedback_classifies_unsafe_outcomes(
         lambda args: FakeFeedbackCanvas(assignment),
     )
 
-    with pytest.raises(SystemExit):
+    if expected_status == "applied_verified":
         command_submissions_feedback(feedback_args(roster, feedback_dir))
+    else:
+        with pytest.raises(SystemExit):
+            command_submissions_feedback(feedback_args(roster, feedback_dir))
 
     evidence = json.loads(
         (feedback_dir / "feedback-results.json").read_text(encoding="utf-8")
@@ -466,8 +477,11 @@ def test_submissions_feedback_classifies_unsafe_outcomes(
     assert result["status"] == expected_status
     assert result["response_status"] == response_status
     assert result["readback_status"] == readback_status
-    assert "do not retry" in result["safe_next_action"].lower() or expected_status == (
-        "failed_before_acceptance"
+    if behavior.startswith("edit_exception"):
+        assert result["attachment_id"] == 4025725
+    assert (
+        "do not retry" in result["safe_next_action"].lower()
+        or expected_status in {"failed_before_acceptance", "applied_verified"}
     )
 
 

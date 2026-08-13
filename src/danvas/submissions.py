@@ -62,6 +62,15 @@ SUBMISSION_EXPORT_FIELDS = [
 ]
 
 
+class FeedbackCommentWriteUncertain(Exception):
+    """Carry a known attachment identity across an uncertain comment write."""
+
+    def __init__(self, attachment_id: Any, cause: Exception) -> None:
+        super().__init__(str(cause))
+        self.attachment_id = attachment_id
+        self.cause = cause
+
+
 def command_submissions_export(args: Any) -> None:
     resolved = resolve_private_path(
         explicit=getattr(args, "output", None),
@@ -559,6 +568,43 @@ def execute_feedback_action(
             response_status="not_sent",
             readback_status="not_attempted",
         )
+    except FeedbackCommentWriteUncertain as exc:
+        mutation_error = safe_error(f"{type(exc.cause).__name__}: {exc.cause}")
+        try:
+            observed = assignment.get_submission(
+                action["canvas_user_id"], include=["submission_comments"]
+            )
+        except Exception as readback_exc:  # noqa: BLE001 - write outcome remains uncertain.
+            return feedback_result(
+                action,
+                status="accepted_unverified",
+                attachment_id=exc.attachment_id,
+                error=safe_error(
+                    f"{mutation_error}; readback {type(readback_exc).__name__}: "
+                    f"{readback_exc}"
+                ),
+                safe_next_action="Inspect Canvas manually; do not retry this row blindly.",
+                response_status="unknown_after_exception",
+                readback_status="failed",
+            )
+        verified = feedback_readback_matches(
+            observed,
+            action,
+            attachment_id=exc.attachment_id,
+        )
+        return feedback_result(
+            action,
+            status="applied_verified" if verified else "accepted_unverified",
+            attachment_id=exc.attachment_id,
+            error=mutation_error,
+            safe_next_action=(
+                "No action required; retain this evidence."
+                if verified
+                else "Inspect Canvas manually; do not retry this row blindly."
+            ),
+            response_status="unknown_after_exception",
+            readback_status="verified" if verified else "mismatch",
+        )
     except Exception as exc:  # noqa: BLE001 - acceptance is uncertain after transport starts.
         return feedback_result(
             action,
@@ -633,12 +679,15 @@ def upload_feedback_comment(
     if attachment_id is None:
         raise ValueError("Canvas accepted the feedback upload without an attachment ID.")
     assert_canvas_mutation_allowed(mutation_mode, "submissions feedback comment")
-    submission.edit(
-        comment={
-            "text_comment": comment,
-            "file_ids": [attachment_id],
-        }
-    )
+    try:
+        submission.edit(
+            comment={
+                "text_comment": comment,
+                "file_ids": [attachment_id],
+            }
+        )
+    except Exception as exc:  # noqa: BLE001 - caller must settle through readback.
+        raise FeedbackCommentWriteUncertain(attachment_id, exc) from exc
     return response
 
 
