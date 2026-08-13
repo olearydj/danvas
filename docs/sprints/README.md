@@ -287,10 +287,13 @@ No history rewrite or live Canvas mutation was used for the release.
 
 The Sprint 20 / `0.17.0` release candidate implements the complete mutation
 inventory, plan-by-default `--apply` contract, conflict-safe file uploads,
-discussion grade plans, and transactional feedback evidence. Groups 1 through
-4 passed independent implementation review. Final Group 5 review, the two
-separately authorized disposable-course probes, and exact branch/tag gates
-remain open; `v0.17.0` has not been tagged or installed globally.
+discussion grade plans, and transactional feedback evidence. Independent
+design and implementation review accepted the candidate through `ed68108`.
+Both separately authorized disposable-course probes passed on 2026-08-13; the
+feedback field case drove a focused correction to Canvas's documented
+file-upload plus comment-edit sequence, followed by exact readback and cleanup.
+Supplemental review of that correction and exact branch/tag gates remain open;
+`v0.17.0` has not been tagged or installed globally.
 
 ## Proposed 0.19.0 Agent Interface Follow-On
 

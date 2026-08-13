@@ -1,11 +1,11 @@
 # Mutation And Evidence Reconciliation
 
 Status: implemented `0.17.0` release candidate through Group 5. Independent
-design review on 2026-08-13 returned accept-with-edits, and independent
-implementation review has accepted Groups 1 through 4. Final Group 5 review,
-the two separately authorized disposable-course probes, and exact branch/tag
-release gates remain open. No live Canvas mutation is authorized by the design
-or implementation work alone.
+design and implementation review accepted the candidate through `ed68108` on
+2026-08-13. The two separately authorized disposable-course probes passed; the
+feedback probe exposed and drove the focused `b3893aa` API correction described
+below. Supplemental review of that correction and exact branch/tag release
+gates remain open.
 
 ## Outcome
 
@@ -614,6 +614,25 @@ data, records created object IDs, and cleans up only objects it created when the
 API supports safe cleanup. No other live Canvas mutation is implied by design
 acceptance or implementation.
 
+The authorized probes passed on 2026-08-13 in sandbox course 1576638. The file
+probe confirmed that omission plans, the default `error` policy blocks a known
+duplicate, and explicit `rename` creates a distinct Canvas file without changing
+the original. Independent inventory readback confirmed both identities and
+sizes before exact-ID cleanup; both files were then confirmed absent.
+
+The first feedback attempt correctly stopped as `accepted_unverified`: Canvas
+stored the attachment but used its default attachment-only comment text. Field
+inspection established that CanvasAPI's `Submission.upload_comment()` ignores
+the supplied text during its upload-token request, then creates an
+attachment-only comment. The focused `b3893aa` correction now follows Canvas's
+documented two-stage contract: upload through the Submission Comments file
+endpoint, then attach that returned file ID with `comment[text_comment]` in one
+submission edit. Tests model both write boundaries, and the architecture gate
+requires a pre-write assertion before each. After exact cleanup of the first
+attempt, the corrected probe returned `applied_verified`, with accepted response
+and verified readback for the exact comment text, attachment ID, filename, and
+size. The exact corrected comment and attachment were then confirmed absent.
+
 ## Acceptance Criteria
 
 Sprint 20 is complete only when all of the following are true:
@@ -640,7 +659,7 @@ Sprint 20 is complete only when all of the following are true:
   architecture tests are complete.
 - [x] The `0.17.0` migration guide enumerates all mutation and local-write mode
   changes command by command.
-- [ ] The authorized bounded live probes pass without production data.
+- [x] The authorized bounded live probes pass without production data.
 - [ ] Independent review accepts the implementation and exact-commit local,
   branch, and tag gates pass before release.
 

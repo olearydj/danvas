@@ -307,10 +307,13 @@ discussion-grade upload is replaced with a private `grades post` CSV; feedback
 apply now checkpoints and reads back every attempted row; and file upload
 defaults to non-destructive conflict handling with explicit race outcomes.
 
-Independent implementation review has accepted Groups 1 through 4. The final
-Group 5 review, the separately authorized disposable-course file-race and
-feedback-readback probes, and exact branch/tag CI remain open. No `v0.17.0` tag
-or global installation exists yet.
+Independent design and implementation review accepted the candidate through
+`ed68108`. The separately authorized disposable-course probes passed on
+2026-08-13 with exact cleanup. The first feedback probe exposed CanvasAPI's
+attachment-only `upload_comment()` behavior; `b3893aa` now uses the documented
+file-upload plus comment-edit sequence, and the corrected probe verified exact
+comment/attachment readback. Supplemental review of that correction and exact
+branch/tag CI remain open. No `v0.17.0` tag or global installation exists yet.
 
 ## Delivered Baseline
 
