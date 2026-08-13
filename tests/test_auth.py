@@ -135,6 +135,7 @@ def test_auth_doctor_reports_canvas_secret_without_canvas_ping(
     command_auth_doctor(
         SimpleNamespace(
             api_url="https://canvas.example/",
+            secret_name="canvas",
             secret_provider="auto",
             op_reference="",
             api_key_env="CANVAS_API_KEY",
@@ -182,6 +183,7 @@ def test_auth_doctor_json_reports_canvas_ping(
     report = build_auth_doctor_report(
         SimpleNamespace(
             api_url="https://canvas.example/",
+            secret_name="canvas",
             secret_provider="env",
             op_reference="",
             api_key_env="CANVAS_API_KEY",
@@ -256,6 +258,7 @@ def test_auth_doctor_check_canvas_requires_api_url(
     report = build_auth_doctor_report(
         SimpleNamespace(
             api_url=None,
+            secret_name="canvas",
             secret_provider="env",
             op_reference="",
             api_key_env="CANVAS_API_KEY",
@@ -290,6 +293,7 @@ def test_auth_doctor_exits_nonzero_when_canvas_secret_unresolved(
         command_auth_doctor(
             SimpleNamespace(
                 api_url="https://canvas.example/",
+                secret_name="canvas",
                 secret_provider="auto",
                 op_reference="",
                 api_key_env="CANVAS_API_KEY",

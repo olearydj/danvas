@@ -59,7 +59,7 @@ def command_auth_doctor(args: Any) -> None:
 
 
 def build_auth_doctor_report(args: Any) -> dict[str, Any]:
-    secret_name = getattr(args, "secret_name", "canvas")
+    secret_name = args.secret_name
     api_url = getattr(args, "api_url", None)
     canvas_report: dict[str, Any] = {
         "checked": bool(getattr(args, "check_canvas", False)),
