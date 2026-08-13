@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from canvasapi.upload import Uploader
 
 from danvas.artifacts import (
     commit_private_staged_pair,
@@ -616,7 +617,29 @@ def upload_feedback_comment(
     mutation_mode: MutationMode,
 ) -> Any:
     assert_canvas_mutation_allowed(mutation_mode, "submissions feedback upload")
-    return submission.upload_comment(file=str(path), comment=comment)
+    attachment_uploader = Uploader(
+        submission._requester,
+        (
+            f"courses/{submission.course_id}/assignments/{submission.assignment_id}/"
+            f"submissions/{submission.user_id}/comments/files"
+        ),
+        str(path),
+    )
+    response = attachment_uploader.start()
+    ok, payload = normalize_feedback_upload_response(response)
+    if not ok:
+        return response
+    attachment_id = payload.get("id")
+    if attachment_id is None:
+        raise ValueError("Canvas accepted the feedback upload without an attachment ID.")
+    assert_canvas_mutation_allowed(mutation_mode, "submissions feedback comment")
+    submission.edit(
+        comment={
+            "text_comment": comment,
+            "file_ids": [attachment_id],
+        }
+    )
+    return response
 
 
 def normalize_feedback_upload_response(response: Any) -> tuple[bool, dict[str, Any]]:

@@ -74,7 +74,8 @@ CURRENT_MUTATION_CALLS = Counter(
         ("quiz_import.py", "command_quiz_import_qti", "edit"): 1,
         ("quiz_import.py", "start_qti_migration", "create_content_migration"): 1,
         ("quiz_import.py", "start_qti_migration", "requests.post"): 1,
-        ("submissions.py", "upload_feedback_comment", "upload_comment"): 1,
+        ("submissions.py", "upload_feedback_comment", "attachment_uploader.start"): 1,
+        ("submissions.py", "upload_feedback_comment", "edit"): 1,
     }
 )
 
@@ -123,7 +124,7 @@ CURRENT_MUTATION_ASSERTIONS = Counter(
         ("quiz_import.py", "command_quiz_import_qti"): 2,
         ("quiz_import.py", "start_qti_migration"): 2,
         ("submissions.py", "command_submissions_feedback"): 1,
-        ("submissions.py", "upload_feedback_comment"): 1,
+        ("submissions.py", "upload_feedback_comment"): 2,
         ("files.py", "command_files_upload"): 1,
         ("files.py", "execute_file_upload"): 1,
     }
@@ -186,6 +187,12 @@ def mutation_call_name(node: ast.Call) -> str | None:
         "upload_comment",
     }:
         return function.attr
+    if (
+        function.attr == "start"
+        and isinstance(function.value, ast.Name)
+        and function.value.id == "attachment_uploader"
+    ):
+        return "attachment_uploader.start"
     if function.attr == "update" and isinstance(function.value, ast.Name):
         return "topic.update" if function.value.id == "topic" else None
     if function.attr == "request" and isinstance(function.value, ast.Attribute):

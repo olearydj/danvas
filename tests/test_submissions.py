@@ -54,10 +54,15 @@ class FakeFeedbackSubmission:
     def __init__(self, assignment: FakeFeedbackAssignment, canvas_id: int) -> None:
         self.assignment = assignment
         self.canvas_id = canvas_id
+        self._requester = self
+        self.course_id = 101
+        self.assignment_id = assignment.id
+        self.user_id = canvas_id
         self.submission_comments = assignment.comments.setdefault(canvas_id, [])
 
-    def upload_comment(self, file: str, comment: str) -> tuple[bool, dict[str, Any]]:
-        self.assignment.uploads.append((self.canvas_id, Path(file).name, comment))
+    def upload_feedback_file(self, file: str) -> tuple[bool, dict[str, Any]]:
+        self.assignment.uploads.append((self.canvas_id, Path(file).name))
+        self.assignment.feedback_sizes[self.canvas_id] = Path(file).stat().st_size
         behavior = self.assignment.behaviors.get(self.canvas_id, "success")
         if behavior == "rejected":
             return False, {"message": "Canvas rejected feedback"}
@@ -68,22 +73,40 @@ class FakeFeedbackSubmission:
         if behavior == "missing_file":
             raise FileNotFoundError(file)
         attachment_id = 900 + self.canvas_id
+        self.assignment.accepted.add(self.canvas_id)
+        return True, {"id": attachment_id, "filename": Path(file).name}
+
+    def edit(self, **kwargs: Any) -> FakeFeedbackSubmission:
+        behavior = self.assignment.behaviors.get(self.canvas_id, "success")
+        comment = kwargs["comment"]
+        self.assignment.edits.append((self.canvas_id, comment))
+        if behavior == "edit_exception":
+            raise RuntimeError("comment edit failed after attachment upload")
         if behavior != "mismatch":
             self.submission_comments.append(
                 {
                     "id": 100 + self.canvas_id,
-                    "comment": comment,
+                    "comment": comment["text_comment"],
                     "attachments": [
                         {
-                            "id": attachment_id,
-                            "filename": Path(file).name,
-                            "size": Path(file).stat().st_size,
+                            "id": comment["file_ids"][0],
+                            "filename": self.assignment.uploads[-1][1],
+                            "size": self.assignment.feedback_sizes[self.canvas_id],
                         }
                     ],
                 }
             )
-        self.assignment.accepted.add(self.canvas_id)
-        return True, {"id": attachment_id, "filename": Path(file).name}
+        return self
+
+
+class FakeFeedbackUploader:
+    def __init__(self, requester: Any, url: str, file: str) -> None:
+        self.requester = requester
+        self.url = url
+        self.file = file
+
+    def start(self) -> tuple[bool, dict[str, Any]]:
+        return self.requester.upload_feedback_file(self.file)
 
 
 class FakeFeedbackAssignment:
@@ -98,7 +121,9 @@ class FakeFeedbackAssignment:
     ) -> None:
         self.behaviors = behaviors or {}
         self.comments = comments or {}
-        self.uploads: list[tuple[int, str, str]] = []
+        self.uploads: list[tuple[int, str]] = []
+        self.edits: list[tuple[int, dict[str, Any]]] = []
+        self.feedback_sizes: dict[int, int] = {}
         self.accepted: set[int] = set()
 
     def get_submission(
@@ -111,6 +136,11 @@ class FakeFeedbackAssignment:
         ):
             raise RuntimeError("readback unavailable")
         return FakeFeedbackSubmission(self, canvas_id)
+
+
+@pytest.fixture(autouse=True)
+def fake_feedback_uploader(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("danvas.submissions.Uploader", FakeFeedbackUploader)
 
 
 class FakeFeedbackCanvas:
@@ -311,7 +341,16 @@ def test_submissions_feedback_uploads_matched_files(
 
     command_submissions_feedback(feedback_args(roster, feedback_dir, comment="Graded."))
 
-    assert assignment.uploads == [(4024825, "4024825-feedback.pdf", "Graded.")]
+    assert assignment.uploads == [(4024825, "4024825-feedback.pdf")]
+    assert assignment.edits == [
+        (
+            4024825,
+            {
+                "text_comment": "Graded.",
+                "file_ids": [4025725],
+            },
+        )
+    ]
 
 
 def test_submissions_feedback_sanitizes_upload_failure(
@@ -372,9 +411,7 @@ def test_submissions_feedback_rejection_stops_and_checkpoints_remaining_rows(
     with pytest.raises(SystemExit):
         command_submissions_feedback(feedback_args(roster, feedback_dir))
 
-    assert assignment.uploads == [
-        (4024825, "4024825-feedback.pdf", "Here is your graded feedback.")
-    ]
+    assert assignment.uploads == [(4024825, "4024825-feedback.pdf")]
     evidence = json.loads(
         (feedback_dir / "feedback-results.json").read_text(encoding="utf-8")
     )
@@ -392,6 +429,12 @@ def test_submissions_feedback_rejection_stops_and_checkpoints_remaining_rows(
         ("missing_file", "failed_before_acceptance", "not_sent", "not_attempted"),
         ("mismatch", "accepted_unverified", "accepted", "mismatch"),
         ("readback_error", "accepted_unverified", "accepted", "failed"),
+        (
+            "edit_exception",
+            "accepted_unverified",
+            "unknown_after_exception",
+            "not_available",
+        ),
     ],
 )
 def test_submissions_feedback_classifies_unsafe_outcomes(
