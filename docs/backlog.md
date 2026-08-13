@@ -276,6 +276,10 @@ all tests, and isolated editable/wheel smoke. The independent implementation
 review was explicitly deferred because the reviewer service was unavailable;
 it remains an open batched-review obligation rather than a completed gate.
 
+Patch release `v0.15.1` forwards the selected profile's `secret_name` through
+the Panopto caption command's direct authentication path. No other command or
+privacy behavior changes.
+
 Independent review found that the initial self-derived transition tests could
 not detect a missing `would_reuse -> failed` edge. The candidate now carries an
 independently declared state contract plus real execution cases for upload

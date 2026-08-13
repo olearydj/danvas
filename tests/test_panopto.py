@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import pytest
 import requests
 
 from danvas.panopto import (
     caption_filename_from_response,
     collect_lti_sessions,
+    command_panopto_captions,
     discover_panopto_tool,
     download_lti_caption,
     normalize_panopto_base_url,
@@ -75,6 +78,39 @@ class FakePanoptoSession:
     def get(self, url: str, **kwargs: Any) -> FakeResponse:
         self.get_calls.append({"url": url, **kwargs})
         return FakeResponse(content=self.caption_content, headers=self.caption_headers)
+
+
+def test_command_uses_profile_secret_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_resolve_api_key(**kwargs: str) -> tuple[str, str]:
+        captured.update(kwargs)
+        return "token", "test"
+
+    def stop_after_auth(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("stop after authentication")
+
+    monkeypatch.setattr("danvas.panopto.resolve_api_key", fake_resolve_api_key)
+    monkeypatch.setattr("danvas.panopto.discover_panopto_tool", stop_after_auth)
+
+    with pytest.raises(RuntimeError, match="stop after authentication"):
+        command_panopto_captions(
+            SimpleNamespace(
+                secret_provider="env",
+                op_reference="",
+                api_key_env="INSTITUTION_TOKEN",
+                secret_name="canvas-institution",
+                api_url="https://canvas.example/",
+                course_id=101,
+            )
+        )
+
+    assert captured == {
+        "provider": "env",
+        "op_reference": "",
+        "env_var": "INSTITUTION_TOKEN",
+        "secret_name": "canvas-institution",
+    }
 
 
 def test_parse_panopto_date_preserves_out_of_range_value() -> None:
