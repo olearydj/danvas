@@ -430,7 +430,10 @@ def test_root_help_states_plan_apply_boundary() -> None:
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    assert "Canvas-changing commands plan by default and require --apply." in result.output
+    assert (
+        "Canvas-changing commands plan by default and require --apply."
+        in normalized_cli_output(result)
+    )
 
 
 def test_quiz_import_qti_defines_expected_options() -> None:
