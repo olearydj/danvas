@@ -1,10 +1,11 @@
 # Public Readiness Program: Sprints 18-21
 
-Status: Sprint 18 released as `v0.15.0`; Sprints 19-21 remain design-only until
-separately reviewed. The independent Sprint 18 implementation review was
-explicitly deferred because the reviewer service was unavailable and must be
-batched into the later program review. No live Canvas mutation, publication, or
-history rewrite is authorized by this design note.
+Status: Sprints 18 through 20 are released as `v0.15.x`, `v0.16.0`, and
+`v0.17.0`; their deferred and release-specific independent reviews are closed.
+Sprint 21's separate implementation specification was accepted on 2026-08-13;
+its Sprint 22 design-review gate is closed, while Group 0 characterization
+remains before implementation. No live Canvas mutation, publication, or history
+rewrite is authorized by this program note.
 
 ## Outcome
 
@@ -830,17 +831,16 @@ into the repository or public acceptance record.
 - The first public beta is POSIX-only; macOS support requires a macOS CI lane.
 - Current history is not rewritten for identity breadcrumbs. A rewrite is
   reconsidered only if the dedicated scan finds actual secret or protected data.
-
-## Remaining Review Questions
-
-1. Which platform-config library and exact profile schema should Sprint 18 use?
-2. What distinct distribution name should Sprint 21 use for publication?
-3. Should existing source discovery default to the legacy layout until each
-   project opts in, or should `init` always materialize a selected layout?
-4. Which course metadata, if any, should be classified as private even when it
-   contains no student records?
-5. Should Panopto remain bundled but experimental, become an optional dependency
-   group, or move to a provider plugin later?
+- Sprint 18 uses the implemented platform-config/profile boundary accepted in
+  its later independent review.
+- Sprint 19's artifact registry supplies the reviewed course-metadata
+  classifications.
+- Sprint 21 uses `danvas-cli` as the distribution name while preserving the
+  `danvas` import package and executable.
+- New Sprint 21 projects materialize `standard-v1`; existing projects without
+  explicit source configuration retain `legacy-v1`.
+- Panopto remains bundled but experimental in 0.18.0 and gains project
+  configuration plus deterministic interrupted-bundle reconciliation.
 
 ## Definition Of Done
 

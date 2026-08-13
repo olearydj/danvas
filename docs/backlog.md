@@ -318,6 +318,38 @@ commit without findings. Branch and signed-tag CI passed on
 3.14, dependency audit, coverage, and isolated installation smoke. The global
 CLI is installed from the verified tag and reports `danvas 0.17.0`.
 
+## Accepted 0.18.0 Generalization And Public Beta Design
+
+Sprint 21 is the accepted final design slice of the public-readiness program:
+
+- [Generalization, Packaging, And Public Beta](sprints/21-generalization-packaging.md)
+
+The design absorbs source layouts, gradebook heading aliases, replaceable file
+inventory defaults, Panopto interrupted-bundle recovery, deprecations due in
+0.18.0, packaging metadata, anonymous installation, the public documentation
+suite, POSIX/macOS and Python support, workflow hardening, secret scanning, and
+the cross-release beta audit. Independent review selected `danvas-cli` as the
+distribution while preserving the `danvas` import package and executable. The
+Sprint 22 design review is complete; the Group 0 characterization baseline
+remains the gate before implementation.
+
+## Accepted 0.19.0 Agent Interface Design
+
+Sprint 22 is the accepted post-beta interface design:
+
+- [Agent-Facing Help And Portable Skill](sprints/22-agent-interface.md)
+
+It extends the shipped access and artifact registries with workflow guidance,
+adds bounded help, offline guides, versioned JSON description, and packages one
+generic skill source inside the `danvas-cli` distribution. It also owns removal
+of roster `--schema legacy-v1`. Implementation begins only after 0.18.0 ships;
+the design authorizes no early skill installation or external agent invocation.
+
+Named post-beta maintenance: when Python 3.15 is released, revisit the
+`<3.15` upper bound. Expand support only with an explicit compatibility review
+and a green Python 3.15 CI lane; do not let the upper bound become an unexamined
+long-term support policy.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as
@@ -1635,15 +1667,18 @@ shipped in 0.14.0, Sprint 18 in 0.15.0, Sprint 19 in 0.16.0, and Sprint 20 in
 0.17.0. The accepted public-readiness program temporarily supersedes the prior
 feature order:
 
-1. Complete Sprint 21 generalization and packaging before considering the
-   public-beta label for 0.18.0.
+1. Complete Sprint 21 Group 0 characterization, then implement the accepted
+   Sprint 21
+   [generalization, packaging, and public-beta gate](sprints/21-generalization-packaging.md)
+   for 0.18.0.
 2. Revisit the Page asset adapter and grouped-case setup after the readiness
    program, based on concrete workflow demand.
 
 Named post-Sprint 20 maintenance: resolve interrupted Panopto caption-bundle
 restart behavior. Sprint 19 deliberately retained unique-name recovery after
-an interrupted run; Sprint 20 keeps it out of scope. Sprint 21 must either own
-the contract or assign it explicitly to a later maintenance release.
+an interrupted run; Sprint 20 kept it out of scope. The accepted Sprint 21
+design owns deterministic pair reconciliation and refusal of ambiguous
+artifacts.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas

@@ -270,6 +270,7 @@ The accepted next hardening program is:
 - Sprints 18-21: [Public Readiness Program](18-public-readiness.md)
 - Sprint 19: [Private Artifact Boundary](19-private-artifacts.md)
 - Sprint 20: [Mutation And Evidence Reconciliation](20-mutation-reconciliation.md)
+- Sprint 21: [Generalization, Packaging, And Public Beta](21-generalization-packaging.md)
 
 The four releases evaluate the boundary between the mature internal
 implementation and a defensible public beta. They separate instance profiles,
@@ -295,9 +296,17 @@ file-upload plus comment-edit sequence, followed by exact readback and cleanup.
 Supplemental review accepted exact commit `f34d32f`; branch and signed-tag CI
 passed on that commit, and the verified tag is installed globally.
 
-## Proposed 0.19.0 Agent Interface Follow-On
+Sprint 21 is accepted as the `0.18.0` public-beta design. It generalizes source,
+inventory, gradebook, and Panopto conventions; removes compatibility flags due
+in 0.18.0; completes anonymous packaging and public documentation; and adds the
+declared macOS/Python/security matrix. Independent review selected `danvas-cli`
+as the distribution while preserving the `danvas` import and command. Sprint 22
+design review is complete; Group 0 characterization remains the implementation
+gate.
 
-The proposed post-beta interface sprint is:
+## Accepted 0.19.0 Agent Interface Follow-On Design
+
+The accepted post-beta interface sprint is:
 
 - Sprint 22: [Agent-Facing Help And Portable Skill](22-agent-interface.md)
 
@@ -305,5 +314,7 @@ Sprint 22 begins only after the Sprints 18-21 contracts have shipped. It makes
 the installed CLI authoritative for bounded workflow-rich help, offline guides,
 versioned machine-readable command discovery, and a generic portable Agent
 Skill with an explicit no-clobber installer. It adds no Canvas feature or MCP
-server and authorizes no implementation, skill installation, marketplace
-publication, external agent invocation, or Canvas mutation.
+server. Independent review accepted the design on 2026-08-13 and assigned roster
+compatibility removal to 0.19.0. Implementation waits for the 0.18.0 release and
+does not authorize skill installation, marketplace publication, external agent
+invocation, or Canvas mutation.

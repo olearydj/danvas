@@ -1,8 +1,8 @@
 # Sprint 22: Agent-Facing Help And Portable Skill
 
-Status: proposed follow-on to the Sprints 18-21 public-readiness program. This
-design assumes the 0.18.0 public-beta contracts have shipped and passed their
-release gates. It authorizes no implementation, skill installation, external
+Status: accepted design on 2026-08-13 after independent review. Implementation
+begins only after 0.18.0 has shipped and passed its public-beta release gates.
+This design authorizes no early implementation, skill installation, external
 plugin publication, filesystem change outside the repository, or Canvas access
 or mutation.
 
@@ -48,9 +48,9 @@ agent-facing guide would need to teach:
 
 Implementing the agent interface before those contracts settle would publish
 and install guidance that immediately becomes stale. Sprint 22 begins only from
-the released 0.18.0 command surface. It may reuse the command-effect and
-private-output inventories established by Sprints 19-20, but it must not weaken
-their safety rules or delay their release.
+the released 0.18.0 command surface. It extends the command-access and
+artifact-policy registries established by Sprints 19-20; it does not replace
+them, weaken their safety rules, or delay their release.
 
 The Page asset adapter or another Canvas feature does not enter this sprint.
 Backlog priority after the public-readiness program remains a separate product
@@ -81,8 +81,8 @@ renderer.
 The current external `teaching-danvas` skill is explicitly scoped to Auburn
 teaching workspaces and assumes maintainer-specific course roots, context files,
 sandbox escalation behavior, transcript locations, and a globally installed
-private workflow. Its main `SKILL.md` is about 2,200 words and its command
-reference is about 4,900 words.
+private workflow. Its main `SKILL.md` is about 2,400 words and its command
+reference is about 5,200 words.
 
 That skill already uses the right broad progressive-disclosure shape: a
 procedural entry point points to a longer reference. The problem is ownership
@@ -94,6 +94,27 @@ Sprint 22 does not install or publish the existing `teaching-danvas` skill. It
 creates a new generic `danvas` skill. The personal skill may later become a thin
 overlay that adds course-workspace and agent-host policy without restating the
 public command surface.
+
+### The implementation input will be the released 0.18.0 surface
+
+The current 0.17.0 tree still contains the override-sync `--live` alias and the
+discussion-score `--upload` compatibility spelling. The accepted Sprint 21
+design removes both in 0.18.0. The resulting surface retains `--apply` on the
+fifteen Canvas-mutation commands and reserves that spelling for Canvas writes.
+Sprint 22 describes that released surface; no help, guide, description, or skill
+resource may reintroduce the removed spellings.
+
+Sprint 21 retains roster `--schema legacy-v1` for 0.18.0 and assigns its removal
+to this 0.19.0 release. Sprint 22 therefore removes the option and exposes only
+the `LoginID` schema through help, guides, machine description, and the portable
+skill. The removal is a migration item, not a second supported schema in the new
+agent interface.
+
+The new `guide`, `describe`, and `skill show`/`install`/`doctor` surfaces must
+also enter the real command and artifact registries. None accesses Canvas;
+`skill install` alone declares a local write. Their artifacts are shareable.
+Exact command-tree tests determine the final leaf count rather than a number
+frozen in this design.
 
 ### Agent Skill conventions are converging
 
@@ -334,9 +355,9 @@ option tables.
 fails with close-match suggestions and the exact list command. Guide rendering
 requires no project and performs no network or secret lookup.
 
-The first release may emit plain terminal text only. A Markdown output option is
-acceptable if it reuses the same source; HTML rendering, a documentation server,
-and remote content fetching are out of scope.
+The first release emits terminal text only. Markdown output waits for a concrete
+consumer. HTML rendering, a documentation server, and remote content fetching
+are out of scope.
 
 ## 3. Versioned Machine-Readable Discovery
 
@@ -367,10 +388,11 @@ The initial JSON schema is named `danvas-command-guide-v1` and includes at least
 - canonical `command_path`, aliases, summary, and long purpose;
 - positional arguments and options, including required state, multiplicity,
   declared choices, safe defaults, and short descriptions;
-- effect classification for Canvas reads, Canvas writes, local reads, local
-  writes, notifications, and grade-affecting behavior;
+- every serialized access-policy field from `CommandAccessPolicy`, including
+  Canvas reads/writes, local writes, dry-run kind, destructive and grade effects,
+  notifications/visibility, and authoritative verification;
 - authentication, network, project, and profile requirements;
-- privacy/output classification;
+- the `ArtifactClass` privacy/output classification;
 - plan/apply behavior and additional guards;
 - identity-resolution behavior;
 - default and optional outputs/evidence;
@@ -403,30 +425,30 @@ surface disagree.
 
 ### Purpose
 
-Introduce a dependency-light typed registry that records facts not represented
-by a Typer option signature. Likely records and closed enums include equivalents
-of:
+Extend the existing dependency-light policy model with a typed guide registry
+for facts not represented by Typer or the shipped policy registries. Likely
+records and closed enums include equivalents of:
 
 - `CommandPath`;
 - `CommandGuide`;
-- `CommandEffects`;
-- `CanvasAccess`;
-- `LocalAccess`;
-- `DataSensitivity`;
-- `OutputContract`;
 - `IdentityPolicy`;
-- `MutationContract`;
+- `CommandWorkflow`;
 - `CommandExample`; and
-- `RecoveryCategory`.
+- `RecoveryCategory`; and
+- `CommandRelationship`.
 
-Names may change, but the model must distinguish:
+Names may change, but this model adds only workflow, identity, examples,
+relationships, and recovery guidance. It does not introduce another effect,
+mutation, or privacy vocabulary. Those facts already exist in:
 
-- Canvas read from Canvas write;
-- local evidence/report writes from authored-source creation;
-- a Canvas plan from an apply;
-- a private output from shareable operational evidence;
-- grade effects from other content mutations; and
-- notification-producing commands from silent changes.
+- `danvas.access.ACCESS_POLICIES`, whose `CommandAccessPolicy` fields own Canvas
+  access, local writes, mutation mode, destructive/grade/notification effects,
+  and authoritative verification; and
+- `danvas.artifacts.ARTIFACT_POLICIES`, whose `ArtifactPolicy` and
+  `ArtifactClass` own retained-output sensitivity and private defaults.
+
+The JSON descriptor serializes those shipped types directly. Renderers may map
+enum values to prose, but they may not infer or maintain a third parallel list.
 
 ### Source-of-truth boundary
 
@@ -434,9 +456,11 @@ The sources of truth are ordered:
 
 1. Typer command registration and function signatures own executable arguments,
    options, choices, and invocation;
-2. the typed command-guide registry owns effects, safety, privacy, identity,
-   examples, relationships, and recovery semantics; and
-3. renderers produce root/group/leaf help, guides, JSON description, generated
+2. `ACCESS_POLICIES` owns access, mutation, and operational effects;
+3. `ARTIFACT_POLICIES` owns retained-output sensitivity and private defaults;
+4. the typed command-guide registry owns identity, examples, workflows,
+   relationships, and recovery semantics; and
+5. renderers produce root/group/leaf help, guides, JSON description, generated
    references, and skill resources.
 
 No renderer owns unique command behavior. A manual guide may add explanatory
@@ -457,8 +481,10 @@ entry. Tests enumerate the actual Typer command tree and fail on:
 - an `--apply` example on a command that cannot mutate Canvas; or
 - a mutation example that omits the review/plan step without an explicit reason.
 
-The registry should reuse the central private-command and mutation inventories
-from Sprints 19-20 rather than establish competing lists.
+The existing exact-equality tests remain authoritative in both directions. The
+new `guide`, `describe`, and `skill` leaves must enter `ACCESS_POLICIES`; all are
+local-only except local-writing `skill install`. They also enter
+`ARTIFACT_POLICIES` as `ArtifactClass.SHAREABLE`. None is Canvas-mutating.
 
 ### CLI architecture
 
@@ -481,9 +507,10 @@ format. Its required front matter includes:
 - a concise trigger description naming Canvas course operations and the danvas
   CLI;
 - the project license or a reference to it;
-- compatibility stating that the matching `danvas` executable must be on
-  `PATH`; and
-- string metadata identifying the danvas skill/CLI version and source.
+- compatibility stating that the matching `danvas` executable from the
+  `danvas-cli` distribution must be on `PATH`; and
+- string metadata identifying the `danvas-cli` distribution, danvas skill/CLI
+  version, and source.
 
 The portable skill does not use host-specific invocation-control fields in its
 standard front matter. It includes no `allowed-tools` grant. If a future plugin
@@ -522,7 +549,7 @@ generated file if family-focused references provide a cleaner boundary. The
 initial package may use:
 
 ```text
-skills/danvas/
+src/danvas/_skill/
 ├── SKILL.md
 └── references/
     ├── safety-and-outputs.md
@@ -552,15 +579,18 @@ released by 0.18.0.
 
 ### Packaging
 
-The canonical skill source lives in the public repository and the exact released
-artifact is included in both sdist and wheel distributions. The build must not
-maintain an unverified hand-copied package version. If a packaging copy step is
-necessary, release tests compare every packaged byte and file hash with the
-canonical source.
+The one canonical skill source lives at `src/danvas/_skill/` as package data.
+`skill show` and `skill install` read it with `importlib.resources`; no generated
+or hand-copied second source tree exists. The existing `uv_build` configuration
+must include that directory in both the `danvas-cli` sdist and wheel while the
+import package and executable remain named `danvas`.
 
 An editable checkout and an installed wheel expose the same `skill show` output.
-The skill version matches `danvas --version`; a stale independently installed
-copy is diagnosed rather than silently treated as current.
+The skill version matches `danvas --version`. Compatibility metadata and
+installer provenance name the `danvas-cli` distribution when referring to the
+package, and name `danvas` only when referring to the command, import package, or
+skill. A stale independently installed copy is diagnosed rather than silently
+treated as current.
 
 ## 6. Skill Installation Contract
 
@@ -586,10 +616,11 @@ itself write intent; it does not use `--apply`, which remains reserved for Canva
 mutation. `--dry-run` previews local directory creation, file creation, update,
 or refusal with exact target paths and no writes.
 
-`skill doctor` inspects selected or discoverable danvas-owned installations,
-compares version/provenance/hashes, verifies that `danvas` is on `PATH`, and
-prints exact repair commands. It performs no network, agent login, Canvas, or
-secret check.
+`skill doctor` inspects every allowlisted host location by default, compares
+version/provenance/hashes, verifies that `danvas` is on `PATH`, and prints exact
+repair commands. `--agent` narrows that inspection. There is no `--all` flag
+because all allowlisted locations are already the diagnostic default. Doctor
+performs no network, agent login, Canvas, or secret check.
 
 ### Initial targets
 
@@ -624,7 +655,7 @@ The installer classifies the target before writing:
 
 - `absent`: create the exact skill directory atomically;
 - `exact`: report already installed and make no change;
-- `owned_stale`: show the version/hash difference and permit a bounded update;
+- `owned_stale`: show the version/hash difference and perform a bounded update;
 - `owned_modified`: refuse and explain which files differ;
 - `unowned`: refuse because the target may belong to the user or another
   installer; or
@@ -635,6 +666,10 @@ The first release does not include a force-overwrite mode for `owned_modified`
 or `unowned` targets. The operator may move or remove the conflicting directory
 after inspecting it, then rerun installation. This keeps an agent from replacing
 standing control instructions merely by adding a force flag.
+
+Invoking `skill install` against an unmodified `owned_stale` target expresses
+update intent and performs the atomic update. There is no separate `--update`
+spelling; provenance and hashes provide the safety boundary.
 
 Owned installations include bounded provenance and content hashes. Provenance
 contains no username, home path, course path, host account, token, or secret
@@ -674,6 +709,8 @@ After Sprint 22 ships, a separately authorized update should reduce it to an
 overlay that contains only:
 
 - teaching-workspace discovery and context rules;
+- the path-scoped trigger that limits the overlay to the maintainer's teaching
+  workspaces;
 - course-local/private filing conventions;
 - the maintainer's agent sandbox and escalation policy;
 - Auburn-specific observed limitations that remain relevant to that workflow;
@@ -694,8 +731,11 @@ the user's personal skill directory, and `danvas skill install` never modifies
 Sprint 22 is intended to preserve Canvas and course-project behavior.
 
 - Existing command names, options, exit statuses, payloads, output schemas,
-  reports, source maps, and mutation behavior remain unchanged unless a separate
-  reviewed defect is discovered.
+  reports, source maps, and mutation behavior remain unchanged except for the
+  already scheduled removal of roster `--schema legacy-v1`.
+- Roster help, guides, JSON description, and skill resources expose only
+  `LoginID`. The migration guide records the removed option and its replacement;
+  generated interface validation rejects any surviving `legacy-v1` reference.
 - `--help` output intentionally becomes longer and more structured. Exact
   whitespace, Rich borders, and prose were not a machine API before this sprint;
   `danvas describe --format json` becomes the supported structured discovery
@@ -710,8 +750,9 @@ Sprint 22 is intended to preserve Canvas and course-project behavior.
   `teaching-danvas` skill because the names and scopes differ.
 - Skill schema/version metadata changes through an explicit migration test.
 
-The 0.19.0 migration guide explains the richer help, new discovery commands,
-supported skill targets, no-clobber behavior, version diagnostics, and the
+The 0.19.0 migration guide explains the roster-schema removal, richer help, new
+discovery commands, supported skill targets, no-clobber behavior, version
+diagnostics, `danvas-cli` distribution versus `danvas` command identity, and the
 relationship between public and personal skills.
 
 ## Implementation Sequence
@@ -730,12 +771,15 @@ relationship between public and personal skills.
 
 ### 2. Establish the command-guide model
 
-1. Reuse the Sprint 19 private-output and Sprint 20 access/mutation inventories.
-2. Add typed guide/effect/privacy/identity/output records.
-3. Enumerate every actual command/group and require exactly one semantic guide
+1. Remove roster `--schema legacy-v1`, retain `LoginID`, and pin its migration
+   behavior.
+2. Extend `ACCESS_POLICIES` and `ARTIFACT_POLICIES` for every new command without
+   adding another effects or privacy model.
+3. Add typed workflow, identity, example, relationship, and recovery records.
+4. Enumerate every actual command/group and require exactly one semantic guide
    entry.
-4. Add validation for command paths, options used by examples, effect
-   contradictions, and missing safety metadata.
+5. Add validation for command paths, options used by examples, policy
+   contradictions, missing safety metadata, and removed compatibility spellings.
 
 ### 3. Render bounded default help
 
@@ -750,17 +794,20 @@ relationship between public and personal skills.
 1. Implement `guide list` and the bounded initial guide topics.
 2. Implement text and deterministic `danvas-command-guide-v1` JSON description.
 3. Derive executable arguments/options from Typer/Click and combine them with
-   registry semantics.
-4. Add schema fixtures and additive/breaking-change tests.
+   access, artifact, and guide registry semantics.
+4. Measure rendered size and tokens, then split only topics that exceed the
+   reviewed bounds.
+5. Add schema fixtures and additive/breaking-change tests.
 
 ### 5. Package the generic skill
 
 1. Write the portable, institution-neutral `SKILL.md` and focused references.
 2. Generate or validate command paths and examples against the registry.
 3. Validate the skill against the open Agent Skills specification.
-4. Include the exact artifact in editable, sdist, and wheel builds.
-5. Verify that `skill show` is byte-consistent inside and outside the source
-   checkout.
+4. Store the only source at `src/danvas/_skill/` and expose it through
+   `importlib.resources` in editable, sdist, and wheel installations.
+5. Verify `skill show` and package metadata from clean installations outside the
+   source checkout.
 
 ### 6. Add the bounded installer
 
@@ -787,6 +834,8 @@ relationship between public and personal skills.
 
 ### Registry coverage
 
+- The executable Click tree, `ACCESS_POLICIES`, and `ARTIFACT_POLICIES` retain
+  their exact bidirectional coverage checks after the new commands are added.
 - Every actual public command group and leaf has exactly one guide entry.
 - No guide entry, example command, referenced option, alias, or related command
   points to a missing executable surface.
@@ -797,6 +846,9 @@ relationship between public and personal skills.
 - Every private-output command is present in the private inventory and described
   as private in help/JSON.
 - Grade-affecting and notification-producing commands are explicitly marked.
+- `guide`, `describe`, `skill show`, and `skill doctor` are local-only;
+  `skill install` is local-writing; all are shareable and none is Canvas-reading
+  or Canvas-mutating.
 
 ### Help
 
@@ -816,6 +868,7 @@ relationship between public and personal skills.
   horizontal prose.
 - No public help contains an Auburn host, maintainer path, real course/object ID,
   or private agent-workspace rule.
+- No help epilog retains `--live`, `--upload`, or `legacy-v1`.
 
 ### Guides
 
@@ -825,6 +878,8 @@ relationship between public and personal skills.
 - Unknown topics fail with suggestions and the exact list command.
 - Guides contain the public portions of the retired external command-reference
   inventory without importing its personal portions.
+- No guide or guide example retains `--live`, `--upload`, or `legacy-v1`; roster
+  examples use only `LoginID`.
 
 ### Machine description
 
@@ -833,12 +888,15 @@ relationship between public and personal skills.
 - Describing a group or leaf returns only the requested subtree/command.
 - Executable argument/option names, required state, choices, and safe defaults
   match the Typer/Click model.
-- JSON contains effect, privacy, identity, output, plan/apply, exit, example, and
-  related-command metadata where applicable.
+- JSON serializes effect fields from `CommandAccessPolicy` and privacy from
+  `ArtifactClass`, then adds identity, output, plan/apply, exit, example, and
+  related-command guidance where applicable.
 - No resolved API URL, profile, course ID, token reference/value, absolute
   project path, or secret-provider result appears.
 - A schema compatibility fixture distinguishes additive v1 changes from changes
   that require v2.
+- Description output contains no `--live`, `--upload`, or `legacy-v1`; the
+  roster schema is only `LoginID`.
 
 ### Portable skill
 
@@ -853,8 +911,10 @@ relationship between public and personal skills.
   `SKILL.md`.
 - The skill contains no scripts, broad tool grants, institution defaults,
   maintainer paths, real IDs, or agent-specific approval bypass.
-- Editable, sdist, and wheel installations expose byte-identical skill content
-  and matching danvas/skill versions.
+- The skill and references contain no `--live`, `--upload`, or `legacy-v1`
+  examples; roster guidance uses only `LoginID`.
+- Editable, `danvas-cli` sdist, and `danvas-cli` wheel installations expose the
+  same canonical package resource and matching danvas/skill versions.
 
 ### Installer
 
@@ -864,14 +924,15 @@ relationship between public and personal skills.
   temporary home/project and match reverified host documentation.
 - Project scope refuses to proceed without an explicit project root.
 - Absent targets install atomically; exact targets are idempotent.
-- Owned stale targets update only when existing files still match recorded
-  provenance/hashes.
+- Owned stale targets update without another flag only when existing files still
+  match recorded provenance/hashes.
 - Owned modified, unowned, symlinked, escaped, and otherwise unsafe targets are
   refused without alteration.
 - Injected interruption at every write/swap boundary leaves the old complete
   version or new complete version, never a partial skill.
 - `skill doctor` distinguishes missing, exact, stale, modified, unowned, and
   executable/version mismatch states and prints exact next commands.
+- Doctor inspects all allowlisted targets by default; `--agent` narrows the scan.
 - No installer path reads Canvas, resolves credentials, edits agent settings, or
   fetches remote content.
 
@@ -903,7 +964,13 @@ The evaluation set includes prompts equivalent to:
 9. distinguish a local report write from a Canvas mutation; and
 10. respond safely to an indeterminate grade or upload result.
 
-For each supported host selected for acceptance, record whether the agent:
+Run model-behavior acceptance on every supported host actually available in the
+release environment, expected to include Codex and Claude Code. Hosts not
+available there receive structural loader and target-path coverage. The public
+support statement names exactly which hosts were behavior-tested and does not
+generalize those results to structurally tested hosts.
+
+For each host selected for behavior acceptance, record whether the agent:
 
 - discovers or invokes the generic skill;
 - calls help/guide/describe when syntax is uncertain;
@@ -915,9 +982,7 @@ For each supported host selected for acceptance, record whether the agent:
 
 No evaluation performs a live Canvas mutation. A model invocation, marketplace
 login, or external agent-host installation requires separate authorization and
-is not implied by this design. If not every named host is available for the
-release environment, structural path/loader coverage remains required and the
-public support statement names which live agent behaviors were actually tested.
+is not implied by this design.
 
 ## Risks And Mitigations
 
@@ -984,37 +1049,33 @@ from the typed registry.
 - Root, group, leaf, guide, and JSON description form a progressive interface.
 - `danvas describe --format json` is the supported machine command-discovery
   contract; Rich help is not parsed as an API.
-- A typed registry owns effects, privacy, identity, workflows, and recovery
-  semantics while Typer owns executable signatures.
+- Typer owns executable signatures, `ACCESS_POLICIES` owns effects,
+  `ARTIFACT_POLICIES` owns privacy, and the guide registry adds workflows,
+  identity, examples, relationships, and recovery semantics.
+- Roster `--schema legacy-v1` is removed in 0.19.0; every new interface exposes
+  only `LoginID`.
 - The public skill is a new generic `danvas` skill, not a published copy of the
   personal `teaching-danvas` skill.
+- Its only source is package data beneath `src/danvas/_skill/`, loaded through
+  `importlib.resources` from the `danvas-cli` distribution.
 - The first portable skill contains no scripts or `allowed-tools` grants.
 - `danvas skill install` uses an embedded, version-matched artifact and fetches
   no remote content.
 - Installation requires an explicit agent target and never silently installs to
   all discovered hosts.
+- `skill doctor` inspects all allowlisted locations by default and accepts
+  `--agent` only as a narrowing option.
+- `skill install` atomically updates an unmodified `owned_stale` target without a
+  separate `--update` spelling.
 - `--apply` remains reserved for Canvas mutation; skill installation uses its
   explicit verb plus an optional local-write dry-run.
 - Modified and unowned skill targets are refused; the first release has no
   force-overwrite path.
+- Guides emit terminal text only in 0.19.0. The listed topics are the initial
+  shape, with measured render/token bounds deciding any further split.
+- Live behavior acceptance covers available release hosts; structural coverage
+  and explicit support wording cover the remainder.
 - Native plugin/marketplace publication may follow but is not a 0.19.0 gate.
-
-## Remaining Review Questions
-
-1. What exact canonical repository path and build-backend inclusion mechanism
-   should hold the portable skill without maintaining duplicate source copies?
-2. Should `danvas guide` support Markdown output in 0.19.0 or remain terminal
-   text only until there is a concrete consumer?
-3. Which initial family guides should be separate topics rather than sections of
-   broader authored-content and grading guides?
-4. Should `skill doctor` require `--agent`, inspect all allowlisted locations, or
-   do both with an explicit `--all` mode?
-5. Should an unmodified provenance-owned stale skill update automatically when
-   `skill install` is invoked, or require an additional `--update` spelling?
-6. Which agent hosts receive actual model-behavior acceptance rather than only
-   structural loader/path tests for the first release?
-7. Should a later release publish the portable skill through native host tools
-   or wrap it in full plugins only after user demand is demonstrated?
 
 ## Definition Of Done
 
