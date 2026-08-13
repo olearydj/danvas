@@ -4,9 +4,9 @@ Status: design accepted on 2026-08-13 after independent review. Sprints 18
 through 20 are released as `v0.15.x`, `v0.16.0`, and `v0.17.0`. This sprint is
 the final generalization and packaging slice of the accepted public-readiness
 program and targets `0.18.0`. Group 0 characterization is complete at
-`ded6b2e`; runtime implementation has not begun. The sprint does not authorize
-external publication, tagging, repository-setting changes, global installation,
-or live Canvas use.
+`ded6b2e`; Group 1 project generalization is complete and awaiting focused
+review. The sprint does not authorize external publication, tagging,
+repository-setting changes, global installation, or live Canvas use.
 
 The reviewed Python distribution name is `danvas-cli`. The Python import
 package and installed command remain `danvas`.
@@ -721,13 +721,26 @@ dependency audit. Group 1 is the next implementation step.
 
 ### Group 1: project generalization
 
-1. Add named source layouts, init selection/materialization, force-preservation,
+1. [x] Add named source layouts, init selection/materialization, force-preservation,
    and configuration-derived next actions.
-2. Split mandatory and convenience inventory exclusions and add replacement
+2. [x] Split mandatory and convenience inventory exclusions and add replacement
    mode.
-3. Validate explicit init timezones before context/network access.
-4. Replace maintainer fixture URLs, IDs, paths, and reusable examples according
+3. [x] Validate explicit init timezones before context/network access.
+4. [x] Replace maintainer fixture URLs, IDs, paths, and reusable examples according
    to the placeholder policy.
+
+Group 1 is implementation-complete in three reviewed-scope commits:
+
+- `f2a94bc` adds immutable source layouts, init materialization and preservation,
+  canonical source validation, and shared status/sync output resolution;
+- `7f23193` separates mandatory inventory machinery from replaceable convenience
+  ignores and records the effective policy in report output; and
+- `c826e88` validates explicit init timezones before Canvas context and replaces
+  reusable institutional hosts, maintainer paths, and real-looking fixture IDs.
+
+The exact local gate passed 797 tests at 84.90% branch coverage, the
+authored-assets module floor at 88.87%, Ruff, ty, frozen-lock validation, and
+the dependency audit. Group 2 remains gated on focused review of this group.
 
 ### Group 2: parser and integration boundaries
 
