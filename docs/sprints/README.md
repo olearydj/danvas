@@ -276,3 +276,16 @@ into bounded 0.15.0 through 0.18.0 slices. Only 0.18.0 may claim public beta
 after the cross-release threshold passes. Sprint 18 implementation is in
 progress; later slices still require their independent reviews. No publication,
 history rewrite, or live Canvas mutation is authorized.
+
+## Proposed 0.19.0 Agent Interface Follow-On
+
+The proposed post-beta interface sprint is:
+
+- Sprint 22: [Agent-Facing Help And Portable Skill](22-agent-interface.md)
+
+Sprint 22 begins only after the Sprints 18-21 contracts have shipped. It makes
+the installed CLI authoritative for bounded workflow-rich help, offline guides,
+versioned machine-readable command discovery, and a generic portable Agent
+Skill with an explicit no-clobber installer. It adds no Canvas feature or MCP
+server and authorizes no implementation, skill installation, marketplace
+publication, external agent invocation, or Canvas mutation.
