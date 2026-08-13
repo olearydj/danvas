@@ -305,12 +305,13 @@ wheels = [
 
 [[package]]
 name = "danvas"
-version = "0.14.0"
+version = "0.15.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "canvasapi" },
     { name = "markdown" },
+    { name = "platformdirs" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "requests" },
@@ -333,6 +334,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "canvasapi", specifier = ">=3.3" },
     { name = "markdown", specifier = ">=3.6" },
+    { name = "platformdirs", specifier = ">=4.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.31" },

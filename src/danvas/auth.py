@@ -10,13 +10,13 @@ from secretpath import SecretMiss, SecretPathError, doctor_report, resolve_named
 
 from danvas.sanitize import sanitize_error
 
-DEFAULT_API_URL = "https://auburn.instructure.com/"
 
-
-def resolve_api_key(*, provider: str, op_reference: str, env_var: str) -> tuple[str, str]:
+def resolve_api_key(
+    *, provider: str, op_reference: str, env_var: str, secret_name: str = "canvas"
+) -> tuple[str, str]:
     try:
         result = resolve_named_secret(
-            "canvas",
+            secret_name,
             display_name="Canvas API key",
             provider=provider,
             op_reference=op_reference,
@@ -31,13 +31,21 @@ def resolve_api_key(*, provider: str, op_reference: str, env_var: str) -> tuple[
 
 
 def canvas_from_args(args: Any) -> Canvas:
+    api_url = getattr(args, "api_url", None)
+    if not api_url:
+        raise SystemExit(
+            "Canvas API URL required before resolving credentials. Pass --api-url, "
+            "initialize the course project, select a configured --profile, or set "
+            "CANVAS_API_URL."
+        )
     api_key, provider_name = resolve_api_key(
         provider=args.secret_provider,
         op_reference=args.op_reference,
         env_var=args.api_key_env,
+        secret_name=getattr(args, "secret_name", "canvas"),
     )
     print(f"Using API key from: {provider_name}")
-    return Canvas(args.api_url, api_key)
+    return Canvas(api_url, api_key)
 
 
 def command_auth_doctor(args: Any) -> None:
@@ -51,6 +59,8 @@ def command_auth_doctor(args: Any) -> None:
 
 
 def build_auth_doctor_report(args: Any) -> dict[str, Any]:
+    secret_name = getattr(args, "secret_name", "canvas")
+    api_url = getattr(args, "api_url", None)
     canvas_report: dict[str, Any] = {
         "checked": bool(getattr(args, "check_canvas", False)),
         "reachable": None,
@@ -58,7 +68,8 @@ def build_auth_doctor_report(args: Any) -> dict[str, Any]:
         "error": "",
     }
     payload: dict[str, Any] = {
-        "api_url": args.api_url,
+        "profile": getattr(args, "profile", None),
+        "api_url": api_url,
         "secretpath": doctor_report(check_resolution=False),
         "canvas": canvas_report,
         "issues": [],
@@ -66,7 +77,7 @@ def build_auth_doctor_report(args: Any) -> dict[str, Any]:
     payload["issues"].extend(payload["secretpath"].get("issues") or [])
     try:
         resolved = resolve_named_secret(
-            "canvas",
+            secret_name,
             display_name="Canvas API key",
             provider=args.secret_provider,
             op_reference=args.op_reference,
@@ -76,14 +87,14 @@ def build_auth_doctor_report(args: Any) -> dict[str, Any]:
         )
     except SecretPathError as exc:
         payload["secretpath"]["resolutions"] = [
-            {"name": "canvas", "resolved": False, "error": str(exc)}
+            {"name": secret_name, "resolved": False, "error": str(exc)}
         ]
         resolved = None
     else:
         if isinstance(resolved, SecretMiss):
             payload["secretpath"]["resolutions"] = [
                 {
-                    "name": "canvas",
+                    "name": secret_name,
                     "resolved": False,
                     "attempts": [
                         {"provider": attempt.provider, "status": attempt.status}
@@ -93,19 +104,25 @@ def build_auth_doctor_report(args: Any) -> dict[str, Any]:
             ]
         else:
             payload["secretpath"]["resolutions"] = [
-                {"name": "canvas", "resolved": True, "source": resolved.source}
+                {"name": secret_name, "resolved": True, "source": resolved.source}
             ]
 
     if isinstance(resolved, SecretMiss) or resolved is None:
         payload["issues"].append("canvas secret is unresolved")
 
     if getattr(args, "check_canvas", False):
-        if isinstance(resolved, SecretMiss) or resolved is None:
+        if not api_url:
+            payload["canvas"]["reachable"] = False
+            payload["canvas"]["error"] = (
+                "Canvas API check skipped because the Canvas API URL is unconfigured."
+            )
+            payload["issues"].append("canvas API URL is unconfigured")
+        elif isinstance(resolved, SecretMiss) or resolved is None:
             payload["canvas"]["reachable"] = False
             payload["canvas"]["error"] = "Canvas API check skipped because the canvas secret is unresolved."
         else:
             try:
-                canvas = Canvas(args.api_url, resolved.value)
+                canvas = Canvas(api_url, resolved.value)
                 user = canvas.get_current_user()
             except Exception as exc:
                 payload["canvas"]["reachable"] = False
@@ -126,7 +143,9 @@ def build_auth_doctor_report(args: Any) -> dict[str, Any]:
 def print_auth_doctor_report(payload: dict[str, Any]) -> None:
     secretpath = payload["secretpath"]
     print("Auth doctor")
-    print(f"API URL: {payload['api_url']}")
+    if payload.get("profile"):
+        print(f"Profile: {payload['profile']}")
+    print(f"API URL: {payload['api_url'] or 'unconfigured'}")
     print(f"op: {'available' if secretpath['op']['available'] else 'not found'}")
     print(f"direnv: {'available' if secretpath['direnv']['available'] else 'not found'}")
     print("secretpath config files:")

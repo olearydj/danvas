@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Annotated, Any, Literal
@@ -29,8 +28,8 @@ from danvas.assignments import (
     command_assignments_upsert,
     command_assignments_verify,
 )
-from danvas.auth import DEFAULT_API_URL, command_auth_doctor
-from danvas.config import command_init, command_refresh, resolve_api_url, resolve_course_id
+from danvas.auth import command_auth_doctor
+from danvas.config import command_init, command_refresh, resolve_course_id
 from danvas.courses import command_courses, command_roster
 from danvas.discussion_sources import (
     command_discussions_create,
@@ -67,6 +66,7 @@ from danvas.pages import (
     command_pages_verify,
 )
 from danvas.panopto import command_panopto_captions
+from danvas.profiles import resolve_canvas_context
 from danvas.quiz_import import command_quiz_import_qti
 from danvas.reports import (
     create_report_run,
@@ -204,12 +204,27 @@ app.add_typer(sources_app, name="sources")
 ApiUrl = Annotated[
     str | None,
     typer.Option(
-        "--api-url", help="Canvas base URL. Defaults to CANVAS_API_URL, then Auburn Canvas."
+        "--api-url",
+        help=(
+            "Canvas base URL. Overrides project and profile configuration; "
+            "CANVAS_API_URL is the final fallback."
+        ),
+    ),
+]
+ProfileName = Annotated[
+    str | None,
+    typer.Option(
+        "--profile",
+        help="User-level Canvas instance profile from the danvas platform config.",
     ),
 ]
 SecretProviderOption = Annotated[
-    SecretProvider,
+    SecretProvider | None,
     typer.Option("--secret-provider", help="Secret source for the Canvas API token."),
+]
+SecretName = Annotated[
+    str | None,
+    typer.Option("--secret-name", help="secretpath name for the Canvas API token."),
 ]
 OpReference = Annotated[
     str | None,
@@ -227,23 +242,31 @@ AssignmentId = Annotated[int, typer.Option("--assignment-id", help="Canvas assig
 
 def args_for(**kwargs: Any) -> SimpleNamespace:
     """Build the namespace expected by operation modules."""
+    canvas_backed = "api_url" in kwargs
+    allow_missing_api_url = bool(kwargs.pop("_allow_missing_api_url", False)) or not canvas_backed
     config_start = config_start_for(kwargs)
     if "course_id" in kwargs:
         kwargs["course_id"] = resolve_course_id(kwargs.get("course_id"), start=config_start)
-    kwargs["api_url"] = (
-        resolve_api_url(kwargs.get("api_url"), start=config_start)
-        or os.environ.get("CANVAS_API_URL")
-        or DEFAULT_API_URL
+    if not canvas_backed:
+        return SimpleNamespace(**kwargs)
+    context = resolve_canvas_context(
+        explicit_profile=kwargs.get("profile"),
+        explicit_api_url=kwargs.get("api_url"),
+        explicit_secret_name=kwargs.get("secret_name"),
+        explicit_secret_provider=kwargs.get("secret_provider"),
+        explicit_op_reference=kwargs.get("op_reference"),
+        explicit_api_key_env=kwargs.get("api_key_env"),
+        start=config_start,
+        allow_missing_api_url=allow_missing_api_url,
     )
-    kwargs["secret_provider"] = kwargs.get("secret_provider") or os.environ.get(
-        "CANVAS_SECRET_PROVIDER", "auto"
-    )
-    kwargs["op_reference"] = kwargs.get("op_reference") or os.environ.get(
-        "CANVAS_API_KEY_OP_REFERENCE", ""
-    )
-    kwargs["api_key_env"] = kwargs.get("api_key_env") or os.environ.get(
-        "CANVAS_API_KEY_ENV", "CANVAS_API_KEY"
-    )
+    kwargs["profile"] = context.profile
+    kwargs["profile_timezone"] = context.profile_timezone
+    kwargs["api_url"] = context.api_url
+    kwargs["api_url_source"] = context.api_url_source
+    kwargs["secret_name"] = context.secret_name
+    kwargs["secret_provider"] = context.secret_provider
+    kwargs["op_reference"] = context.op_reference
+    kwargs["api_key_env"] = context.api_key_env
     return SimpleNamespace(**kwargs)
 
 
@@ -438,8 +461,15 @@ def init_project(
         Path, typer.Option("--project-root", help="Course project root to initialize.")
     ] = Path("."),
     timezone: Annotated[
-        str, typer.Option("--timezone", help="Course-local timezone for due-date workflows.")
-    ] = "America/Chicago",
+        str | None,
+        typer.Option(
+            "--timezone",
+            help=(
+                "Course-local IANA timezone. Defaults to Canvas course metadata, "
+                "then the selected profile."
+            ),
+        ),
+    ] = None,
     force: Annotated[
         bool, typer.Option("--force", help="Replace an existing .danvas/config.toml.")
     ] = False,
@@ -450,8 +480,10 @@ def init_project(
             help="Exit 3 without writing project state if any snapshot collection is partial.",
         ),
     ] = False,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -463,7 +495,9 @@ def init_project(
             timezone=timezone,
             force=force,
             require_complete=require_complete,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -483,17 +517,22 @@ def auth_doctor(
     json_output: Annotated[
         bool, typer.Option("--json", help="Emit machine-readable JSON.")
     ] = False,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
     run_command(
         command_auth_doctor,
         args_for(
+            _allow_missing_api_url=True,
             check_canvas=check_canvas,
             json=json_output,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -535,8 +574,10 @@ def refresh_project(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -550,7 +591,9 @@ def refresh_project(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -670,8 +713,10 @@ def courses(
             "--output", "-o", help="CSV output path: id, name, course_code, start_at, end_at."
         ),
     ] = Path("courses.csv"),
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -679,7 +724,9 @@ def courses(
         command_courses,
         args_for(
             output=str(output),
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -699,8 +746,10 @@ def roster(
         str,
         typer.Option("--enrollment-type", help="Canvas enrollment type to include."),
     ] = "StudentEnrollment",
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -710,7 +759,9 @@ def roster(
             course_id=course_id,
             output=str(output),
             enrollment_type=enrollment_type,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -739,8 +790,10 @@ def assignments_export(
         bool,
         typer.Option("--full", help="Include extended sanitized assignment/group metadata."),
     ] = False,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -751,7 +804,9 @@ def assignments_export(
             output=str(output),
             format=output_format,
             full=full,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -780,8 +835,10 @@ def assignments_overrides(
         bool, typer.Option("--overwrite", help="Replace an existing private output file.")
     ] = False,
     course_id: CourseId = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -793,7 +850,9 @@ def assignments_overrides(
             output=str(output),
             source=str(source) if source else "",
             overwrite=overwrite,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -843,8 +902,10 @@ def assignments_overrides_sync(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -861,7 +922,9 @@ def assignments_overrides_sync(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -911,8 +974,10 @@ def assignments_create(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -930,7 +995,9 @@ def assignments_create(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -969,8 +1036,10 @@ def assignments_verify(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -985,7 +1054,9 @@ def assignments_verify(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1047,8 +1118,10 @@ def assignments_update(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -1068,7 +1141,9 @@ def assignments_update(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1140,8 +1215,10 @@ def assignments_upsert(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -1162,7 +1239,9 @@ def assignments_upsert(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1556,8 +1635,10 @@ def quiz_import_qti(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -1584,7 +1665,9 @@ def quiz_import_qti(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1614,8 +1697,10 @@ def submissions_export(
         bool, typer.Option("--overwrite", help="Replace existing explicit outputs.")
     ] = False,
     course_id: CourseId = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -1629,7 +1714,9 @@ def submissions_export(
             include_history=include_history,
             save_raw=str(save_raw) if save_raw else None,
             overwrite=overwrite,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1650,8 +1737,10 @@ def submissions_grades(
         bool, typer.Option("--overwrite", help="Replace an existing explicit output.")
     ] = False,
     course_id: CourseId = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -1663,7 +1752,9 @@ def submissions_grades(
             output=str(output),
             only_graded=only_graded,
             overwrite=overwrite,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1690,8 +1781,10 @@ def submissions_media(
     overwrite: Annotated[
         bool, typer.Option("--overwrite", help="Replace existing downloaded files.")
     ] = False,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -1703,7 +1796,9 @@ def submissions_media(
             output_dir=str(output_dir),
             layout=layout,
             overwrite=overwrite,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1744,8 +1839,10 @@ def submissions_feedback(
     sleep_seconds: Annotated[
         float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
     ] = 0.5,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -1760,7 +1857,9 @@ def submissions_feedback(
             comment=comment,
             dry_run=dry_run,
             sleep_seconds=sleep_seconds,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1828,8 +1927,10 @@ def grades_post(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -1849,7 +1950,9 @@ def grades_post(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1907,8 +2010,10 @@ def grades_clear(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -1927,7 +2032,9 @@ def grades_clear(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1946,8 +2053,10 @@ def grades_comments(
         bool, typer.Option("--overwrite", help="Replace an existing output file.")
     ] = False,
     course_id: CourseId = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -1959,7 +2068,9 @@ def grades_comments(
             canvas_id=canvas_id,
             output=str(output),
             overwrite=overwrite,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -1992,8 +2103,10 @@ def grades_verify(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2008,7 +2121,9 @@ def grades_verify(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2032,8 +2147,10 @@ def discussions_export(
     output_format: Annotated[
         DiscussionExportFormat, typer.Option("--format", help="Output format.")
     ] = "json",
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2043,7 +2160,9 @@ def discussions_export(
             discussion_url=discussion_url,
             output=str(output),
             format=output_format,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2083,8 +2202,10 @@ def discussions_create(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2100,7 +2221,9 @@ def discussions_create(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2134,8 +2257,10 @@ def discussions_verify(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2150,7 +2275,9 @@ def discussions_verify(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2194,8 +2321,10 @@ def discussions_update(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2212,7 +2341,9 @@ def discussions_update(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2252,8 +2383,10 @@ def discussions_sync_prompts(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2268,7 +2401,9 @@ def discussions_sync_prompts(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2293,12 +2428,25 @@ def sources_lint(
 @pages_app.command("list", help="List Canvas Pages without writing local files.")
 def pages_list(
     course_id: CourseId = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
-    run_command(command_pages_list, args_for(course_id=course_id, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+    run_command(
+        command_pages_list,
+        args_for(
+            course_id=course_id,
+            profile=profile,
+            api_url=api_url,
+            secret_name=secret_name,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
 
 
 @pages_app.command("export", help="Export all Pages as JSON or one Page as HTML/Markdown source.")
@@ -2315,12 +2463,30 @@ def pages_export(
         str | None, typer.Option("--url", help="Select one Canvas Page by exact URL slug.")
     ] = None,
     overwrite: Annotated[bool, typer.Option("--overwrite", help="Replace an existing output file.")] = False,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
-    run_command(command_pages_export, args_for(course_id=course_id, output=str(output), format=output_format, page_id=page_id, url=url, overwrite=overwrite, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+    run_command(
+        command_pages_export,
+        args_for(
+            course_id=course_id,
+            output=str(output),
+            format=output_format,
+            page_id=page_id,
+            url=url,
+            overwrite=overwrite,
+            profile=profile,
+            api_url=api_url,
+            secret_name=secret_name,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
 
 
 @pages_app.command("sync", help="Create missing local Page sources without overwriting authored files.")
@@ -2354,8 +2520,10 @@ def pages_sync(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2373,7 +2541,9 @@ def pages_sync(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2407,12 +2577,32 @@ def pages_create(
     report_root: Annotated[Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")] = None,
     report_dir: Annotated[Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")] = None,
     report_slug: Annotated[str | None, typer.Option("--report-slug", help="Override the report run slug.")] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
-    run_command(command_pages_create, args_for(course_id=course_id, source=str(source), dry_run=dry_run, project_root=str(project_root), no_report=no_report, report_root=str(report_root) if report_root else None, report_dir=str(report_dir) if report_dir else None, report_slug=report_slug, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+    run_command(
+        command_pages_create,
+        args_for(
+            course_id=course_id,
+            source=str(source),
+            dry_run=dry_run,
+            project_root=str(project_root),
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
+            profile=profile,
+            api_url=api_url,
+            secret_name=secret_name,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
 
 
 @pages_app.command(
@@ -2435,12 +2625,33 @@ def pages_update(
     report_root: Annotated[Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")] = None,
     report_dir: Annotated[Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")] = None,
     report_slug: Annotated[str | None, typer.Option("--report-slug", help="Override the report run slug.")] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
-    run_command(command_pages_update, args_for(course_id=course_id, source=str(source), page_id=page_id, dry_run=dry_run, project_root=str(project_root), no_report=no_report, report_root=str(report_root) if report_root else None, report_dir=str(report_dir) if report_dir else None, report_slug=report_slug, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+    run_command(
+        command_pages_update,
+        args_for(
+            course_id=course_id,
+            source=str(source),
+            page_id=page_id,
+            dry_run=dry_run,
+            project_root=str(project_root),
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
+            profile=profile,
+            api_url=api_url,
+            secret_name=secret_name,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
 
 
 @pages_app.command("verify", help="Verify a rendered Page source and publication state against Canvas.")
@@ -2453,12 +2664,32 @@ def pages_verify(
     report_root: Annotated[Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")] = None,
     report_dir: Annotated[Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")] = None,
     report_slug: Annotated[str | None, typer.Option("--report-slug", help="Override the report run slug.")] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
-    run_command(command_pages_verify, args_for(course_id=course_id, source=str(source), page_id=page_id, project_root=str(project_root), no_report=no_report, report_root=str(report_root) if report_root else None, report_dir=str(report_dir) if report_dir else None, report_slug=report_slug, api_url=api_url, secret_provider=secret_provider, op_reference=op_reference, api_key_env=api_key_env))
+    run_command(
+        command_pages_verify,
+        args_for(
+            course_id=course_id,
+            source=str(source),
+            page_id=page_id,
+            project_root=str(project_root),
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
+            profile=profile,
+            api_url=api_url,
+            secret_name=secret_name,
+            secret_provider=secret_provider,
+            op_reference=op_reference,
+            api_key_env=api_key_env,
+        ),
+    )
 
 
 @announcements_app.command(
@@ -2476,8 +2707,10 @@ def announcements_create(
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Print the Canvas payload without creating anything.")
     ] = False,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2487,7 +2720,9 @@ def announcements_create(
             course_id=course_id,
             source=str(source),
             dry_run=dry_run,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2520,8 +2755,10 @@ def announcements_export(
             help="Canvas user ID whose replies should be included. Defaults to authenticated user.",
         ),
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2532,7 +2769,9 @@ def announcements_export(
             output=str(output),
             format=output_format,
             reply_user_id=reply_user_id,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2558,8 +2797,10 @@ def announcements_latest(
         AnnouncementLatestFormat,
         typer.Option("--format", help="Output format. 'auto' uses Markdown unless output is .json."),
     ] = "auto",
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2569,7 +2810,9 @@ def announcements_latest(
             course_id=course_id,
             output=str(output) if output else None,
             format=output_format,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2609,8 +2852,10 @@ def announcements_sync(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2625,7 +2870,9 @@ def announcements_sync(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2671,8 +2918,10 @@ def announcements_update(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2688,7 +2937,9 @@ def announcements_update(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2728,8 +2979,10 @@ def announcements_verify(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2744,7 +2997,9 @@ def announcements_verify(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2792,8 +3047,10 @@ def files_inventory(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2808,7 +3065,9 @@ def files_inventory(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2834,8 +3093,10 @@ def files_download(
         bool,
         typer.Option("--overwrite", help="Replace local files that already exist."),
     ] = False,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2845,7 +3106,9 @@ def files_download(
             course_id=course_id,
             output_dir=str(output_dir),
             overwrite=overwrite,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2884,8 +3147,10 @@ def files_download_one(
         bool,
         typer.Option("--overwrite", help="Replace the output file if it already exists."),
     ] = False,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2898,7 +3163,9 @@ def files_download_one(
             file_id=file_id,
             canvas_path=canvas_path,
             overwrite=overwrite,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -2956,8 +3223,10 @@ def files_compare(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -2975,7 +3244,9 @@ def files_compare(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -3038,8 +3309,10 @@ def files_upload(
     report_slug: Annotated[
         str | None, typer.Option("--report-slug", help="Override the report run slug.")
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -3058,7 +3331,9 @@ def files_upload(
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
             report_slug=report_slug,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -3118,8 +3393,10 @@ def recordings_panopto_captions(
             help="Override Panopto base URL. Defaults to the Canvas Panopto tool domain.",
         ),
     ] = None,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -3134,7 +3411,9 @@ def recordings_panopto_captions(
             dry_run=dry_run,
             caption_language=caption_language,
             panopto_base_url=panopto_base_url,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,
@@ -3173,8 +3452,10 @@ def discussions_score(
     sleep_seconds: Annotated[
         float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
     ] = 0.3,
+    profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_provider: SecretProviderOption = "auto",
+    secret_name: SecretName = None,
+    secret_provider: SecretProviderOption = None,
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
@@ -3190,7 +3471,9 @@ def discussions_score(
             upload=upload,
             dry_run=dry_run,
             sleep_seconds=sleep_seconds,
+            profile=profile,
             api_url=api_url,
+            secret_name=secret_name,
             secret_provider=secret_provider,
             op_reference=op_reference,
             api_key_env=api_key_env,

@@ -205,6 +205,64 @@ def test_write_project_config_and_snapshot(tmp_path: Path) -> None:
     assert payload["folders"][1]["full_name"] == "course files/Case Studies"
 
 
+def test_write_project_config_records_profile_and_omits_unknown_timezone(
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / ".danvas" / "config.toml"
+
+    config.write_project_config(
+        config_path,
+        course_snapshot={
+            "course": {"id": 1, "name": "Course"},
+            "assignment_groups": [],
+        },
+        api_url="https://canvas.example/",
+        timezone=None,
+        profile="institution-a",
+    )
+
+    text = config_path.read_text(encoding="utf-8")
+    assert 'profile = "institution-a"' in text
+    assert "timezone" not in text
+
+
+def test_init_timezone_prefers_explicit_then_canvas_then_profile() -> None:
+    course = SimpleNamespace(time_zone="Central Time (US & Canada)")
+
+    assert (
+        config.resolve_init_timezone(
+            SimpleNamespace(timezone="America/New_York", profile_timezone="America/Denver"),
+            course,
+        )
+        == "America/New_York"
+    )
+    assert (
+        config.resolve_init_timezone(
+            SimpleNamespace(timezone=None, profile_timezone="America/Denver"), course
+        )
+        == "America/Chicago"
+    )
+    assert (
+        config.resolve_init_timezone(
+            SimpleNamespace(timezone=None, profile_timezone="America/Denver"),
+            SimpleNamespace(time_zone="Unknown Canvas Zone"),
+        )
+        == "America/Denver"
+    )
+
+
+def test_init_timezone_leaves_unknown_unconfigured(capsys) -> None:
+    timezone = config.resolve_init_timezone(
+        SimpleNamespace(timezone=None, profile_timezone=None),
+        SimpleNamespace(time_zone="Unknown Canvas Zone"),
+    )
+
+    assert timezone is None
+    error = capsys.readouterr().err
+    assert "will not guess" in error
+    assert "Date-only assignment metadata is unavailable" in error
+
+
 def test_build_course_snapshot_includes_expanded_sections() -> None:
     snapshot = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
 
@@ -582,6 +640,38 @@ def test_init_require_complete_writes_no_project_state(
 
     assert exc_info.value.code == config.PARTIAL_SNAPSHOT_EXIT_CODE
     assert not (tmp_path / ".danvas").exists()
+
+
+def test_init_records_profile_and_canvas_metadata_timezone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ZonedCourse(FakeCourse):
+        time_zone = "Central Time (US & Canada)"
+
+    class FakeCanvas:
+        def get_course(self, course_id: int):
+            assert course_id == 1742717
+            return ZonedCourse()
+
+    monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
+
+    config.command_init(
+        SimpleNamespace(
+            project_root=str(tmp_path),
+            course_id=1742717,
+            force=False,
+            require_complete=True,
+            api_url="https://canvas.example/",
+            profile="institution-a",
+            profile_timezone="America/New_York",
+            timezone=None,
+        )
+    )
+
+    project_config = (tmp_path / ".danvas" / "config.toml").read_text(encoding="utf-8")
+    assert 'profile = "institution-a"' in project_config
+    assert 'api_url = "https://canvas.example/"' in project_config
+    assert 'timezone = "America/Chicago"' in project_config
 
 
 def test_diff_snapshots_reports_added_removed_changed() -> None:

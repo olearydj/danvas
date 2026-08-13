@@ -13,6 +13,12 @@ from tests.fixtures import write_assignment_fixture, write_gradebook_fixture, wr
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def _configured_canvas_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CLI adapter tests run with the explicit environment fallback configured."""
+    monkeypatch.setenv("CANVAS_API_URL", "https://environment.canvas.example/")
+
+
 def command(*path: str) -> click.Command:
     """Resolve a (sub)command from the Typer app's Click tree."""
     cmd: click.Command = typer.main.get_command(app)
@@ -69,6 +75,20 @@ def test_reports_commands_are_registered() -> None:
 
 def test_refresh_cli_accepts_report_options() -> None:
     assert {"--report-root", "--report-dir", "--report-slug"} <= option_names("refresh")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("init",),
+        ("refresh",),
+        ("assignments", "export"),
+        ("grades", "post"),
+        ("pages", "list"),
+    ],
+)
+def test_canvas_commands_expose_profile_and_secret_name(path: tuple[str, ...]) -> None:
+    assert {"--profile", "--secret-name"} <= option_names(*path)
 
 
 @pytest.mark.parametrize("action", ["create", "update", "upsert"])
@@ -444,6 +464,42 @@ def test_auth_doctor_cli_options_and_args(monkeypatch: pytest.MonkeyPatch) -> No
     assert {"--report-root", "--report-dir", "--no-report"}.isdisjoint(
         option_names("auth", "doctor")
     )
+
+
+def test_canvas_command_without_instance_fails_before_dispatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CANVAS_API_URL", raising=False)
+    monkeypatch.delenv("DANVAS_PROFILE", raising=False)
+    monkeypatch.setattr("danvas.profiles.user_config_path", lambda: tmp_path / "missing.toml")
+    dispatched = False
+
+    def fake_courses(args: SimpleNamespace) -> None:
+        nonlocal dispatched
+        dispatched = True
+
+    monkeypatch.setattr("danvas.cli.command_courses", fake_courses)
+
+    result = runner.invoke(app, ["courses"])
+
+    assert result.exit_code == 1
+    assert "Canvas API URL required" in result.output
+    assert dispatched is False
+
+
+def test_local_args_do_not_load_canvas_profiles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    malformed = tmp_path / "config.toml"
+    malformed.write_text("not valid toml =", encoding="utf-8")
+    monkeypatch.setattr("danvas.profiles.user_config_path", lambda: malformed)
+
+    from danvas.cli import args_for
+
+    args = args_for(paths=[], kind="assignment", format="text")
+
+    assert args.paths == []
+    assert not hasattr(args, "api_url")
 
 
 def test_local_report_commands_define_report_options() -> None:

@@ -9,6 +9,7 @@ from secretpath import SecretMiss, clear_cache
 
 from danvas.auth import (
     build_auth_doctor_report,
+    canvas_from_args,
     command_auth_doctor,
     resolve_api_key,
     safe_auth_error,
@@ -30,6 +31,25 @@ def test_resolve_api_key_uses_env_provider(monkeypatch: pytest.MonkeyPatch) -> N
         op_reference="op://Vault/Canvas/credential",
         env_var="CANVAS_API_KEY",
     ) == ("from-env", "env:CANVAS_API_KEY")
+
+
+def test_canvas_requires_instance_before_secret_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_if_called(**kwargs):
+        raise AssertionError(f"secret resolution should not run: {kwargs}")
+
+    monkeypatch.setattr("danvas.auth.resolve_api_key", fail_if_called)
+
+    with pytest.raises(SystemExit, match="before resolving credentials"):
+        canvas_from_args(
+            SimpleNamespace(
+                api_url=None,
+                secret_provider="auto",
+                op_reference="",
+                api_key_env="CANVAS_API_KEY",
+            )
+        )
 
 
 def test_resolve_api_key_auto_prefers_1password(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -171,6 +191,76 @@ def test_auth_doctor_json_reports_canvas_ping(
     assert report["canvas"]["reachable"] is True
     assert report["canvas"]["current_user"] == {"id": 42, "name": "Instructor"}
     assert report["issues"] == []
+
+
+def test_auth_doctor_is_useful_offline_without_api_url(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        "danvas.auth.doctor_report",
+        lambda check_resolution: {
+            "op": {"available": False, "path": None},
+            "direnv": {"available": False, "path": None},
+            "config_files": [],
+            "secrets": [],
+            "resolutions": [],
+            "issues": [],
+        },
+    )
+    monkeypatch.setattr(
+        "danvas.auth.resolve_named_secret",
+        lambda *args, **kwargs: SimpleNamespace(value="token", source="env:CANVAS_API_KEY"),
+    )
+
+    command_auth_doctor(
+        SimpleNamespace(
+            api_url=None,
+            secret_name="canvas-work",
+            secret_provider="env",
+            op_reference="",
+            api_key_env="CANVAS_API_KEY",
+            check_canvas=False,
+            json=False,
+        )
+    )
+
+    output = capsys.readouterr().out
+    assert "API URL: unconfigured" in output
+    assert "canvas-work: resolved" in output
+    assert "status: ok" in output
+
+
+def test_auth_doctor_check_canvas_requires_api_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "danvas.auth.doctor_report",
+        lambda check_resolution: {
+            "op": {"available": False, "path": None},
+            "direnv": {"available": False, "path": None},
+            "config_files": [],
+            "secrets": [],
+            "resolutions": [],
+            "issues": [],
+        },
+    )
+    monkeypatch.setattr(
+        "danvas.auth.resolve_named_secret",
+        lambda *args, **kwargs: SimpleNamespace(value="token", source="env:CANVAS_API_KEY"),
+    )
+
+    report = build_auth_doctor_report(
+        SimpleNamespace(
+            api_url=None,
+            secret_provider="env",
+            op_reference="",
+            api_key_env="CANVAS_API_KEY",
+            check_canvas=True,
+        )
+    )
+
+    assert report["canvas"]["reachable"] is False
+    assert "canvas API URL is unconfigured" in report["issues"]
 
 
 def test_auth_doctor_exits_nonzero_when_canvas_secret_unresolved(
