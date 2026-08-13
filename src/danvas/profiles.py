@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -156,6 +157,21 @@ def resolve_canvas_context(
         api_url = _optional_string(environment.get("CANVAS_API_URL"))
         api_url_source = "CANVAS_API_URL" if api_url else None
 
+    if (
+        explicit_profile
+        and project_api_url
+        and profile
+        and profile.api_url
+        and _normalized_api_url(project_api_url) != _normalized_api_url(profile.api_url)
+    ):
+        print(
+            f"WARNING: explicitly selected profile {profile.name!r} is configured for "
+            f"{profile.api_url}, but this project is pinned to {project_api_url}. "
+            "The project URL keeps precedence; verify that the selected credentials belong "
+            "to this Canvas instance.",
+            file=sys.stderr,
+        )
+
     if not api_url and not allow_missing_api_url:
         raise SystemExit(
             "Canvas API URL required. Pass --api-url, initialize the course project, "
@@ -238,3 +254,7 @@ def _optional_string(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _normalized_api_url(value: str) -> str:
+    return value.strip().rstrip("/").casefold()

@@ -16,6 +16,10 @@ LEGACY_COMPLEXITY_EXCEPTIONS = {
     ("pages.py", "build_pages_sync_plan"),
     ("status.py", "compare_pages"),
 }
+RESOLVE_API_KEY_CALLS = {
+    ("auth.py", "canvas_from_args"),
+    ("panopto.py", "command_panopto_captions"),
+}
 
 
 def package_import_graph() -> dict[str, set[str]]:
@@ -119,3 +123,27 @@ def test_only_documented_legacy_functions_suppress_complexity() -> None:
                 exceptions.add((path.name, node.name))
 
     assert exceptions == LEGACY_COMPLEXITY_EXCEPTIONS
+
+
+def test_resolve_api_key_call_sites_are_bounded_and_pass_secret_name() -> None:
+    found: set[tuple[str, str]] = set()
+    missing_secret_name: set[tuple[str, str]] = set()
+    for path in PACKAGE_ROOT.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for function in (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ):
+            for node in ast.walk(function):
+                if not isinstance(node, ast.Call):
+                    continue
+                if not isinstance(node.func, ast.Name) or node.func.id != "resolve_api_key":
+                    continue
+                call_site = (path.name, function.name)
+                found.add(call_site)
+                if "secret_name" not in {keyword.arg for keyword in node.keywords}:
+                    missing_secret_name.add(call_site)
+
+    assert found == RESOLVE_API_KEY_CALLS
+    assert missing_secret_name == set()

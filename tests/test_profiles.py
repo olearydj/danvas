@@ -68,6 +68,61 @@ course_id = 101
     assert context.api_key_env == "INSTITUTION_A_CANVAS_TOKEN"
 
 
+def test_explicit_profile_warns_when_project_pins_a_different_instance(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    profiles_path = tmp_path / "user.toml"
+    write_profiles(profiles_path)
+    project = tmp_path / "course"
+    (project / ".danvas").mkdir(parents=True)
+    (project / ".danvas" / "config.toml").write_text(
+        '[canvas]\napi_url = "https://project.canvas.example/"\ncourse_id = 101\n',
+        encoding="utf-8",
+    )
+
+    context = resolve_canvas_context(
+        explicit_profile="institution-b",
+        start=project,
+        profiles_path=profiles_path,
+        environ={},
+    )
+
+    assert context.api_url == "https://project.canvas.example/"
+    assert context.api_url_source == ".danvas/config.toml"
+    assert context.secret_name == "canvas-institution-b"
+    warning = capsys.readouterr().err
+    assert "explicitly selected profile 'institution-b'" in warning
+    assert "project is pinned" in warning
+    assert "project URL keeps precedence" in warning
+
+
+def test_project_selected_profile_mismatch_does_not_emit_explicit_selection_warning(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    profiles_path = tmp_path / "user.toml"
+    write_profiles(profiles_path)
+    project = tmp_path / "course"
+    (project / ".danvas").mkdir(parents=True)
+    (project / ".danvas" / "config.toml").write_text(
+        """
+[canvas]
+profile = "institution-b"
+api_url = "https://project.canvas.example/"
+course_id = 101
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    context = resolve_canvas_context(
+        start=project,
+        profiles_path=profiles_path,
+        environ={},
+    )
+
+    assert context.profile == "institution-b"
+    assert capsys.readouterr().err == ""
+
+
 def test_profile_selection_and_instance_precedence(tmp_path: Path) -> None:
     profiles_path = tmp_path / "user.toml"
     write_profiles(profiles_path)

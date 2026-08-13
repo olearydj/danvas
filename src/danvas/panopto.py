@@ -82,7 +82,7 @@ def command_panopto_captions(args: Any) -> None:
         provider=args.secret_provider,
         op_reference=args.op_reference,
         env_var=args.api_key_env,
-        secret_name=getattr(args, "secret_name", "canvas"),
+        secret_name=args.secret_name,
     )
     print(f"Using API key from: {provider_name}")
     canvas_session = requests.Session()

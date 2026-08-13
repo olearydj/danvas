@@ -30,6 +30,7 @@ def test_resolve_api_key_uses_env_provider(monkeypatch: pytest.MonkeyPatch) -> N
         provider="env",
         op_reference="op://Vault/Canvas/credential",
         env_var="CANVAS_API_KEY",
+        secret_name="canvas",
     ) == ("from-env", "env:CANVAS_API_KEY")
 
 
@@ -67,6 +68,7 @@ def test_resolve_api_key_auto_prefers_1password(monkeypatch: pytest.MonkeyPatch)
         provider="auto",
         op_reference="op://Vault/Canvas/credential",
         env_var="CANVAS_API_KEY",
+        secret_name="canvas",
     ) == ("from-op", "1password")
     assert len(calls) == 1
 
@@ -79,6 +81,7 @@ def test_resolve_api_key_auto_falls_back_to_env(monkeypatch: pytest.MonkeyPatch)
         provider="auto",
         op_reference="op://Vault/Canvas/credential",
         env_var="CANVAS_API_KEY",
+        secret_name="canvas",
     ) == ("from-env", "env:CANVAS_API_KEY")
 
 
@@ -91,6 +94,7 @@ def test_resolve_api_key_exits_with_safe_message(monkeypatch: pytest.MonkeyPatch
             provider="auto",
             op_reference="op://Vault/Canvas/credential",
             env_var="CANVAS_API_KEY",
+            secret_name="canvas",
         )
 
     message = str(excinfo.value)
