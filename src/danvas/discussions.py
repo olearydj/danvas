@@ -12,6 +12,12 @@ from typing import Any
 import yaml
 from bs4 import BeautifulSoup
 
+from danvas.artifacts import (
+    resolve_private_path,
+    warn_if_external_private_path,
+    write_private_json,
+    write_private_rows,
+)
 from danvas.auth import canvas_from_args
 from danvas.frontmatter import parse_frontmatter
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
@@ -20,7 +26,6 @@ from danvas.utils import (
     html_to_text,
     print_mutation_banner,
     slugify,
-    write_rows,
 )
 
 
@@ -34,13 +39,21 @@ def parse_discussion_url(url: str) -> tuple[int, int]:
 
 
 def command_discussions_export(args: Any) -> None:
-    canvas = canvas_from_args(args)
     course_id, discussion_id = parse_discussion_url(args.discussion_url)
+    suffix = "csv" if args.format == "csv" else "json"
+    resolved = resolve_private_path(
+        explicit=getattr(args, "output", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative=f"discussions/topic-{discussion_id}/posts.{suffix}",
+        option_name="--output",
+    )
+    warn_if_external_private_path(resolved)
+    _refuse_discussion_target(resolved.path, bool(getattr(args, "overwrite", False)))
+    canvas = canvas_from_args(args)
     course = canvas.get_course(course_id)
     topic = course.get_discussion_topic(discussion_id)
     posts = discussion_posts(course, topic)
-    output = Path(args.output)
-    output.parent.mkdir(parents=True, exist_ok=True)
+    output = resolved.path
     if args.format == "csv" or output.suffix.lower() == ".csv":
         fieldnames = [
             "topic_id",
@@ -54,10 +67,26 @@ def command_discussions_export(args: Any) -> None:
             "is_reply",
             "depth",
         ]
-        write_rows(output, posts, fieldnames)
+        write_private_rows(
+            output,
+            posts,
+            fieldnames,
+            command="discussions export",
+            overwrite=bool(getattr(args, "overwrite", False)),
+        )
     else:
-        output.write_text(json.dumps(posts, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"Wrote {len(posts)} posts to {output}")
+        write_private_json(
+            output,
+            {
+                "course_id": course_id,
+                "discussion_id": discussion_id,
+                "posts": posts,
+            },
+            command="discussions export",
+            overwrite=bool(getattr(args, "overwrite", False)),
+        )
+    print(f"Exported posts: {len(posts)}")
+    print(f"Private artifact: {output}")
 
 
 def command_discussions_sync_prompts(args: Any) -> None:
@@ -78,8 +107,18 @@ def command_discussions_sync_prompts(args: Any) -> None:
 
 
 def command_discussions_score(args: Any) -> None:
-    canvas = canvas_from_args(args)
     course_id, discussion_id = parse_discussion_url(args.discussion_url)
+    resolved = resolve_private_path(
+        explicit=getattr(args, "output", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative=f"discussions/topic-{discussion_id}/grade-plan.csv",
+        option_name="--output",
+    )
+    warn_if_external_private_path(resolved)
+    _refuse_discussion_target(resolved.path, bool(getattr(args, "overwrite", False)))
+    if resolved.path.suffix.lower() != ".csv":
+        raise SystemExit("Discussion score output must end in .csv.")
+    canvas = canvas_from_args(args)
     course = canvas.get_course(course_id)
     topic = course.get_discussion_topic(discussion_id)
     posts = discussion_posts(course, topic)
@@ -92,26 +131,50 @@ def command_discussions_score(args: Any) -> None:
         args.max_original_comments,
         args.max_responses,
     )
-    for row in scored:
-        print(f"  {row['name']}: {row['score']}")
-    if args.output:
-        write_rows(
-            Path(args.output),
-            scored,
-            [
-                "author_id",
-                "name",
-                "score",
-                "original_comments",
-                "responses",
-                "total_posts",
-                "comment",
-            ],
-        )
+    fieldnames = [
+        "author_id",
+        "name",
+        "score",
+        "original_comments",
+        "responses",
+        "total_posts",
+        "comment",
+        "upload_status",
+        "error",
+    ]
+    write_private_rows(
+        resolved.path,
+        scored,
+        fieldnames,
+        command="discussions score",
+        overwrite=bool(getattr(args, "overwrite", False)),
+        sidecar_fields={"course_id": course_id, "discussion_id": discussion_id},
+    )
+    failed = 0
     if args.upload or args.dry_run:
-        upload_discussion_scores(
+        _, failed = upload_discussion_scores(
             course, topic, scored, dry_run=args.dry_run, sleep_seconds=args.sleep_seconds
         )
+        write_private_rows(
+            resolved.path,
+            scored,
+            fieldnames,
+            command="discussions score",
+            overwrite=True,
+            sidecar_fields={"course_id": course_id, "discussion_id": discussion_id},
+        )
+    print(f"Scored: {len(scored)}; upload failures: {failed}")
+    print(f"Private artifact: {resolved.path}")
+    if failed:
+        raise SystemExit(1)
+
+
+def _refuse_discussion_target(path: Path, overwrite: bool) -> None:
+    if overwrite:
+        return
+    sidecar = path.with_name(f"{path.name}.artifact.json")
+    if path.exists() or (path.suffix.lower() == ".csv" and sidecar.exists()):
+        raise SystemExit(f"Refusing to overwrite existing private output: {path}")
 
 
 def discussion_posts(course: Any, topic: Any) -> list[dict[str, Any]]:
@@ -166,12 +229,18 @@ def discussion_prompt_record(topic: Any) -> dict[str, Any]:
         "title": first_attr(topic, "title") or payload.get("title") or "",
         "html_url": first_attr(topic, "html_url") or payload.get("html_url") or "",
         "posted_at": first_attr(topic, "posted_at", "created_at") or payload.get("posted_at") or "",
-        "delayed_post_at": first_attr(topic, "delayed_post_at") or payload.get("delayed_post_at") or "",
+        "delayed_post_at": first_attr(topic, "delayed_post_at")
+        or payload.get("delayed_post_at")
+        or "",
         "due_at": first_attr(topic, "due_at") or payload.get("due_at") or "",
         "unlock_at": first_attr(topic, "unlock_at") or payload.get("unlock_at") or "",
         "lock_at": first_attr(topic, "lock_at") or payload.get("lock_at") or "",
-        "published": first_attr(topic, "published") if first_attr(topic, "published") != "" else payload.get("published", ""),
-        "points_possible": first_attr(topic, "points_possible") or payload.get("points_possible") or "",
+        "published": first_attr(topic, "published")
+        if first_attr(topic, "published") != ""
+        else payload.get("published", ""),
+        "points_possible": first_attr(topic, "points_possible")
+        or payload.get("points_possible")
+        or "",
         "assignment_id": first_attr(topic, "assignment_id") or payload.get("assignment_id") or "",
         "message": html_to_text(str(message_html)),
         "message_html": message_html,
@@ -339,9 +408,7 @@ def make_discussions_sync_report_run(args: Any, plan: dict[str, Any]) -> ReportR
     )
 
 
-def write_discussions_sync_report_run(
-    report_run: ReportRun | None, plan: dict[str, Any]
-) -> None:
+def write_discussions_sync_report_run(report_run: ReportRun | None, plan: dict[str, Any]) -> None:
     if report_run is None:
         return
     try:
@@ -478,7 +545,7 @@ def score_discussion(
 
 def upload_discussion_scores(
     course: Any, topic: Any, rows: list[dict[str, Any]], *, dry_run: bool, sleep_seconds: float
-) -> None:
+) -> tuple[int, int]:
     assignment_id = getattr(topic, "assignment_id", None)
     if not assignment_id:
         raise SystemExit("Discussion is not graded and has no assignment_id.")
@@ -495,7 +562,8 @@ def upload_discussion_scores(
     success = failed = 0
     for row in rows:
         if dry_run:
-            print(f"  {row['name']} (user {row['author_id']}): {row['score']}")
+            row["upload_status"] = "planned"
+            row["error"] = ""
             success += 1
             continue
         try:
@@ -503,12 +571,14 @@ def upload_discussion_scores(
                 submission={"posted_grade": row["score"]},
                 comment={"text_comment": row["comment"]},
             )
+            row["upload_status"] = "uploaded"
+            row["error"] = ""
             success += 1
             time.sleep(sleep_seconds)
         except Exception as exc:  # noqa: BLE001
             failed += 1
-            print(f"  {row['name']}: FAILED {type(exc).__name__}: {exc}")
+            row["upload_status"] = "failed"
+            row["error"] = f"{type(exc).__name__}"
     label = "Dry run" if dry_run else "Upload"
     print(f"{label} complete: {success} succeeded, {failed} failed")
-    if failed:
-        raise SystemExit(1)
+    return success, failed

@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 
 from danvas.discussions import (
+    command_discussions_export,
+    command_discussions_score,
     command_discussions_sync_prompts,
     discussion_posts,
     discussion_prompt_records,
@@ -70,6 +72,15 @@ class FakeDiscussionCanvas:
         return self.course
 
 
+def write_config(root: Path) -> None:
+    config_dir = root / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\napi_url = "https://canvas.example.edu/"\n',
+        encoding="utf-8",
+    )
+
+
 def test_parse_discussion_url_extracts_course_and_topic() -> None:
     url = "https://canvas.example/courses/123/discussion_topics/456?entry=1"
 
@@ -123,6 +134,96 @@ def test_discussion_posts_flattens_view_and_strips_html() -> None:
         "is_reply": True,
         "depth": 1,
     }
+
+
+def test_discussions_export_uses_private_project_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_config(tmp_path)
+    topic = SimpleNamespace(id=9, title="Student Topic")
+    course = SimpleNamespace(
+        get_discussion_topic=lambda topic_id: topic,
+        get_full_discussion_topic=lambda topic_id: {
+            "participants": [{"id": 11, "display_name": "Student One"}],
+            "view": [
+                {
+                    "id": 1,
+                    "user_id": 11,
+                    "message": "<p>Private response</p>",
+                    "created_at": "2026-06-01T00:00:00Z",
+                }
+            ],
+        },
+    )
+    canvas = SimpleNamespace(get_course=lambda course_id: course)
+    monkeypatch.setattr("danvas.discussions.canvas_from_args", lambda args: canvas)
+
+    command_discussions_export(
+        SimpleNamespace(
+            discussion_url="https://canvas.example/courses/101/discussion_topics/9",
+            output=None,
+            format="json",
+            overwrite=False,
+            project_root=str(tmp_path),
+        )
+    )
+
+    output = tmp_path / ".danvas/private/discussions/topic-9/posts.json"
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["artifact_class"] == "private"
+    assert payload["posts"][0]["author"] == "Student One"
+    terminal = capsys.readouterr().out
+    assert "Student One" not in terminal
+    assert "Private response" not in terminal
+
+
+def test_discussions_score_writes_private_plan_without_student_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_config(tmp_path)
+    topic = SimpleNamespace(id=9, title="Student Topic", assignment_id=77)
+    course = SimpleNamespace(
+        get_discussion_topic=lambda topic_id: topic,
+        get_full_discussion_topic=lambda topic_id: {
+            "participants": [{"id": 11, "display_name": "Student One"}],
+            "view": [
+                {
+                    "id": 1,
+                    "user_id": 11,
+                    "message": "<p>Private response</p>",
+                    "created_at": "2026-06-01T00:00:00Z",
+                }
+            ],
+        },
+        get_enrollments=lambda **kwargs: [
+            SimpleNamespace(user_id=11, user={"name": "Student One"})
+        ],
+    )
+    canvas = SimpleNamespace(get_course=lambda course_id: course)
+    monkeypatch.setattr("danvas.discussions.canvas_from_args", lambda args: canvas)
+
+    command_discussions_score(
+        SimpleNamespace(
+            discussion_url="https://canvas.example/courses/101/discussion_topics/9",
+            points_per_original=2.0,
+            points_per_response=1.0,
+            max_original_comments=1,
+            max_responses=1,
+            output=None,
+            overwrite=False,
+            upload=False,
+            dry_run=False,
+            sleep_seconds=0,
+            project_root=str(tmp_path),
+        )
+    )
+
+    output = tmp_path / ".danvas/private/discussions/topic-9/grade-plan.csv"
+    assert "Student One" in output.read_text(encoding="utf-8")
+    assert output.with_name("grade-plan.csv.artifact.json").is_file()
+    terminal = capsys.readouterr().out
+    assert "Student One" not in terminal
+    assert "Private response" not in terminal
 
 
 def test_discussion_prompt_records_skip_announcements() -> None:
@@ -244,8 +345,10 @@ Different content.
         "skipped_known_local",
         "conflict",
     ]
-    assert (output_dir / "existing-week-1.md").read_text(encoding="utf-8").endswith(
-        "Edited locally.\n"
+    assert (
+        (output_dir / "existing-week-1.md")
+        .read_text(encoding="utf-8")
+        .endswith("Edited locally.\n")
     )
     assert "different canvas_id 999" in report["actions"][1]["reason"]
 
@@ -297,9 +400,7 @@ def test_upload_discussion_scores_requires_graded_discussion() -> None:
     topic = SimpleNamespace(assignment_id=None)
 
     with pytest.raises(SystemExit, match="not graded"):
-        upload_discussion_scores(
-            SimpleNamespace(), topic, [], dry_run=False, sleep_seconds=0
-        )
+        upload_discussion_scores(SimpleNamespace(), topic, [], dry_run=False, sleep_seconds=0)
 
 
 def test_upload_discussion_scores_posts_grades_and_comments() -> None:

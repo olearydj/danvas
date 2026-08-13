@@ -242,9 +242,7 @@ def test_grade_commands_expose_private_report_options_and_forward_args(
     grades_csv = tmp_path / "grades.csv"
     grades_csv.write_text("CanvasID,Grade\n1,90\n", encoding="utf-8")
     captured: dict[str, object] = {}
-    monkeypatch.setattr(
-        "danvas.cli.command_grades_post", lambda args: captured.update(vars(args))
-    )
+    monkeypatch.setattr("danvas.cli.command_grades_post", lambda args: captured.update(vars(args)))
     report_dir = tmp_path / "report"
 
     result = runner.invoke(
@@ -457,7 +455,13 @@ def test_help_renders_without_error() -> None:
 
 def test_quiz_import_qti_defines_expected_options() -> None:
     options = option_names("quiz", "import-qti")
-    report_options = {"--project-root", "--no-report", "--report-root", "--report-dir", "--report-slug"}
+    report_options = {
+        "--project-root",
+        "--no-report",
+        "--report-root",
+        "--report-dir",
+        "--report-slug",
+    }
 
     assert {"--match-title", "--dry-run", "--no-publish", "--course-id"} <= options
     assert report_options <= options
@@ -548,7 +552,9 @@ def test_local_report_commands_define_report_options() -> None:
     assert expected <= option_names("announcements", "sync")
     assert expected <= option_names("announcements", "verify")
     assert expected <= option_names("discussions", "sync-prompts")
-    assert expected.isdisjoint(option_names("discussions", "score"))
+    score_options = option_names("discussions", "score")
+    assert "--project-root" in score_options
+    assert (expected - {"--project-root"}).isdisjoint(score_options)
 
 
 def test_status_report_options() -> None:
@@ -936,9 +942,7 @@ def test_discussions_sync_prompts_cli_options_and_args(
     assert "--overwrite" not in option_names("discussions", "sync-prompts")
 
 
-def test_files_upload_cli_options_and_args(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_files_upload_cli_options_and_args(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     source = tmp_path / "slides.pptx"
     source.write_text("slides", encoding="utf-8")
     captured: dict[str, object] = {}
@@ -1131,9 +1135,7 @@ def test_pages_export_cli_supports_targeted_markdown(
     )
 
 
-def test_pages_sync_cli_options_and_args(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_pages_sync_cli_options_and_args(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
     def fake_sync(args: SimpleNamespace) -> None:

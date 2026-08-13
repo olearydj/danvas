@@ -81,6 +81,25 @@ def test_command_roster_writes_sorted_roster(
     assert rows[0] == {
         "CanvasID": "1",
         "Name": "Lawson, Jack",
-        "Email": "jack@example.edu",
+        "LoginID": "jack@example.edu",
         "SIS_ID": "JL1",
     }
+    assert output.with_name("roster.csv.artifact.json").is_file()
+
+
+def test_command_roster_legacy_schema_retains_email_label(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("danvas.courses.canvas_from_args", lambda args: FakeCanvas())
+    output = tmp_path / "roster.csv"
+
+    command_roster(
+        SimpleNamespace(
+            course_id=101,
+            output=str(output),
+            enrollment_type="StudentEnrollment",
+            schema="legacy-v1",
+        )
+    )
+
+    assert list(read_csv(output)[0]) == ["CanvasID", "Name", "Email", "SIS_ID"]

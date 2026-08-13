@@ -20,6 +20,11 @@ from danvas.announcements import (
     command_announcements_update,
     command_announcements_verify,
 )
+from danvas.artifacts import (
+    resolve_private_path,
+    warn_if_external_private_path,
+    write_private_json,
+)
 from danvas.assignments import (
     command_assignments_create,
     command_assignments_export,
@@ -99,6 +104,7 @@ LintFormat = Literal["text", "json"]
 LintFailOn = Literal["error", "warning"]
 PageExportFormat = Literal["json", "html", "markdown"]
 PageSyncFormat = Literal["html", "markdown"]
+RosterSchema = Literal["v2", "legacy-v1"]
 
 
 app = typer.Typer(
@@ -164,6 +170,7 @@ sources_app = typer.Typer(
     help="Validate local Canvas-facing authored sources without Canvas access.",
     no_args_is_help=True,
 )
+
 
 def version_callback(value: bool) -> None:
     if value:
@@ -413,6 +420,22 @@ def write_payload_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def write_explicit_private_json(
+    *, command_name: str, output: Path, project_root: Path, payload: dict[str, Any]
+) -> None:
+    resolved = resolve_private_path(
+        explicit=output,
+        project_root=project_root,
+        default_relative=output.name,
+        option_name="--output",
+    )
+    warn_if_external_private_path(resolved)
+    try:
+        write_private_json(resolved.path, payload, command=command_name)
+    except FileExistsError as exc:
+        raise SystemExit(f"Refusing to overwrite existing private output: {resolved.path}") from exc
+
+
 def echo_report_rows(rows: list[dict[str, Any]], *, root: Path | None = None) -> None:
     if root:
         typer.echo(f"Reports: {root}")
@@ -514,7 +537,9 @@ def init_project(
 def auth_doctor(
     check_canvas: Annotated[
         bool,
-        typer.Option("--check-canvas", help="Resolve the Canvas token and call Canvas current user."),
+        typer.Option(
+            "--check-canvas", help="Resolve the Canvas token and call Canvas current user."
+        ),
     ] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Emit machine-readable JSON.")
@@ -707,7 +732,12 @@ def reports_latest(
     echo_report_detail(row)
 
 
-@app.command(help="Export active courses visible to the authenticated Canvas user.")
+@app.command(
+    help=(
+        "Export active courses visible to the authenticated Canvas user. The CSV is "
+        "course-internal and is not automatically safe to publish."
+    )
+)
 def courses(
     output: Annotated[
         Path,
@@ -742,8 +772,26 @@ def courses(
 def roster(
     course_id: CourseId = None,
     output: Annotated[
-        Path, typer.Option("--output", "-o", help="CSV output path: CanvasID, Name, Email, SIS_ID.")
-    ] = Path("roster.csv"),
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help=(
+                "Private CSV output. Defaults to .danvas/private/roster.csv in a project; "
+                "required otherwise."
+            ),
+        ),
+    ] = None,
+    schema: Annotated[
+        RosterSchema,
+        typer.Option(
+            "--schema",
+            help="Roster columns: v2 uses LoginID; legacy-v1 retains the deprecated Email label.",
+        ),
+    ] = "v2",
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     enrollment_type: Annotated[
         str,
         typer.Option("--enrollment-type", help="Canvas enrollment type to include."),
@@ -759,7 +807,9 @@ def roster(
         command_roster,
         args_for(
             course_id=course_id,
-            output=str(output),
+            output=str(output) if output else None,
+            schema=schema,
+            project_root=str(project_root),
             enrollment_type=enrollment_type,
             profile=profile,
             api_url=api_url,
@@ -822,13 +872,16 @@ def assignments_export(
 def assignments_overrides(
     assignment_id: AssignmentId,
     output: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--output",
             "-o",
-            help="Private YAML or JSON output path.",
+            help=(
+                "Private YAML or JSON output. Defaults beneath .danvas/private/overrides in "
+                "a project; required otherwise."
+            ),
         ),
-    ],
+    ] = None,
     source: Annotated[
         Path | None,
         typer.Option("--source", help="Optional authored assignment source path to record."),
@@ -837,6 +890,9 @@ def assignments_overrides(
         bool, typer.Option("--overwrite", help="Replace an existing private output file.")
     ] = False,
     course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -849,9 +905,10 @@ def assignments_overrides(
         args_for(
             course_id=course_id,
             assignment_id=assignment_id,
-            output=str(output),
+            output=str(output) if output else None,
             source=str(source) if source else "",
             overwrite=overwrite,
+            project_root=str(project_root),
             profile=profile,
             api_url=api_url,
             secret_name=secret_name,
@@ -869,9 +926,7 @@ def assignments_overrides(
 def assignments_overrides_sync(
     source: Annotated[
         Path,
-        typer.Argument(
-            help="Assignment Markdown with availability_overrides_ref front matter."
-        ),
+        typer.Argument(help="Assignment Markdown with availability_overrides_ref front matter."),
     ],
     course_id: CourseId = None,
     assignment_id: Annotated[
@@ -1160,9 +1215,7 @@ def assignments_update(
 def assignments_upsert(
     source: Annotated[
         Path,
-        typer.Argument(
-            help="Markdown source to plan as an assignment create-or-update operation."
-        ),
+        typer.Argument(help="Markdown source to plan as an assignment create-or-update operation."),
     ],
     course_id: CourseId = None,
     assignment_id: Annotated[
@@ -1345,7 +1398,8 @@ def gradebook_check(
         ),
     ] = None,
     output: Annotated[
-        Path | None, typer.Option("--output", "-o", help="Optional JSON check output path.")
+        Path | None,
+        typer.Option("--output", "-o", help="Optional private JSON check output path."),
     ] = None,
     no_report: Annotated[
         bool, typer.Option("--no-report", help="Suppress the default report run.")
@@ -1374,7 +1428,12 @@ def gradebook_check(
     if payload["missing"]["totals"]:
         typer.echo(f"  Missing/nonnumeric totals: {payload['missing']['totals']}")
     if output:
-        write_json(output, payload)
+        write_explicit_private_json(
+            command_name="gradebook check",
+            output=output,
+            project_root=project_root,
+            payload=payload,
+        )
         typer.echo(f"Wrote {output}")
     if should_write_report_run(
         no_report=no_report,
@@ -1425,7 +1484,8 @@ def gradebook_audit(
         float, typer.Option("--tolerance", help="Maximum allowed absolute final-score difference.")
     ] = 0.05,
     output: Annotated[
-        Path | None, typer.Option("--output", "-o", help="Optional JSON audit output path.")
+        Path | None,
+        typer.Option("--output", "-o", help="Optional private JSON audit output path."),
     ] = None,
     no_report: Annotated[
         bool, typer.Option("--no-report", help="Suppress the default report run.")
@@ -1466,7 +1526,12 @@ def gradebook_audit(
     typer.echo(f"  Rows over tolerance: {recon['rows_over_tolerance']}")
     typer.echo(f"  Status: {recon['status']}")
     if output:
-        write_json(output, payload)
+        write_explicit_private_json(
+            command_name="gradebook audit",
+            output=output,
+            project_root=project_root,
+            payload=payload,
+        )
         typer.echo(f"Wrote {output}")
     if should_write_report_run(
         no_report=no_report,
@@ -1513,7 +1578,8 @@ def quiz_analysis(
         ),
     ] = None,
     output: Annotated[
-        Path | None, typer.Option("--output", "-o", help="Optional JSON analysis output path.")
+        Path | None,
+        typer.Option("--output", "-o", help="Optional private JSON analysis output path."),
     ] = None,
     no_report: Annotated[
         bool, typer.Option("--no-report", help="Suppress the default report run.")
@@ -1538,7 +1604,12 @@ def quiz_analysis(
     if "answer_counts" in payload:
         typer.echo(f"  Answer counts: {payload['answer_counts']}")
     if output:
-        write_json(output, payload)
+        write_explicit_private_json(
+            command_name="quiz analysis",
+            output=output,
+            project_root=project_root,
+            payload=payload,
+        )
         typer.echo(f"Wrote {output}")
     if should_write_report_run(
         no_report=no_report,
@@ -1683,8 +1754,16 @@ def quiz_import_qti(
 def submissions_export(
     assignment_id: AssignmentId,
     output: Annotated[
-        Path, typer.Option("--output", "-o", help="Private JSON or CSV output path.")
-    ],
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help=(
+                "Private JSON or CSV output. Defaults beneath .danvas/private/submissions "
+                "in a project; required otherwise."
+            ),
+        ),
+    ] = None,
     include_comments: Annotated[
         bool, typer.Option("--include-comments", help="Include full text submission comments.")
     ] = False,
@@ -1699,6 +1778,9 @@ def submissions_export(
         bool, typer.Option("--overwrite", help="Replace existing explicit outputs.")
     ] = False,
     course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -1711,11 +1793,12 @@ def submissions_export(
         args_for(
             course_id=course_id,
             assignment_id=assignment_id,
-            output=str(output),
+            output=str(output) if output else None,
             include_comments=include_comments,
             include_history=include_history,
             save_raw=str(save_raw) if save_raw else None,
             overwrite=overwrite,
+            project_root=str(project_root),
             profile=profile,
             api_url=api_url,
             secret_name=secret_name,
@@ -1730,8 +1813,16 @@ def submissions_export(
 def submissions_grades(
     assignment_id: AssignmentId,
     output: Annotated[
-        Path, typer.Option("--output", "-o", help="Private JSON or CSV output path.")
-    ],
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help=(
+                "Private JSON or CSV output. Defaults beneath .danvas/private/submissions "
+                "in a project; required otherwise."
+            ),
+        ),
+    ] = None,
     only_graded: Annotated[
         bool, typer.Option("--only-graded", help="Exclude submissions without a current grade.")
     ] = False,
@@ -1739,6 +1830,9 @@ def submissions_grades(
         bool, typer.Option("--overwrite", help="Replace an existing explicit output.")
     ] = False,
     course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -1751,9 +1845,10 @@ def submissions_grades(
         args_for(
             course_id=course_id,
             assignment_id=assignment_id,
-            output=str(output),
+            output=str(output) if output else None,
             only_graded=only_graded,
             overwrite=overwrite,
+            project_root=str(project_root),
             profile=profile,
             api_url=api_url,
             secret_name=secret_name,
@@ -1771,11 +1866,15 @@ def submissions_media(
     assignment_id: AssignmentId,
     course_id: CourseId = None,
     output_dir: Annotated[
-        Path,
+        Path | None,
         typer.Option(
-            "--output-dir", help="Base directory for downloaded files and .info.json metadata."
+            "--output-dir",
+            help=(
+                "Private directory for files and .info.json metadata. Defaults beneath "
+                ".danvas/private/submissions in a project; required otherwise."
+            ),
         ),
-    ] = Path("canvas_assignment_files"),
+    ] = None,
     layout: Annotated[
         SubmissionLayout,
         typer.Option("--layout", help="Use a flat output or an assignment subdirectory."),
@@ -1783,6 +1882,9 @@ def submissions_media(
     overwrite: Annotated[
         bool, typer.Option("--overwrite", help="Replace existing downloaded files.")
     ] = False,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -1795,9 +1897,10 @@ def submissions_media(
         args_for(
             course_id=course_id,
             assignment_id=assignment_id,
-            output_dir=str(output_dir),
+            output_dir=str(output_dir) if output_dir else None,
             layout=layout,
             overwrite=overwrite,
+            project_root=str(project_root),
             profile=profile,
             api_url=api_url,
             secret_name=secret_name,
@@ -1838,6 +1941,20 @@ def submissions_feedback(
             "--dry-run", help="Show matched/unmatched files without uploading. Recommended first."
         ),
     ] = False,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help=(
+                "Private feedback plan/result JSON. Defaults beneath .danvas/private/submissions "
+                "in a project; required otherwise."
+            ),
+        ),
+    ] = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     sleep_seconds: Annotated[
         float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
     ] = 0.5,
@@ -1858,6 +1975,8 @@ def submissions_feedback(
             pattern=pattern,
             comment=comment,
             dry_run=dry_run,
+            output=str(output) if output else None,
+            project_root=str(project_root),
             sleep_seconds=sleep_seconds,
             profile=profile,
             api_url=api_url,
@@ -1881,17 +2000,14 @@ def grades_post(
             "--grades-csv",
             "-g",
             help=(
-                "CSV with CanvasID, Grade, optional Name/Comment, and guarded "
-                "CommentAction fields."
+                "CSV with CanvasID, Grade, optional Name/Comment, and guarded CommentAction fields."
             ),
         ),
     ],
     course_id: CourseId = None,
     dry_run: Annotated[
         bool,
-        typer.Option(
-            "--dry-run", help="Read Canvas and preflight rows without posting."
-        ),
+        typer.Option("--dry-run", help="Read Canvas and preflight rows without posting."),
     ] = False,
     offline_preview: Annotated[
         bool,
@@ -1978,7 +2094,8 @@ def grades_clear(
     ],
     course_id: CourseId = None,
     dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Preflight current grade/comment state without writes.")
+        bool,
+        typer.Option("--dry-run", help="Preflight current grade/comment state without writes."),
     ] = False,
     expected_assignment_title: Annotated[
         str | None,
@@ -2141,14 +2258,25 @@ def discussions_export(
         str, typer.Argument(help="Canvas discussion URL containing course and topic IDs.")
     ],
     output: Annotated[
-        Path,
+        Path | None,
         typer.Option(
-            "--output", "-o", help="Output file. Use --format csv for spreadsheet review."
+            "--output",
+            "-o",
+            help=(
+                "Private output file. Defaults beneath .danvas/private/discussions; "
+                "required outside a project."
+            ),
         ),
-    ] = Path("discussion.json"),
+    ] = None,
     output_format: Annotated[
         DiscussionExportFormat, typer.Option("--format", help="Output format.")
     ] = "json",
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace an existing private output pair.")
+    ] = False,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -2160,8 +2288,10 @@ def discussions_export(
         command_discussions_export,
         args_for(
             discussion_url=discussion_url,
-            output=str(output),
+            output=str(output) if output else None,
             format=output_format,
+            overwrite=overwrite,
+            project_root=str(project_root),
             profile=profile,
             api_url=api_url,
             secret_name=secret_name,
@@ -2377,7 +2507,8 @@ def discussions_sync_prompts(
         bool, typer.Option("--no-report", help="Suppress the default report run.")
     ] = False,
     report_root: Annotated[
-        Path | None, typer.Option("--report-root", help="Root for a dated report run directory."),
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
     ] = None,
     report_dir: Annotated[
         Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
@@ -2415,16 +2546,39 @@ def discussions_sync_prompts(
 
 @sources_app.command("lint", help="Lint Canvas-facing local sources without making Canvas calls.")
 def sources_lint(
-    paths: Annotated[list[Path] | None, typer.Argument(help="Source paths, directories, or glob patterns.")] = None,
-    kind: Annotated[SourceKind | None, typer.Option("--kind", help="Force one source kind; otherwise infer per file.")] = None,
-    project_root: Annotated[Path, typer.Option("--project-root", help="Course root used for discovery and provenance.")] = Path("."),
-    output_format: Annotated[LintFormat, typer.Option("--format", help="Human-readable text or JSON.")] = "text",
-    output: Annotated[Path | None, typer.Option("--output", "-o", help="Explicit JSON output path.")] = None,
-    fail_on: Annotated[LintFailOn, typer.Option("--fail-on", help="Lowest severity that produces exit 1.")] = "error",
+    paths: Annotated[
+        list[Path] | None, typer.Argument(help="Source paths, directories, or glob patterns.")
+    ] = None,
+    kind: Annotated[
+        SourceKind | None,
+        typer.Option("--kind", help="Force one source kind; otherwise infer per file."),
+    ] = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course root used for discovery and provenance.")
+    ] = Path("."),
+    output_format: Annotated[
+        LintFormat, typer.Option("--format", help="Human-readable text or JSON.")
+    ] = "text",
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Explicit JSON output path.")
+    ] = None,
+    fail_on: Annotated[
+        LintFailOn, typer.Option("--fail-on", help="Lowest severity that produces exit 1.")
+    ] = "error",
 ) -> None:
     if output and output_format != "json":
         raise typer.BadParameter("--output requires --format json")
-    run_command(command_sources_lint, args_for(paths=[str(path) for path in paths or []], kind=kind, project_root=str(project_root), format=output_format, output=str(output) if output else None, fail_on=fail_on))
+    run_command(
+        command_sources_lint,
+        args_for(
+            paths=[str(path) for path in paths or []],
+            kind=kind,
+            project_root=str(project_root),
+            format=output_format,
+            output=str(output) if output else None,
+            fail_on=fail_on,
+        ),
+    )
 
 
 @pages_app.command("list", help="List Canvas Pages without writing local files.")
@@ -2464,7 +2618,9 @@ def pages_export(
     url: Annotated[
         str | None, typer.Option("--url", help="Select one Canvas Page by exact URL slug.")
     ] = None,
-    overwrite: Annotated[bool, typer.Option("--overwrite", help="Replace an existing output file.")] = False,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace an existing output file.")
+    ] = False,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -2491,12 +2647,17 @@ def pages_export(
     )
 
 
-@pages_app.command("sync", help="Create missing local Page sources without overwriting authored files.")
+@pages_app.command(
+    "sync", help="Create missing local Page sources without overwriting authored files."
+)
 def pages_sync(
-    output_dir: Annotated[Path, typer.Option("--output-dir", help="Directory for new Page sources.")],
+    output_dir: Annotated[
+        Path, typer.Option("--output-dir", help="Directory for new Page sources.")
+    ],
     course_id: CourseId = None,
     output_format: Annotated[
-        PageSyncFormat, typer.Option("--format", help="Local Markdown or native HTML source format.")
+        PageSyncFormat,
+        typer.Option("--format", help="Local Markdown or native HTML source format."),
     ] = "markdown",
     page_id: Annotated[
         str | None, typer.Option("--page-id", help="Limit actions to one numeric Page ID.")
@@ -2553,32 +2714,57 @@ def pages_sync(
     )
 
 
-@pages_app.command("render", help="Render a local Page source to a Canvas-compatible HTML fragment.")
+@pages_app.command(
+    "render", help="Render a local Page source to a Canvas-compatible HTML fragment."
+)
 def pages_render(
     source: Annotated[Path, typer.Argument(help="Markdown or HTML Page source with front matter.")],
-    output: Annotated[str, typer.Option("--output", "-o", help="Output path, or - for stdout.")] = "-",
+    output: Annotated[
+        str, typer.Option("--output", "-o", help="Output path, or - for stdout.")
+    ] = "-",
 ) -> None:
     run_command(command_pages_render, args_for(source=str(source), output=output))
 
 
-@pages_app.command("css-check", help="Validate restricted Canvas CSS and optionally show its inline plan.")
+@pages_app.command(
+    "css-check", help="Validate restricted Canvas CSS and optionally show its inline plan."
+)
 def pages_css_check(
     css: Annotated[Path, typer.Argument(help="Restricted .canvas.css sidecar.")],
-    source: Annotated[Path | None, typer.Option("--source", help="Optional Page source used to test selector matches.")] = None,
+    source: Annotated[
+        Path | None,
+        typer.Option("--source", help="Optional Page source used to test selector matches."),
+    ] = None,
 ) -> None:
-    run_command(command_pages_css_check, args_for(css=str(css), source=str(source) if source else None))
+    run_command(
+        command_pages_css_check, args_for(css=str(css), source=str(source) if source else None)
+    )
 
 
-@pages_app.command("create", help="Create one Page after a dry-run plan, then verify Canvas readback.")
+@pages_app.command(
+    "create", help="Create one Page after a dry-run plan, then verify Canvas readback."
+)
 def pages_create(
     source: Annotated[Path, typer.Argument(help="Markdown or HTML Page source with front matter.")],
     course_id: CourseId = None,
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Plan without creating a Page.")] = False,
-    project_root: Annotated[Path, typer.Option("--project-root", help="Course project root containing .danvas.")] = Path("."),
-    no_report: Annotated[bool, typer.Option("--no-report", help="Suppress the default report run.")] = False,
-    report_root: Annotated[Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")] = None,
-    report_dir: Annotated[Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")] = None,
-    report_slug: Annotated[str | None, typer.Option("--report-slug", help="Override the report run slug.")] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Plan without creating a Page.")
+    ] = False,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -2614,7 +2800,9 @@ def pages_create(
 def pages_update(
     source: Annotated[Path, typer.Argument(help="Page source resolvable by ID or source map.")],
     course_id: CourseId = None,
-    page_id: Annotated[str | None, typer.Option("--page-id", help="Canvas Page numeric ID or URL slug.")] = None,
+    page_id: Annotated[
+        str | None, typer.Option("--page-id", help="Canvas Page numeric ID or URL slug.")
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -2622,11 +2810,21 @@ def pages_update(
             help="Show body/publication/roles/scheduling changes without updating.",
         ),
     ] = False,
-    project_root: Annotated[Path, typer.Option("--project-root", help="Course project root containing .danvas.")] = Path("."),
-    no_report: Annotated[bool, typer.Option("--no-report", help="Suppress the default report run.")] = False,
-    report_root: Annotated[Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")] = None,
-    report_dir: Annotated[Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")] = None,
-    report_slug: Annotated[str | None, typer.Option("--report-slug", help="Override the report run slug.")] = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -2656,16 +2854,30 @@ def pages_update(
     )
 
 
-@pages_app.command("verify", help="Verify a rendered Page source and publication state against Canvas.")
+@pages_app.command(
+    "verify", help="Verify a rendered Page source and publication state against Canvas."
+)
 def pages_verify(
     source: Annotated[Path, typer.Argument(help="Page source resolvable by ID or source map.")],
     course_id: CourseId = None,
-    page_id: Annotated[str | None, typer.Option("--page-id", help="Canvas Page numeric ID or URL slug.")] = None,
-    project_root: Annotated[Path, typer.Option("--project-root", help="Course project root containing .danvas.")] = Path("."),
-    no_report: Annotated[bool, typer.Option("--no-report", help="Suppress the default report run.")] = False,
-    report_root: Annotated[Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")] = None,
-    report_dir: Annotated[Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")] = None,
-    report_slug: Annotated[str | None, typer.Option("--report-slug", help="Override the report run slug.")] = None,
+    page_id: Annotated[
+        str | None, typer.Option("--page-id", help="Canvas Page numeric ID or URL slug.")
+    ] = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -2739,13 +2951,16 @@ def announcements_create(
 def announcements_export(
     course_id: CourseId = None,
     output: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--output",
             "-o",
-            help="Output file. Use .json, .csv, or .md, or specify --format.",
+            help=(
+                "Private output file. Defaults beneath .danvas/private/announcements; "
+                "required outside a project."
+            ),
         ),
-    ] = Path("announcements.json"),
+    ] = None,
     output_format: Annotated[
         AnnouncementExportFormat,
         typer.Option("--format", help="Output format. 'auto' infers JSON/CSV/Markdown."),
@@ -2757,6 +2972,12 @@ def announcements_export(
             help="Canvas user ID whose replies should be included. Defaults to authenticated user.",
         ),
     ] = None,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace an existing private output pair.")
+    ] = False,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -2768,9 +2989,11 @@ def announcements_export(
         command_announcements_export,
         args_for(
             course_id=course_id,
-            output=str(output),
+            output=str(output) if output else None,
             format=output_format,
             reply_user_id=reply_user_id,
+            overwrite=overwrite,
+            project_root=str(project_root),
             profile=profile,
             api_url=api_url,
             secret_name=secret_name,
@@ -2797,7 +3020,9 @@ def announcements_latest(
     ] = None,
     output_format: Annotated[
         AnnouncementLatestFormat,
-        typer.Option("--format", help="Output format. 'auto' uses Markdown unless output is .json."),
+        typer.Option(
+            "--format", help="Output format. 'auto' uses Markdown unless output is .json."
+        ),
     ] = "auto",
     profile: ProfileName = None,
     api_url: ApiUrl = None,
@@ -2846,7 +3071,8 @@ def announcements_sync(
         bool, typer.Option("--no-report", help="Suppress the default report run.")
     ] = False,
     report_root: Annotated[
-        Path | None, typer.Option("--report-root", help="Root for a dated report run directory."),
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
     ] = None,
     report_dir: Annotated[
         Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
@@ -2973,7 +3199,8 @@ def announcements_verify(
         bool, typer.Option("--no-report", help="Suppress the default report run.")
     ] = False,
     report_root: Annotated[
-        Path | None, typer.Option("--report-root", help="Root for a dated report run directory."),
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
     ] = None,
     report_dir: Annotated[
         Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
@@ -3139,10 +3366,7 @@ def files_download_one(
         str | None,
         typer.Option(
             "--canvas-path",
-            help=(
-                "Exact Canvas Files path, for example "
-                "'course files/slides/example.pptx'."
-            ),
+            help=("Exact Canvas Files path, for example 'course files/slides/example.pptx'."),
         ),
     ] = None,
     overwrite: Annotated[
@@ -3196,10 +3420,7 @@ def files_compare(
         str | None,
         typer.Option(
             "--canvas-path",
-            help=(
-                "Exact Canvas Files path, for example "
-                "'course files/slides/example.pptx'."
-            ),
+            help=("Exact Canvas Files path, for example 'course files/slides/example.pptx'."),
         ),
     ] = None,
     output: Annotated[
@@ -3217,7 +3438,8 @@ def files_compare(
         bool, typer.Option("--no-report", help="Suppress the default report run.")
     ] = False,
     report_root: Annotated[
-        Path | None, typer.Option("--report-root", help="Root for a dated report run directory."),
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated report run directory."),
     ] = None,
     report_dir: Annotated[
         Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
@@ -3345,9 +3567,7 @@ def files_upload(
 
 @recordings_app.command(
     "panopto-captions",
-    help=(
-        "Use the Canvas Panopto LTI tool to list or download Panopto caption text exports."
-    ),
+    help=("Use the Canvas Panopto LTI tool to list or download Panopto caption text exports."),
 )
 def recordings_panopto_captions(
     course_id: CourseId = None,
@@ -3436,8 +3656,19 @@ def discussions_score(
     max_original_comments: Annotated[int, typer.Argument(help="Maximum original posts counted.")],
     max_responses: Annotated[int, typer.Argument(help="Maximum responses counted.")],
     output: Annotated[
-        Path | None, typer.Option("--output", "-o", help="Optional CSV output for scored rows.")
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help=(
+                "Private CSV grade plan. Defaults beneath .danvas/private/discussions; "
+                "required outside a project."
+            ),
+        ),
     ] = None,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace an existing private grade plan pair.")
+    ] = False,
     upload: Annotated[
         bool,
         typer.Option(
@@ -3454,6 +3685,9 @@ def discussions_score(
     sleep_seconds: Annotated[
         float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
     ] = 0.3,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -3470,9 +3704,11 @@ def discussions_score(
             max_original_comments=max_original_comments,
             max_responses=max_responses,
             output=str(output) if output else None,
+            overwrite=overwrite,
             upload=upload,
             dry_run=dry_run,
             sleep_seconds=sleep_seconds,
+            project_root=str(project_root),
             profile=profile,
             api_url=api_url,
             secret_name=secret_name,

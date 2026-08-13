@@ -40,6 +40,8 @@ def feedback_args(roster: Path, feedback_dir: Path, **overrides: Any) -> Any:
         "comment": "Here is your graded feedback.",
         "dry_run": False,
         "sleep_seconds": 0,
+        "output": str(feedback_dir / "feedback-plan.json"),
+        "project_root": None,
     }
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
@@ -88,9 +90,12 @@ def test_submissions_feedback_dry_run_previews_without_canvas(
 
     out = capsys.readouterr().out
     assert "Matched: 1" in out
-    assert "Unmatched files (1):" in out
-    assert "0000001-feedback.pdf" in out
+    assert "Unmatched: 1" in out
+    assert "0000001-feedback.pdf" not in out
     assert "notes.txt" not in out
+    evidence = json.loads((feedback_dir / "feedback-plan.json").read_text(encoding="utf-8"))
+    assert evidence["matched"][0]["canvas_user_id"] == 4024825
+    assert evidence["unmatched_files"] == ["0000001-feedback.pdf"]
 
 
 def test_submissions_feedback_live_run_prints_mutation_banner(
@@ -124,6 +129,8 @@ def test_submissions_feedback_live_run_prints_mutation_banner(
     out = capsys.readouterr().out
     assert "== Canvas write: upload feedback comments ==" in out
     assert "files: 1" in out
+    assert "Lawson" not in out
+    assert "4024825" not in out
 
 
 def test_submissions_feedback_uploads_matched_files(
@@ -191,10 +198,13 @@ def test_submissions_feedback_sanitizes_upload_failure(
         command_submissions_feedback(feedback_args(roster, feedback_dir))
 
     output = capsys.readouterr().out
-    assert "FAILED RuntimeError" in output
+    assert "Failed: 1" in output
     assert "secret" not in output
     assert "abc123" not in output
     assert "https://" not in output
+    evidence = json.loads((feedback_dir / "feedback-plan.json").read_text(encoding="utf-8"))
+    assert evidence["results"][0]["status"] == "failed"
+    assert "abc123" not in evidence["results"][0]["error"]
 
 
 class FakeAttachment:
@@ -302,9 +312,7 @@ def test_submissions_grades_only_graded_flattens_comments(
     monkeypatch.setattr("danvas.submissions.canvas_from_args", lambda args: canvas)
     output = tmp_path / "grades.csv"
 
-    command_submissions_grades(
-        submission_args(tmp_path, output=str(output), only_graded=True)
-    )
+    command_submissions_grades(submission_args(tmp_path, output=str(output), only_graded=True))
 
     text = output.read_text(encoding="utf-8")
     assert "Good work." in text
@@ -347,16 +355,12 @@ def test_submissions_media_flat_writes_hash_integrity_and_safe_manifest(
 
     downloaded = output / "Lawson,_Jack_sub800_workbook.xlsx"
     assert downloaded.is_file()
-    sidecar = json.loads(
-        downloaded.with_suffix(".xlsx.info.json").read_text(encoding="utf-8")
-    )
+    sidecar = json.loads(downloaded.with_suffix(".xlsx.info.json").read_text(encoding="utf-8"))
     assert sidecar["integrity_status"] == "valid"
     assert sidecar["downloaded_at"].endswith("+00:00")
     assert len(sidecar["sha256"]) == 64
     assert "url" not in json.dumps(sidecar).lower()
-    manifest = json.loads(
-        (output / "submissions-manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((output / "artifact-manifest.json").read_text(encoding="utf-8"))
     assert manifest["files"][0]["stable_canvas_id"] == 700
     assert "verifier" not in json.dumps(manifest)
 
@@ -374,9 +378,7 @@ def test_media_http_failure_is_sanitized_in_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def fail(*args: Any, **kwargs: Any) -> None:
-        raise requests.ConnectionError(
-            "failed https://canvas.test/download?verifier=secret-token"
-        )
+        raise requests.ConnectionError("failed https://canvas.test/download?verifier=secret-token")
 
     monkeypatch.setattr("danvas.submissions.requests.get", fail)
     canvas = FakeSubmissionCanvas(FakeSubmissionAssignment([FakeSubmission()]))
@@ -391,9 +393,32 @@ def test_media_http_failure_is_sanitized_in_manifest(
             overwrite=False,
         )
     )
-    manifest = json.loads(
-        (output / "submissions-manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((output / "artifact-manifest.json").read_text(encoding="utf-8"))
     assert manifest["files"][0]["download_status"] == "failed"
     assert "secret-token" not in json.dumps(manifest)
     assert not list(output.glob("*.part"))
+
+
+def test_submissions_media_refuses_preexisting_partial_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    canvas = FakeSubmissionCanvas(FakeSubmissionAssignment([FakeSubmission()]))
+    monkeypatch.setattr("danvas.submissions.canvas_from_args", lambda args: canvas)
+    output = tmp_path / "downloads"
+    output.mkdir(mode=0o700)
+    partial = output / "Lawson,_Jack_sub800_workbook.xlsx.part"
+    partial.write_bytes(b"not owned by danvas")
+
+    with pytest.raises(SystemExit, match="pre-existing private temporary file"):
+        command_submissions_media(
+            SimpleNamespace(
+                course_id=101,
+                assignment_id=5,
+                output_dir=str(output),
+                project_root=None,
+                layout="flat",
+                overwrite=False,
+            )
+        )
+
+    assert partial.read_bytes() == b"not owned by danvas"

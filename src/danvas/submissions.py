@@ -14,16 +14,22 @@ from typing import Any
 
 import requests
 
+from danvas.artifacts import (
+    commit_private_staged_pair,
+    ensure_private_directory,
+    private_staged_file,
+    resolve_private_path,
+    warn_if_external_private_path,
+    write_private_json,
+    write_private_rows,
+)
 from danvas.auth import canvas_from_args
 from danvas.reports import safe_error
 from danvas.utils import (
     canvas_object_to_dict,
     clean_filename,
-    mark_private,
     normalize_json,
     print_mutation_banner,
-    write_json,
-    write_rows,
 )
 
 SUBMISSION_EXPORT_FIELDS = [
@@ -50,6 +56,25 @@ SUBMISSION_EXPORT_FIELDS = [
 
 
 def command_submissions_export(args: Any) -> None:
+    resolved = resolve_private_path(
+        explicit=getattr(args, "output", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative=f"submissions/assignment-{args.assignment_id}/submissions.json",
+        option_name="--output",
+    )
+    warn_if_external_private_path(resolved)
+    raw_resolved = None
+    if getattr(args, "save_raw", None):
+        raw_resolved = resolve_private_path(
+            explicit=args.save_raw,
+            project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+            default_relative=f"submissions/assignment-{args.assignment_id}/raw.json",
+            option_name="--save-raw",
+        )
+        warn_if_external_private_path(raw_resolved)
+    _refuse_private_targets(resolved.path, bool(args.overwrite))
+    if raw_resolved:
+        _refuse_private_targets(raw_resolved.path, bool(args.overwrite))
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
     include = ["user", "submission_comments"]
@@ -64,23 +89,29 @@ def command_submissions_export(args: Any) -> None:
         )
         for submission in submissions
     ]
-    write_submission_export(Path(args.output), rows, overwrite=bool(args.overwrite))
-    raw_output = getattr(args, "save_raw", None)
-    if raw_output:
-        raw_path = Path(raw_output)
-        refuse_overwrite(raw_path, bool(args.overwrite))
-        write_json(
-            raw_path,
+    write_submission_export(resolved.path, rows, overwrite=bool(args.overwrite))
+    if raw_resolved:
+        write_private_json(
+            raw_resolved.path,
             {
                 "private_student_data": True,
                 "raw_canvas_payloads": [canvas_object_to_dict(row) for row in submissions],
             },
+            command="submissions export",
+            overwrite=bool(args.overwrite),
         )
-        mark_private(raw_path)
-        print(f"Wrote private raw submission export: {raw_path}")
+        print(f"Wrote private raw submission export: {raw_resolved.path}")
 
 
 def command_submissions_grades(args: Any) -> None:
+    resolved = resolve_private_path(
+        explicit=getattr(args, "output", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative=f"submissions/assignment-{args.assignment_id}/grades.csv",
+        option_name="--output",
+    )
+    warn_if_external_private_path(resolved)
+    _refuse_private_targets(resolved.path, bool(args.overwrite))
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
     submissions = list(assignment.get_submissions(include=["user", "submission_comments"]))
@@ -104,7 +135,7 @@ def command_submissions_grades(args: Any) -> None:
                         "comment_created_at": comment["created_at"],
                     }
                 )
-    write_submission_export(Path(args.output), rows, overwrite=bool(args.overwrite))
+    write_submission_export(resolved.path, rows, overwrite=bool(args.overwrite))
 
 
 def submission_record(
@@ -158,17 +189,34 @@ def submission_comment_record(comment: Any) -> dict[str, Any]:
 
 
 def write_submission_export(output: Path, rows: list[dict[str, Any]], *, overwrite: bool) -> None:
-    refuse_overwrite(output, overwrite)
     if output.suffix.lower() == ".csv":
         flattened = [flatten_submission_row(row) for row in rows]
         fields = list(dict.fromkeys(key for row in flattened for key in row))
-        write_rows(output, flattened, fields or SUBMISSION_EXPORT_FIELDS)
+        write_private_rows(
+            output,
+            flattened,
+            fields or SUBMISSION_EXPORT_FIELDS,
+            command="submissions export",
+            overwrite=overwrite,
+        )
     elif output.suffix.lower() == ".json":
-        write_json(output, {"private_student_data": True, "submissions": rows})
+        write_private_json(
+            output,
+            {"private_student_data": True, "submissions": rows},
+            command="submissions export",
+            overwrite=overwrite,
+        )
     else:
         raise SystemExit("Submission export output must end in .json or .csv.")
-    mark_private(output)
     print(f"Wrote private submission export: {output}")
+
+
+def _refuse_private_targets(path: Path, overwrite: bool) -> None:
+    if overwrite:
+        return
+    sidecar = path.with_name(f"{path.name}.artifact.json")
+    if path.exists() or (path.suffix.lower() == ".csv" and sidecar.exists()):
+        raise SystemExit(f"Refusing to overwrite existing private output: {path}")
 
 
 def flatten_submission_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -184,6 +232,14 @@ def refuse_overwrite(path: Path, overwrite: bool) -> None:
 
 
 def command_submissions_feedback(args: Any) -> None:
+    resolved = resolve_private_path(
+        explicit=getattr(args, "output", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative=f"submissions/assignment-{args.assignment_id}/feedback-plan.json",
+        option_name="--output",
+    )
+    warn_if_external_private_path(resolved)
+    _refuse_private_targets(resolved.path, False)
     feedback_dir = Path(args.feedback_dir)
     roster_path = Path(args.roster)
     if not feedback_dir.is_dir():
@@ -194,13 +250,26 @@ def command_submissions_feedback(args: Any) -> None:
     files = sorted(feedback_dir.glob(args.pattern))
     matched, unmatched = match_files_to_students(files, canvas_ids)
     print(f"Matched: {len(matched)}")
-    if unmatched:
-        print(f"Unmatched files ({len(unmatched)}):")
-        for path in unmatched:
-            print(f"  - {path.name}")
+    print(f"Unmatched: {len(unmatched)}")
+    evidence: dict[str, Any] = {
+        "private_student_data": True,
+        "course_id": args.course_id,
+        "assignment_id": args.assignment_id,
+        "status": "planned" if args.dry_run else "running",
+        "matched": [
+            {
+                "canvas_user_id": canvas_id,
+                "student": canvas_ids[canvas_id],
+                "feedback_file": path.name,
+            }
+            for canvas_id, path in matched
+        ],
+        "unmatched_files": [path.name for path in unmatched],
+        "results": [],
+    }
     if args.dry_run:
-        for canvas_id, path in matched:
-            print(f"  {canvas_ids[canvas_id]} (CanvasID {canvas_id}) <- {path.name}")
+        write_private_json(resolved.path, evidence, command="submissions feedback")
+        print(f"Private artifact: {resolved.path}")
         return
     print_mutation_banner(
         "upload feedback comments",
@@ -208,25 +277,34 @@ def command_submissions_feedback(args: Any) -> None:
             "course": args.course_id,
             "assignment": args.assignment_id,
             "files": len(matched),
-            "comment": args.comment,
         },
     )
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
     success = failed = 0
     for canvas_id, path in matched:
-        label = f"{canvas_ids[canvas_id]} (CanvasID {canvas_id})"
         try:
             assignment.get_submission(canvas_id).upload_comment(
                 file=str(path), comment=args.comment
             )
             success += 1
-            print(f"  {label}: uploaded {path.name}")
+            evidence["results"].append(
+                {"canvas_user_id": canvas_id, "status": "uploaded", "error": ""}
+            )
             time.sleep(args.sleep_seconds)
         except Exception as exc:  # noqa: BLE001
             failed += 1
-            print(f"  {label}: FAILED {type(exc).__name__}: {safe_error(str(exc))}")
+            evidence["results"].append(
+                {
+                    "canvas_user_id": canvas_id,
+                    "status": "failed",
+                    "error": safe_error(f"{type(exc).__name__}: {exc}"),
+                }
+            )
+    evidence["status"] = "success" if not failed else "partial"
+    write_private_json(resolved.path, evidence, command="submissions feedback")
     print(f"Done. Uploaded: {success}, Failed: {failed}")
+    print(f"Private artifact: {resolved.path}")
     if failed:
         raise SystemExit(1)
 
@@ -259,14 +337,23 @@ def match_files_to_students(
 
 
 def command_submissions_media(args: Any) -> None:
+    resolved = resolve_private_path(
+        explicit=getattr(args, "output_dir", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative=f"submissions/assignment-{args.assignment_id}/media",
+        option_name="--output-dir",
+    )
+    warn_if_external_private_path(resolved)
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
-    output_root = Path(args.output_dir)
+    output_root = resolved.path
     layout = getattr(args, "layout", "assignment-subdir")
     assignment_name = clean_filename(assignment.name)
     if layout not in {"flat", "assignment-subdir"}:
         raise SystemExit("--layout must be flat or assignment-subdir.")
-    if layout == "assignment-subdir" and clean_filename(output_root.name) == assignment_name:
+    if resolved.used_project_default:
+        assignment_dir = output_root
+    elif layout == "assignment-subdir" and clean_filename(output_root.name) == assignment_name:
         print(
             f"WARNING: output already looks like the assignment directory; using {output_root} "
             "without another nested directory."
@@ -274,7 +361,10 @@ def command_submissions_media(args: Any) -> None:
         assignment_dir = output_root
     else:
         assignment_dir = output_root if layout == "flat" else output_root / assignment_name
-    assignment_dir.mkdir(parents=True, exist_ok=True)
+    ensure_private_directory(
+        assignment_dir,
+        tighten_existing=resolved.used_project_default,
+    )
     count = 0
     manifest: list[dict[str, Any]] = []
     for submission in assignment.get_submissions(include=["submission_comments", "user"]):
@@ -323,8 +413,8 @@ def command_submissions_media(args: Any) -> None:
                 )
                 manifest.append({**submission_manifest_fields(submission), **result})
                 count += result["download_status"] == "downloaded"
-    manifest_path = collision_safe_path(assignment_dir / "submissions-manifest.json")
-    write_json(
+    manifest_path = assignment_dir / "artifact-manifest.json"
+    write_private_json(
         manifest_path,
         {
             "private_student_data": True,
@@ -333,10 +423,10 @@ def command_submissions_media(args: Any) -> None:
             "assignment_title": assignment.name,
             "files": manifest,
         },
+        command="submissions media",
     )
-    mark_private(manifest_path)
-    print(f"Downloaded {count} files to {assignment_dir}")
-    print(f"Wrote private submission manifest: {manifest_path}")
+    print(f"Downloaded: {count}; records: {len(manifest)}")
+    print(f"Private artifact bundle: {assignment_dir}")
 
 
 def student_label(submission: Any) -> str:
@@ -375,8 +465,11 @@ def download_file(
     source: str,
     overwrite: bool,
 ) -> dict[str, Any]:
+    sidecar = path.with_suffix(path.suffix + ".info.json")
+    temporary = path.with_name(f"{path.name}.part")
+    if temporary.exists() or temporary.is_symlink():
+        raise SystemExit(f"Refusing pre-existing private temporary file: {temporary}")
     if path.exists() and not overwrite:
-        print(f"Skipped existing: {path}")
         return download_result(
             path,
             "skipped_exists",
@@ -384,18 +477,16 @@ def download_file(
             source=source,
             content_type=content_type,
         )
+    if sidecar.exists() and not overwrite:
+        raise SystemExit(f"Refusing existing private media sidecar: {sidecar}")
     try:
         response = requests.get(url, stream=True, timeout=60)
         response.raise_for_status()
-        temporary = path.with_name(f"{path.name}.part")
-        temporary.unlink(missing_ok=True)
-        with temporary.open("wb") as f:
+        with private_staged_file(temporary) as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
-        temporary.replace(path)
-        mark_private(path)
-        sha256 = file_sha256(path)
-        integrity_status, integrity_error = file_integrity(path)
+        sha256 = file_sha256(temporary)
+        integrity_status, integrity_error = file_integrity(temporary, filename=path.name)
         metadata = {
             "private_student_data": True,
             "stable_canvas_id": stable_id,
@@ -404,17 +495,19 @@ def download_file(
             "content_type_from_canvas": content_type,
             "downloaded_filename": path.name,
             "sha256": sha256,
-            "size": path.stat().st_size,
+            "size": temporary.stat().st_size,
             "downloaded_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "integrity_status": integrity_status,
             "integrity_error": integrity_error,
         }
-        sidecar = path.with_suffix(path.suffix + ".info.json")
-        sidecar.write_text(
-            json.dumps(metadata, indent=2), encoding="utf-8"
+        commit_private_staged_pair(
+            temporary,
+            path,
+            command="submissions media",
+            overwrite=overwrite,
+            sidecar_path=sidecar,
+            sidecar_fields=metadata,
         )
-        mark_private(sidecar)
-        print(f"Downloaded: {path}")
         return {
             **download_result(
                 path,
@@ -426,8 +519,7 @@ def download_file(
             **metadata,
         }
     except requests.RequestException as exc:
-        path.with_name(f"{path.name}.part").unlink(missing_ok=True)
-        print(f"Failed download {path.name}: {safe_error(str(exc))}")
+        print(f"Private download failed: {safe_error(str(exc))}")
         return {
             **download_result(
                 path,
@@ -461,7 +553,7 @@ def download_result(
     result = {
         "stable_canvas_id": stable_id,
         "source": source,
-        "local_path": str(path),
+        "local_path": path.name,
         "download_status": status,
         "content_type_from_canvas": content_type,
     }
@@ -486,23 +578,24 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def file_integrity(path: Path) -> tuple[str, str]:
-    if path.suffix.lower() not in {".zip", ".docx", ".xlsx", ".pptx"}:
+def file_integrity(path: Path, *, filename: str | None = None) -> tuple[str, str]:
+    suffix = Path(filename or path.name).suffix.lower()
+    if suffix not in {".zip", ".docx", ".xlsx", ".pptx"}:
         return "not_checked", ""
     try:
         with zipfile.ZipFile(path) as archive:
             bad = archive.testzip()
             if bad:
                 return "invalid", f"corrupt ZIP member: {bad}"
-            if path.suffix.lower() in {".docx", ".xlsx", ".pptx"}:
+            if suffix in {".docx", ".xlsx", ".pptx"}:
                 names = set(archive.namelist())
                 required_root = {".docx": "word/", ".xlsx": "xl/", ".pptx": "ppt/"}[
-                    path.suffix.lower()
+                    suffix
                 ]
                 if "[Content_Types].xml" not in names or not any(
                     name.startswith(required_root) for name in names
                 ):
-                    return "invalid", f"missing required OOXML package parts for {path.suffix.lower()}"
+                    return "invalid", f"missing required OOXML package parts for {suffix}"
     except (OSError, zipfile.BadZipFile) as exc:
         return "invalid", f"{type(exc).__name__}: {exc}"
     return "valid", ""

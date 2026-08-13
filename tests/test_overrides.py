@@ -102,6 +102,7 @@ def test_command_assignments_overrides_writes_yaml(
     payload = yaml.safe_load(output.read_text(encoding="utf-8"))
     assert payload["assignment_id"] == 123
     assert payload["overrides"][0]["assignees"]["canvas_user_ids"] == [10, 11]
+    assert output.with_name("overrides.yaml.artifact.json").is_file()
 
 
 def test_command_assignments_overrides_refuses_overwrite(

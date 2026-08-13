@@ -10,7 +10,9 @@ import pytest
 from danvas.artifacts import (
     ARTIFACT_POLICIES,
     ArtifactClass,
+    commit_private_staged_pair,
     ensure_private_directory,
+    private_staged_file,
     resolve_private_path,
     verify_private_sidecar,
     write_private_pair,
@@ -96,6 +98,20 @@ def test_private_pair_refuses_preexisting_sidecar_without_writing_data(tmp_path:
 
     assert not path.exists()
     assert sidecar.read_text(encoding="utf-8") == "prior"
+
+
+def test_staged_pair_collision_removes_only_owned_temporary_file(tmp_path: Path) -> None:
+    path = tmp_path / "roster.csv"
+    write_private_text(path, "prior")
+    staged = tmp_path / "roster.csv.part"
+    with private_staged_file(staged) as handle:
+        handle.write(b"new")
+
+    with pytest.raises(FileExistsError):
+        commit_private_staged_pair(staged, path, command="roster")
+
+    assert path.read_text(encoding="utf-8") == "prior"
+    assert not staged.exists()
 
 
 def test_private_writer_rejects_symlink_target(tmp_path: Path) -> None:

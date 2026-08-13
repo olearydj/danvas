@@ -17,6 +17,7 @@ from danvas.announcements import (
     announcement_verify_checks,
     announcement_verify_local_source,
     command_announcements_create,
+    command_announcements_export,
     command_announcements_latest,
     command_announcements_sync,
     command_announcements_update,
@@ -235,6 +236,33 @@ def test_write_announcements_csv_flattens_without_student_replies(tmp_path: Path
         "announcement",
     ]
     assert "Student response" not in path.read_text(encoding="utf-8")
+
+
+def test_announcements_export_writes_private_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_config(tmp_path)
+    monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
+
+    command_announcements_export(
+        SimpleNamespace(
+            course_id=101,
+            output=None,
+            format="json",
+            reply_user_id=42,
+            overwrite=False,
+            project_root=str(tmp_path),
+        )
+    )
+
+    output = tmp_path / ".danvas/private/announcements/announcements.json"
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["artifact_class"] == "private"
+    assert payload["reply_user"]["id"] == 42
+    assert payload["announcements"][0]["instructor_replies"][0]["author"] == "Instructor"
+    terminal = capsys.readouterr().out
+    assert "Instructor" not in terminal
+    assert "Instructor reply" not in terminal
 
 
 def test_load_announcement_markdown_accepts_yaml_frontmatter(tmp_path: Path) -> None:
@@ -539,8 +567,8 @@ Different content.
         "skipped_known_local",
         "conflict",
     ]
-    assert (output_dir / "existing-first.md").read_text(encoding="utf-8").endswith(
-        "Edited locally.\n"
+    assert (
+        (output_dir / "existing-first.md").read_text(encoding="utf-8").endswith("Edited locally.\n")
     )
     assert "different canvas_id 999" in report["actions"][1]["reason"]
 
@@ -681,9 +709,7 @@ def test_command_announcements_verify_allows_source_without_title(
 
     assert exc.value.code == 1
     report = json.loads((report_dir / "announcements-verify.json").read_text("utf-8"))
-    assert "title" in {
-        check["field"] for check in report["checks"] if not check["matches"]
-    }
+    assert "title" in {check["field"] for check in report["checks"] if not check["matches"]}
 
 
 def test_announcement_verify_ignores_unknown_metadata_but_validates_datetimes(
@@ -782,7 +808,9 @@ First body
 def update_args(source: Path, report_dir: Path, **overrides: object) -> SimpleNamespace:
     defaults: dict[str, object] = {
         "course_id": 101,
-        "project_root": str(source.parent.parent if source.parent.name == "content" else source.parent),
+        "project_root": str(
+            source.parent.parent if source.parent.name == "content" else source.parent
+        ),
         "source": str(source),
         "announcement_id": None,
         "dry_run": True,
@@ -893,7 +921,9 @@ def test_command_announcements_update_uses_source_map_id(
     )
     monkeypatch.setattr("danvas.announcements.canvas_from_args", lambda args: FakeCanvas())
 
-    command_announcements_update(update_args(source, tmp_path / "report", project_root=str(tmp_path)))
+    command_announcements_update(
+        update_args(source, tmp_path / "report", project_root=str(tmp_path))
+    )
 
     report = json.loads((tmp_path / "report" / "announcements-update.json").read_text("utf-8"))
     assert report["status"] == "no_change"
@@ -908,8 +938,7 @@ def test_command_announcements_update_reads_back_specific_sections(
     source = tmp_path / "content" / "announcements" / "first.md"
     source.parent.mkdir(parents=True)
     source.write_text(
-        "---\ncanvas_id: 1\ntitle: First Update\nspecific_sections: [11, 12]\n"
-        "---\n\nFirst body\n",
+        "---\ncanvas_id: 1\ntitle: First Update\nspecific_sections: [11, 12]\n---\n\nFirst body\n",
         encoding="utf-8",
     )
     fake_canvas = FakeCanvas()

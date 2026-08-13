@@ -12,6 +12,12 @@ from typing import Any, cast
 import yaml
 from canvasapi.exceptions import ResourceDoesNotExist
 
+from danvas.artifacts import (
+    resolve_private_path,
+    warn_if_external_private_path,
+    write_private_json,
+    write_private_pair,
+)
 from danvas.asset_state import AssetPlan, AssetVerification
 from danvas.assignment_sources import expand_date_only_metadata
 from danvas.auth import canvas_from_args
@@ -51,10 +57,8 @@ from danvas.source_map import resolve_source_canvas_id, source_path_key, write_s
 from danvas.utils import (
     canvas_object_to_dict,
     html_to_text,
-    mark_private,
     print_mutation_banner,
     slugify,
-    write_json,
     write_rows,
 )
 
@@ -279,9 +283,19 @@ def command_assignments_export(args: Any) -> None:
 
 
 def command_assignments_overrides(args: Any) -> None:
-    output = Path(args.output)
-    if output.exists() and not getattr(args, "overwrite", False):
-        raise SystemExit(f"Refusing to overwrite existing private output: {output}")
+    resolved = resolve_private_path(
+        explicit=getattr(args, "output", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative=f"overrides/assignment-{args.assignment_id}.yaml",
+        option_name="--output",
+    )
+    warn_if_external_private_path(resolved)
+    if not bool(getattr(args, "overwrite", False)):
+        sidecar = resolved.path.with_name(f"{resolved.path.name}.artifact.json")
+        if resolved.path.exists() or (
+            resolved.path.suffix.lower() in {".yaml", ".yml"} and sidecar.exists()
+        ):
+            raise SystemExit(f"Refusing to overwrite existing private output: {resolved.path}")
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(
         args.assignment_id, include=["all_dates", "overrides"]
@@ -289,13 +303,26 @@ def command_assignments_overrides(args: Any) -> None:
     payload = private_assignment_overrides(
         assignment, source=str(getattr(args, "source", "") or "")
     )
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if output.suffix.lower() in {".yaml", ".yml"}:
-        output.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
-    else:
-        write_json(output, payload)
-    mark_private(output)
-    print(f"Wrote private assignment override export: {output}")
+    try:
+        if resolved.path.suffix.lower() in {".yaml", ".yml"}:
+            write_private_pair(
+                resolved.path,
+                yaml.safe_dump(payload, sort_keys=False).encode("utf-8"),
+                command="assignments overrides",
+                overwrite=bool(getattr(args, "overwrite", False)),
+            )
+        else:
+            write_private_json(
+                resolved.path,
+                payload,
+                command="assignments overrides",
+                overwrite=bool(getattr(args, "overwrite", False)),
+            )
+    except FileExistsError as exc:
+        raise SystemExit(
+            f"Refusing to overwrite existing private output: {resolved.path}"
+        ) from exc
+    print(f"Wrote private assignment override export: {resolved.path}")
 
 
 def resolve_format(output: Path, requested: str) -> str:

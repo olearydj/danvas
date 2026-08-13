@@ -8,9 +8,10 @@ import io
 import json
 import os
 import stat
+import sys
 import tempfile
 from collections.abc import Callable, Mapping
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -111,9 +112,7 @@ def _policies() -> tuple[ArtifactPolicy, ...]:
     )
 
 
-ARTIFACT_POLICIES: Mapping[str, ArtifactPolicy] = {
-    policy.command: policy for policy in _policies()
-}
+ARTIFACT_POLICIES: Mapping[str, ArtifactPolicy] = {policy.command: policy for policy in _policies()}
 
 
 def artifact_policy(command: str) -> ArtifactPolicy:
@@ -174,6 +173,16 @@ def resolve_private_path(
         used_project_default=True,
         outside_project_private_root=False,
     )
+
+
+def warn_if_external_private_path(resolved: ResolvedPrivatePath) -> None:
+    if resolved.outside_project_private_root:
+        print(
+            "WARNING: private artifact destination is outside this project's "
+            ".danvas/private directory; danvas will protect the artifact itself but will not "
+            "change unrelated ancestor permissions.",
+            file=sys.stderr,
+        )
 
 
 def ensure_private_directory(
@@ -300,27 +309,90 @@ def write_private_pair(
     _preflight_target(sidecar, overwrite=overwrite)
 
     data_temp = _stage_bytes(path, data)
-    metadata = {
-        "artifact_schema_version": ARTIFACT_SCHEMA_VERSION,
-        "artifact_class": ArtifactClass.PRIVATE.value,
-        "command": command,
-        "sha256": hashlib.sha256(data).hexdigest(),
-    }
-    metadata.update(dict(sidecar_fields or {}))
-    sidecar_data = (json.dumps(metadata, indent=2, ensure_ascii=False) + "\n").encode()
-    sidecar_temp = _stage_bytes(sidecar, sidecar_data)
+    return commit_private_staged_pair(
+        data_temp,
+        path,
+        command=command,
+        overwrite=overwrite,
+        sidecar_path=sidecar,
+        sidecar_fields=sidecar_fields,
+    )
+
+
+def commit_private_staged_pair(
+    staged: Path,
+    path: Path,
+    *,
+    command: str,
+    overwrite: bool = False,
+    sidecar_path: Path | None = None,
+    sidecar_fields: Mapping[str, Any] | None = None,
+) -> tuple[Path, Path]:
+    """Commit an owned 0600 staged file followed by its integrity sidecar."""
+    sidecar = sidecar_path or path.with_name(f"{path.name}.artifact.json")
+    if staged.absolute() in {path.absolute(), sidecar.absolute()}:
+        raise ValueError("Private staging path must differ from final targets.")
+    sidecar_temp: Path | None = None
     data_committed = False
     try:
-        _commit_staged(data_temp, path, overwrite=overwrite)
+        ensure_private_parent(path)
+        ensure_private_parent(sidecar)
+        if path.absolute().parent != sidecar.absolute().parent:
+            raise ValueError("Private data and sidecar must share a directory.")
+        _preflight_target(path, overwrite=overwrite)
+        _preflight_target(sidecar, overwrite=overwrite)
+        if staged.is_symlink() or not staged.is_file():
+            raise SystemExit(f"Private staged artifact is not a regular file: {staged}")
+        if stat.S_IMODE(staged.stat().st_mode) & 0o077:
+            raise SystemExit(f"Private staged artifact has unsafe permissions: {staged}")
+
+        metadata = {
+            "artifact_schema_version": ARTIFACT_SCHEMA_VERSION,
+            "artifact_class": ArtifactClass.PRIVATE.value,
+            "command": command,
+        }
+        metadata.update(dict(sidecar_fields or {}))
+        metadata["sha256"] = private_file_sha256(staged)
+        sidecar_data = (json.dumps(metadata, indent=2, ensure_ascii=False) + "\n").encode()
+        sidecar_temp = _stage_bytes(sidecar, sidecar_data)
+        _commit_staged(staged, path, overwrite=overwrite)
         data_committed = True
         _commit_staged(sidecar_temp, sidecar, overwrite=overwrite)
     except BaseException:
-        _unlink_owned(data_temp)
-        _unlink_owned(sidecar_temp)
+        _unlink_owned(staged)
+        if sidecar_temp is not None:
+            _unlink_owned(sidecar_temp)
         if data_committed and not overwrite:
             _unlink_owned(path)
         raise
     return path, sidecar
+
+
+@contextmanager
+def private_staged_file(path: Path):
+    """Open an exact private staging path exclusively and remove it on handled failure."""
+    require_private_platform()
+    ensure_private_parent(path)
+    if path.is_symlink():
+        raise SystemExit(f"Refusing private artifact symlink: {path}")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags, PRIVATE_FILE_MODE)
+    except FileExistsError:
+        raise FileExistsError(path) from None
+    completed = False
+    try:
+        os.fchmod(descriptor, PRIVATE_FILE_MODE)
+        with os.fdopen(descriptor, "wb") as handle:
+            yield handle
+            handle.flush()
+            os.fsync(handle.fileno())
+        completed = True
+    finally:
+        if not completed:
+            _unlink_owned(path)
 
 
 def private_file_sha256(path: Path) -> str:
@@ -337,11 +409,14 @@ def verify_private_sidecar(path: Path, sidecar: Path | None = None) -> bool:
         payload = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    return (
-        isinstance(payload, dict)
-        and payload.get("artifact_class") == ArtifactClass.PRIVATE.value
-        and payload.get("sha256") == private_file_sha256(path)
-    )
+    try:
+        return (
+            isinstance(payload, dict)
+            and payload.get("artifact_class") == ArtifactClass.PRIVATE.value
+            and payload.get("sha256") == private_file_sha256(path)
+        )
+    except OSError:
+        return False
 
 
 def _write_private(

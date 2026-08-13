@@ -11,6 +11,13 @@ from typing import Any
 import yaml
 from canvasapi.exceptions import ResourceDoesNotExist
 
+from danvas.artifacts import (
+    resolve_private_path,
+    warn_if_external_private_path,
+    write_private_json,
+    write_private_pair,
+    write_private_rows,
+)
 from danvas.auth import canvas_from_args
 from danvas.authored_content import (
     DATETIME,
@@ -82,6 +89,16 @@ ANNOUNCEMENT_FIELD_POLICIES.update(
 
 
 def command_announcements_export(args: Any) -> None:
+    requested = getattr(args, "format", "auto")
+    suffix = {"csv": "csv", "markdown": "md"}.get(requested, "json")
+    resolved = resolve_private_path(
+        explicit=getattr(args, "output", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative=f"announcements/announcements.{suffix}",
+        option_name="--output",
+    )
+    warn_if_external_private_path(resolved)
+    _refuse_announcement_export_target(resolved.path, bool(getattr(args, "overwrite", False)))
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     reply_user_id = args.reply_user_id
@@ -100,17 +117,41 @@ def command_announcements_export(args: Any) -> None:
         "reply_user": {"id": int(reply_user_id), "name": reply_user_name},
         "announcements": records,
     }
-    output = Path(args.output)
+    output = resolved.path
     fmt = resolve_format(output, args.format)
     if fmt == "csv":
-        write_announcements_csv(output, records)
+        write_private_rows(
+            output,
+            announcement_csv_rows(records),
+            ANNOUNCEMENT_EXPORT_FIELDS,
+            command="announcements export",
+            overwrite=bool(getattr(args, "overwrite", False)),
+        )
     elif fmt == "markdown":
-        write_announcements_markdown(output, payload)
+        write_private_pair(
+            output,
+            render_announcements_markdown(payload).encode("utf-8"),
+            command="announcements export",
+            overwrite=bool(getattr(args, "overwrite", False)),
+        )
     else:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        write_private_json(
+            output,
+            payload,
+            command="announcements export",
+            overwrite=bool(getattr(args, "overwrite", False)),
+        )
     reply_count = sum(len(record["instructor_replies"]) for record in records)
-    print(f"Wrote {len(records)} announcements and {reply_count} filtered replies to {output}")
+    print(f"Exported announcements: {len(records)}; filtered replies: {reply_count}")
+    print(f"Private artifact: {output}")
+
+
+def _refuse_announcement_export_target(path: Path, overwrite: bool) -> None:
+    if overwrite:
+        return
+    sidecar = path.with_name(f"{path.name}.artifact.json")
+    if path.exists() or (path.suffix.lower() in {".csv", ".md"} and sidecar.exists()):
+        raise SystemExit(f"Refusing to overwrite existing private output: {path}")
 
 
 def command_announcements_latest(args: Any) -> None:
@@ -236,15 +277,21 @@ def command_announcements_update(args: Any) -> None:
         readback_status="skipped",
     )
     if topic is None:
-        write_announcement_update_report_run(make_announcement_update_report_run(args, report), report)
+        write_announcement_update_report_run(
+            make_announcement_update_report_run(args, report), report
+        )
         print_announcement_update_summary(report)
         raise SystemExit(1)
     if args.dry_run:
-        write_announcement_update_report_run(make_announcement_update_report_run(args, report), report)
+        write_announcement_update_report_run(
+            make_announcement_update_report_run(args, report), report
+        )
         print_announcement_update_summary(report)
         return
     if report["status"] == "no_change":
-        write_announcement_update_report_run(make_announcement_update_report_run(args, report), report)
+        write_announcement_update_report_run(
+            make_announcement_update_report_run(args, report), report
+        )
         print_announcement_update_summary(report)
         return
 
@@ -254,12 +301,16 @@ def command_announcements_update(args: Any) -> None:
         {
             "course": args.course_id,
             "announcement_id": report["canvas_id"],
-            "title": update_payload.get("title", canvas_before.get("title") if canvas_before else ""),
+            "title": update_payload.get(
+                "title", canvas_before.get("title") if canvas_before else ""
+            ),
             "source": source,
         },
     )
     updated = topic.update(**update_payload)
-    updated_id = int(first_value(updated, canvas_object_to_dict(updated), "id") or report["canvas_id"])
+    updated_id = int(
+        first_value(updated, canvas_object_to_dict(updated), "id") or report["canvas_id"]
+    )
     readback = course.get_discussion_topic(updated_id, include=["sections"])
     canvas_after = announcement_update_canvas_record(course, readback)
     final_report = build_announcement_update_report(
@@ -507,7 +558,22 @@ def participants_by_id(full_topic: dict[str, Any]) -> dict[int, str]:
     return participants
 
 
-def write_announcements_csv(output: Path, records: list[dict[str, Any]]) -> None:
+ANNOUNCEMENT_EXPORT_FIELDS = [
+    "announcement_id",
+    "announcement_title",
+    "announcement_posted_at",
+    "announcement_url",
+    "record_type",
+    "reply_id",
+    "parent_id",
+    "created_at",
+    "author",
+    "author_id",
+    "message",
+]
+
+
+def announcement_csv_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = []
     for record in records:
         rows.append(
@@ -541,27 +607,19 @@ def write_announcements_csv(output: Path, records: list[dict[str, Any]]) -> None
                     "message": reply["message"],
                 }
             )
-    write_rows(
-        output,
-        rows,
-        [
-            "announcement_id",
-            "announcement_title",
-            "announcement_posted_at",
-            "announcement_url",
-            "record_type",
-            "reply_id",
-            "parent_id",
-            "created_at",
-            "author",
-            "author_id",
-            "message",
-        ],
-    )
+    return rows
+
+
+def write_announcements_csv(output: Path, records: list[dict[str, Any]]) -> None:
+    write_rows(output, announcement_csv_rows(records), ANNOUNCEMENT_EXPORT_FIELDS)
 
 
 def write_announcements_markdown(output: Path, payload: dict[str, Any]) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(render_announcements_markdown(payload), encoding="utf-8")
+
+
+def render_announcements_markdown(payload: dict[str, Any]) -> str:
     course = payload["course"]
     reply_user = payload["reply_user"]
     lines = [
@@ -597,7 +655,7 @@ def write_announcements_markdown(output: Path, payload: dict[str, Any]) -> None:
                 )
         else:
             lines.extend(["### Filtered Replies", "", "None.", ""])
-    output.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def render_latest_announcement_markdown(payload: dict[str, Any]) -> str:
@@ -745,7 +803,9 @@ def announcement_verify_local_source(
     }
     canvas_id = announcement_id if announcement_id is not None else metadata.get("canvas_id")
     if canvas_id is None or str(canvas_id).strip() == "":
-        raise SystemExit("Announcement verification requires --announcement-id or canvas_id front matter.")
+        raise SystemExit(
+            "Announcement verification requires --announcement-id or canvas_id front matter."
+        )
     return {
         **{field: announcement.get(field) for field in ANNOUNCEMENT_METADATA_FIELDS},
         "canvas_id": int(canvas_id),
@@ -798,16 +858,22 @@ def build_announcement_update_report(
 ) -> dict[str, Any]:
     local_record = announcement_update_local_compare_record(local)
     before_checks = (
-        announcement_update_checks(local_record, canvas_before, update_payload) if canvas_before else []
+        announcement_update_checks(local_record, canvas_before, update_payload)
+        if canvas_before
+        else []
     )
     after_checks = (
-        announcement_update_checks(local_record, canvas_after, update_payload) if canvas_after else []
+        announcement_update_checks(local_record, canvas_after, update_payload)
+        if canvas_after
+        else []
     )
     mismatches = [check for check in before_checks if not check["matches"]]
     if lookup["status"] != "matched":
         status = "lookup_failed"
     elif canvas_after is not None:
-        readback_status = "matches" if all(check["matches"] for check in after_checks) else "mismatch"
+        readback_status = (
+            "matches" if all(check["matches"] for check in after_checks) else "mismatch"
+        )
         status = "updated" if readback_status == "matches" else "readback_mismatch"
     elif dry_run:
         status = "would_update" if mismatches else "no_change"
@@ -929,8 +995,7 @@ def announcement_verify_checks(
     )
     canvas_compare = announcement_canvas_compare_record(canvas_record)
     checks = [
-        verify_check(field, local.get(field), canvas_compare.get(field))
-        for field in sorted(fields)
+        verify_check(field, local.get(field), canvas_compare.get(field)) for field in sorted(fields)
     ]
     return [check for check in checks if check["local"] != "" or check["canvas"] != ""]
 
@@ -954,8 +1019,7 @@ def canonical_specific_sections(value: Any) -> list[Any]:
     if not isinstance(values, (list, tuple, set)):
         values = [values]
     return [
-        item.get("id") if isinstance(item, dict) else getattr(item, "id", item)
-        for item in values
+        item.get("id") if isinstance(item, dict) else getattr(item, "id", item) for item in values
     ]
 
 
@@ -1183,9 +1247,7 @@ def make_announcements_sync_report_run(args: Any, plan: dict[str, Any]) -> Repor
     )
 
 
-def write_announcements_sync_report_run(
-    report_run: ReportRun | None, plan: dict[str, Any]
-) -> None:
+def write_announcements_sync_report_run(report_run: ReportRun | None, plan: dict[str, Any]) -> None:
     if report_run is None:
         return
     try:
