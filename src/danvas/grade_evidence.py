@@ -168,8 +168,7 @@ def write_grade_report(
     json_path = report_run.write_json(f"{artifact}.json", report)
     md_path = report_run.write_text(f"{artifact}.md", render_grade_markdown(report))
     manifest_path = report_run.finish("success" if success else "failed")
-    for path in (json_path, md_path, manifest_path):
-        print(f"Wrote {path}")
+    print("Private report artifacts: 3")
     print(f"Report directory: {report_run.path}")
     return [json_path, md_path, manifest_path]
 

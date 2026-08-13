@@ -1,10 +1,10 @@
 # Private Artifact Boundary
 
-Status: accepted implementation specification for Sprint 19 / `0.16.0` after
-independent design review on 2026-08-13. The same review retrospectively
-accepted the Sprint 18 implementation and `v0.15.1` correction as released,
-subject to the durable-context correction landed with this acceptance. This
-document authorizes implementation but no live Canvas mutation.
+Status: accepted specification with the Sprint 19 / `0.16.0` implementation
+candidate complete locally on 2026-08-13. Independent implementation review,
+CI, and release tagging remain pending. The design review also retrospectively
+accepted the Sprint 18 implementation and `v0.15.1` correction as released.
+No live Canvas mutation was used for Sprint 19 acceptance.
 
 ## Outcome
 
@@ -20,7 +20,7 @@ This is the bounded second release in the accepted public-readiness program:
 | Sprint | Release | Outcome | Public status |
 | --- | --- | --- | --- |
 | 18 | 0.15.x | Instance profiles | Alpha, released |
-| 19 | 0.16.0 | Private artifacts | Alpha, this specification |
+| 19 | 0.16.0 | Private artifacts | Alpha, implementation candidate |
 | 20 | 0.17.0 | Mutation and evidence | Alpha, design-only |
 | 21 | 0.18.0 | Generalization and packaging | Beta candidate |
 

@@ -87,6 +87,10 @@ checks, tests, lint, typecheck, dependency audit, and install smoke. The
 user-level CLI is installed from the verified `v0.15.1` tag and reports
 `danvas 0.15.1`.
 
+The Sprint 19 private-artifact implementation candidate uses package version
+0.16.0 and is complete locally. It is not yet tagged or installed globally;
+independent implementation review and release CI remain required.
+
 Recommended local checks:
 
 ```bash

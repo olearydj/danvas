@@ -96,6 +96,7 @@ def command_init(args: Any) -> None:
     write_course_snapshot(snapshot, payload)
     maybe_ignore_course_snapshot(root)
     maybe_ignore_reports(root)
+    maybe_ignore_private_artifacts(root)
     print(f"Wrote {config}")
     print(f"Wrote {snapshot}")
 
@@ -549,6 +550,10 @@ def maybe_ignore_course_snapshot(root: Path) -> None:
 
 def maybe_ignore_reports(root: Path) -> None:
     maybe_append_gitignore(root, f"{CONFIG_DIR_NAME}/reports/")
+
+
+def maybe_ignore_private_artifacts(root: Path) -> None:
+    maybe_append_gitignore(root, f"{CONFIG_DIR_NAME}/private/")
 
 
 def maybe_append_gitignore(root: Path, ignore_line: str) -> None:

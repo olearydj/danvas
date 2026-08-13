@@ -55,6 +55,17 @@ def test_load_roster_ids_requires_canvas_id_column(tmp_path: Path) -> None:
         load_roster_ids(path)
 
 
+def test_load_roster_ids_rejects_conflicting_login_id_and_email(tmp_path: Path) -> None:
+    path = tmp_path / "roster.csv"
+    path.write_text(
+        "CanvasID,Name,LoginID,Email\n1,Example,login@example.edu,other@example.edu\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="both LoginID and Email with different values"):
+        load_roster_ids(path)
+
+
 def test_match_files_to_students_matches_unique_embedded_ids(tmp_path: Path) -> None:
     canvas_ids = {4024825: "Lawson, Jack", 5113936: "Reyes, Ana"}
     matched_file = tmp_path / "4024825-feedback.pdf"

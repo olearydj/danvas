@@ -312,11 +312,24 @@ def command_submissions_feedback(args: Any) -> None:
 def load_roster_ids(path: Path) -> dict[int, str]:
     with path.open("r", newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
-        if "CanvasID" not in (reader.fieldnames or []):
+        fieldnames = reader.fieldnames or []
+        if "CanvasID" not in fieldnames:
             raise SystemExit(f"Roster CSV must include CanvasID: {path}")
+        rows = list(reader)
+        if {"LoginID", "Email"} <= set(fieldnames):
+            conflicting = [
+                row
+                for row in rows
+                if str(row.get("LoginID") or "").strip().casefold()
+                != str(row.get("Email") or "").strip().casefold()
+            ]
+            if conflicting:
+                raise SystemExit(
+                    "Roster CSV contains both LoginID and Email with different values."
+                )
         return {
             int(row["CanvasID"]): row.get("Name", row["CanvasID"])
-            for row in reader
+            for row in rows
             if row.get("CanvasID")
         }
 

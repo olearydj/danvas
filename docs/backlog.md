@@ -1603,9 +1603,8 @@ Sprint 16 shipped in 0.13.0, dependency maintenance shipped in 0.13.1, Sprint 17
 shipped in 0.14.0, and Sprint 18 shipped in 0.15.0. The accepted public-readiness
 program temporarily supersedes the prior feature order:
 
-1. Implement the independently reviewed and accepted Sprint 19 private-artifact
-   boundary for 0.16.0, then obtain a separate implementation review before the
-   release tag.
+1. Review the completed Sprint 19 private-artifact implementation candidate,
+   then run release CI and tag 0.16.0 only after acceptance.
 2. Complete Sprint 20 mutation/evidence reconciliation for 0.17.0.
 3. Complete Sprint 21 generalization and packaging before considering the
    public-beta label for 0.18.0.

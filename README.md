@@ -19,7 +19,8 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 - discover courses and rosters
   - list active Canvas courses visible to the authenticated user
   - export course rosters by course
-  - roster format includes `CanvasID`, name, Canvas login ID in the `Email` column, and SIS ID
+  - roster format includes `CanvasID`, name, Canvas login ID in the `LoginID` column, and SIS ID
+  - private roster output defaults beneath `.danvas/private/`; `--schema legacy-v1` temporarily retains the old `Email` label
 
 - export assignments from Canvas by course
   - JSON, CSV, Markdown directory formats
@@ -90,7 +91,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - sync missing Canvas discussion prompts into local Markdown sources without overwriting
   - score discussions by original post count and response count
   - configurable points and caps
-  - optional CSV output of scored rows
+  - private CSV grade plan with aggregate-only terminal output
   - optional upload to graded discussion assignment
 
 - export announcements
@@ -117,8 +118,8 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 
 - download Panopto captions
   - launches Panopto through the Canvas course navigation LTI tool
-  - lists visible recording sessions and writes JSON/CSV manifests
-  - downloads caption text exports when captions are available
+  - lists visible recording sessions and writes sanitized private JSON/CSV manifests
+  - downloads caption text exports into a protected bundle when captions are available
 
 - upload grades
   - assignment grades from CSV
@@ -231,7 +232,7 @@ temporary uv tool directories:
 
 ```bash
 scripts/release-smoke.sh
-scripts/release-smoke.sh --expected-version 0.15.1
+scripts/release-smoke.sh --expected-version X.Y.Z
 ```
 
 The smoke script honors normal uv configuration and freshness rules, never
@@ -378,7 +379,31 @@ decorators that Canvas injects around API readback while continuing to reject
 those elements in authored Page sources. Absolute links become Canvas-relative
 only when their origin matches the configured Canvas origin. Status requests a
 refresh instead of comparing Page hashes produced by an older normalizer. If the
-project is a git repo, `danvas init` adds `.danvas/course.json` to `.gitignore`.
+project is a git repo, `danvas init` adds `.danvas/course.json`,
+`.danvas/reports/`, and `.danvas/private/` to `.gitignore`.
+
+`.danvas/config.toml` and `.danvas/source-map.json` contain stable, non-secret
+course configuration and deployment provenance. They are suitable for tracking
+in a private course repository, but may expose course names, Canvas object IDs,
+schedules, and deployment history. Review them before publishing. Tokens never
+belong in either file.
+
+## Private Artifacts
+
+Student-identifying exports, grades, comments, discussion responses, feedback
+plans, and protected recording captions are private artifacts. In an
+initialized project, their omitted output paths resolve beneath
+`.danvas/private/`. Outside a project, the relevant `--output`, `--output-dir`,
+or `--rollback-dir` is required before Canvas authentication begins.
+
+On supported POSIX platforms, danvas creates its private directories as `0700`
+and files as `0600`, including temporary files. It does not overwrite private
+artifacts by default. Standalone CSV, text, and binary artifacts receive an
+integrity sidecar; standalone JSON embeds classification metadata. Routine
+terminal output is count-first and does not repeat student rows.
+
+See [the 0.16.0 migration guide](docs/migrations/0.16.0.md) for the complete
+command inventory and compatibility changes.
 
 Refresh the generated snapshot without changing Canvas; `--diff` summarizes what
 changed since the previous snapshot:
@@ -534,24 +559,31 @@ reorders, edits, or reposts instructor or student entries.
 
 Report-first commands such as assignment audits, file inventories, file
 comparisons, gradebook checks/audits, grade post/clear/verify, quiz analyses,
-source sync, verification, and update dry-run/readback workflows write dated run directories under
-`.danvas/reports/` by default when a course project is available:
+source sync, verification, and update dry-run/readback workflows write dated
+run directories when a course project is available. Non-private reports use
+`.danvas/reports/`; private reports use `.danvas/private/reports/`:
 
 ```text
 .danvas/reports/YYYY-MM-DD-NNN-command-slug/
   manifest.json
   command-output.json
   command-output.md
+
+.danvas/private/reports/YYYY-MM-DD-NNN-command-slug/
+  manifest.json
+  command-output.json
+  command-output.md
 ```
 
 The date prefix uses the course timezone from `.danvas/config.toml` when present,
-then falls back to the system local date. `danvas init` adds `.danvas/reports/` to
-`.gitignore` in git repositories.
+then falls back to the system local date. `danvas init` ignores both report
+roots in Git repositories.
 
-Report runs classified with `may_contain_private_student_data: true`, including
-grade post/clear/verify, gradebook checks/audits, and quiz analyses, create their
-run directory and every artifact without group or other permissions. This
-protection applies to default and explicitly selected report directories.
+Report manifest schema version 2 records bounded relative provenance and omits
+full argument vectors and absolute project/run paths. Report discovery reads
+both roots, including legacy v1 runs, and identifies equal directory names by
+storage scope. Private report runs create their directory and every artifact
+without group or other permissions.
 
 Use `--output`, `--report-md`, or `--output-dir` when you need a specific legacy
 path. Use `--report-root` to choose a different root while keeping the dated run
@@ -583,7 +615,7 @@ danvas status --output status.json --report-md status.md
 
 # Courses and rosters
 danvas courses --output courses.csv
-danvas roster --course-id 101 --output roster.csv
+danvas roster --course-id 101
 
 # Assignments
 danvas assignments export --course-id 101 --output assignments.json
@@ -600,18 +632,15 @@ danvas assignments update --course-id 101 content/assignments/case.md \
 danvas assignments update --course-id 101 content/assignments/case.md \
   --project-root . --asset-folder "course files/case-resources"
 danvas assignments audit assignments-full.json --course-yaml course.yaml
-danvas assignments overrides --course-id 101 --assignment-id 202 \
-  --output .danvas/private/assignment-overrides.yaml
+danvas assignments overrides --course-id 101 --assignment-id 202
 danvas assignments overrides-sync --course-id 101 assignments/hw1.md
 danvas assignments overrides-sync --course-id 101 assignments/hw1.md \
   --live --confirm apply
 
 # Submissions and feedback
-danvas submissions export --course-id 101 --assignment-id 202 \
-  --output .danvas/private/submissions.json
-danvas submissions grades --course-id 101 --assignment-id 202 \
-  --output .danvas/private/grades.csv
-danvas submissions media --course-id 101 --assignment-id 202 --output-dir downloads
+danvas submissions export --course-id 101 --assignment-id 202
+danvas submissions grades --course-id 101 --assignment-id 202
+danvas submissions media --course-id 101 --assignment-id 202
 danvas submissions feedback --course-id 101 --assignment-id 202 \
   --roster roster.csv --feedback-dir feedback --pattern "*-feedback.pdf" --dry-run
 
@@ -773,9 +802,10 @@ patch without writing. Use `--offline-preview` only when authentication is
 intentionally unavailable. Post, clear, and verify write private report runs by
 default when a course project is discoverable; use `--project-root` for explicit
 project discovery and `--no-report`, `--report-root`, `--report-dir`, or
-`--report-slug` to control the report. Live post/clear writes private
-rollback JSON/CSV before the first mutation, reads every attempted row back, and
-stops new writes after a partial, unverified, or indeterminate result. When the
+`--report-slug` to control the report. Live post/clear writes private rollback
+JSON/CSV beneath `.danvas/private/grades/assignment-<id>/rollback/` before the
+first mutation, reads every attempted row back, and stops new writes after a
+partial, unverified, or indeterminate result. When the
 observed state supports safe preconditions, danvas also writes a guarded forward
 recovery CSV; otherwise it leaves private JSON/Markdown guidance and requires a
 fresh readback. Grade release conclusions are `verified_visible`,
@@ -797,11 +827,15 @@ source-map provenance; it does not mutate Canvas and has no overwrite mode.
 
 `files download` treats Canvas folder and file names as untrusted input and
 confines every broad-download target to `--output-dir`; `--overwrite` never
-weakens that boundary.
+weakens that boundary. Canvas cannot prove that arbitrary course files lack
+student data or restricted material, so choose a private destination when the
+downloaded content is sensitive.
 
 `recordings panopto-captions --dry-run` previews a local caption-download
-workflow and writes manifests without caption files. Live mode downloads
-captions locally; neither mode mutates Canvas.
+workflow and writes private manifests without caption files. Live mode
+downloads captions beneath `.danvas/private/recordings/` by default; neither
+mode mutates Canvas. Retained manifests omit viewer, launch, signed, verifier,
+and session URLs.
 
 Live Canvas writes print a `== Canvas write: ... ==` banner showing the course, target, and write counts before any change is made.
 

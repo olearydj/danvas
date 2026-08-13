@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import danvas.artifacts as artifact_module
 from danvas.artifacts import (
     ARTIFACT_POLICIES,
     ArtifactClass,
@@ -45,6 +46,19 @@ def test_private_creation_ignores_permissive_umask(tmp_path: Path) -> None:
     assert mode(path) == 0o600
 
 
+def test_private_staged_file_removes_partial_after_writer_failure(tmp_path: Path) -> None:
+    partial = tmp_path / "artifact.part"
+
+    with (
+        pytest.raises(RuntimeError, match="injected failure"),
+        private_staged_file(partial) as handle,
+    ):
+        handle.write(b"private prefix")
+        raise RuntimeError("injected failure")
+
+    assert not partial.exists()
+
+
 def test_no_clobber_preserves_existing_private_file(tmp_path: Path) -> None:
     path = tmp_path / "artifact.txt"
     write_private_text(path, "first")
@@ -63,6 +77,16 @@ def test_private_overwrite_replaces_atomically_with_private_mode(tmp_path: Path)
     write_private_text(path, "second", overwrite=True)
 
     assert path.read_text(encoding="utf-8") == "second"
+    assert mode(path) == 0o600
+
+
+def test_explicit_private_file_does_not_chmod_existing_parent(tmp_path: Path) -> None:
+    parent = tmp_path / "external"
+    parent.mkdir(mode=0o755)
+
+    path = write_private_text(parent / "artifact.txt", "private")
+
+    assert mode(parent) == 0o755
     assert mode(path) == 0o600
 
 
@@ -85,6 +109,39 @@ def test_private_pair_tampering_is_detectably_invalid(tmp_path: Path) -> None:
 
     write_private_text(path, "changed", overwrite=True)
 
+    assert not verify_private_sidecar(path, sidecar)
+
+
+def test_overwrite_interrupted_between_pair_commits_is_detectably_invalid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "roster.csv"
+    _, sidecar = write_private_pair(path, b"old", command="roster")
+    staged = tmp_path / "roster.csv.part"
+    with private_staged_file(staged) as handle:
+        handle.write(b"new")
+    original_commit = artifact_module._commit_staged
+    calls = 0
+
+    def interrupt_second_commit(temporary: Path, target: Path, *, overwrite: bool) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise KeyboardInterrupt
+        original_commit(temporary, target, overwrite=overwrite)
+
+    monkeypatch.setattr(artifact_module, "_commit_staged", interrupt_second_commit)
+
+    with pytest.raises(KeyboardInterrupt):
+        commit_private_staged_pair(
+            staged,
+            path,
+            command="roster",
+            overwrite=True,
+            sidecar_path=sidecar,
+        )
+
+    assert path.read_bytes() == b"new"
     assert not verify_private_sidecar(path, sidecar)
 
 
@@ -151,6 +208,18 @@ def test_resolve_private_path_requires_explicit_destination_without_project(
             default_relative="roster.csv",
             option_name="--output",
         )
+
+
+def test_private_output_rejects_unsupported_platform_before_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "artifact.txt"
+    monkeypatch.setattr(artifact_module.os, "name", "nt")
+
+    with pytest.raises(SystemExit, match="supported only on POSIX"):
+        write_private_text(target, "private")
+
+    assert not target.exists()
 
 
 def test_resolve_private_path_rejects_symlink_beneath_managed_root(tmp_path: Path) -> None:
