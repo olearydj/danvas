@@ -1,10 +1,11 @@
 # Mutation And Evidence Reconciliation
 
-Status: accepted Sprint 20 specification for `0.17.0`. Independent design
-review on 2026-08-13 returned accept-with-edits; the accepted residual
-automation risk and all requested flag, enforcement, migration, and follow-up
-clarifications are incorporated below. No live Canvas mutation is authorized
-by accepting the proposal.
+Status: implemented `0.17.0` release candidate through Group 5. Independent
+design review on 2026-08-13 returned accept-with-edits, and independent
+implementation review has accepted Groups 1 through 4. Final Group 5 review,
+the two separately authorized disposable-course probes, and exact branch/tag
+release gates remain open. No live Canvas mutation is authorized by the design
+or implementation work alone.
 
 ## Outcome
 
@@ -617,27 +618,27 @@ acceptance or implementation.
 
 Sprint 20 is complete only when all of the following are true:
 
-- [ ] Every leaf command has a reviewed, exact access-policy declaration.
-- [ ] Every Canvas-mutating command plans on omission and requires `--apply`.
-- [ ] Local-write dry-run commands retain their distinct contract and never
+- [x] Every leaf command has a reviewed, exact access-policy declaration.
+- [x] Every Canvas-mutating command plans on omission and requires `--apply`.
+- [x] Local-write dry-run commands retain their distinct contract and never
   gain `--apply`.
-- [ ] Legacy aliases cannot bypass the new boundary and have documented removal
+- [x] Legacy aliases cannot bypass the new boundary and have documented removal
   versions.
-- [ ] Plans expose target, action, blockers, visibility/notification effects,
+- [x] Plans expose target, action, blockers, visibility/notification effects,
   and a safe apply command without secret or private terminal leakage.
-- [ ] Apply evidence distinguishes intention, attempt, response, readback,
+- [x] Apply evidence distinguishes intention, attempt, response, readback,
   classification, and safe next action.
-- [ ] File upload defaults to conflict error and cannot overwrite under that
+- [x] File upload defaults to conflict error and cannot overwrite under that
   policy.
-- [ ] Discussion scoring no longer writes grades and emits an exact
+- [x] Discussion scoring no longer writes grades and emits an exact
   `grades post` plan.
-- [ ] Submission feedback checkpoints per-row evidence, reads back outcomes,
+- [x] Submission feedback checkpoints per-row evidence, reads back outcomes,
   and stops after unsafe or uncertain results.
-- [ ] Grade post/clear retain their rollback, recovery, and release-state
+- [x] Grade post/clear retain their rollback, recovery, and release-state
   guarantees under the new mode.
-- [ ] Required `secret_name`, URL/profile mismatch warning, and strengthened
+- [x] Required `secret_name`, URL/profile mismatch warning, and strengthened
   architecture tests are complete.
-- [ ] The `0.17.0` migration guide enumerates all mutation and local-write mode
+- [x] The `0.17.0` migration guide enumerates all mutation and local-write mode
   changes command by command.
 - [ ] The authorized bounded live probes pass without production data.
 - [ ] Independent review accepts the implementation and exact-commit local,

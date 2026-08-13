@@ -34,6 +34,9 @@ their full text.
 
 - `src/danvas/cli.py`: Typer command surface.
 - `src/danvas/auth.py`: Canvas API auth/client creation.
+- `src/danvas/access.py`: exact typed access policy for every leaf command.
+- `src/danvas/mutation.py`: shared plan/apply mode and fail-closed pre-write
+  assertion.
 - `src/danvas/profiles.py`: user profile loading plus profile, instance, and
   credential-reference precedence.
 - `src/danvas/timezones.py`: bounded Canvas/Rails-to-IANA timezone mapping.
@@ -82,6 +85,15 @@ explicit precedence, and shipped in 0.15.0. The 0.15.1 patch makes Panopto
 caption authentication honor profile-specific secret names. Sprint 19 shipped
 the private-artifact boundary in 0.16.0.
 
+The 0.17.0 Sprint 20 release candidate is implemented through Group 5. It makes
+all Canvas-writing commands plan on omission and require `--apply`, removes
+direct discussion-grade upload in favor of a `grades post` plan, makes file
+upload conflicts non-destructive by default, and adds checkpointed feedback
+readback plus the adjacent auth/call-site hardening. Groups 1 through 4 have
+passed independent implementation review. Final Group 5 review, the two
+separately authorized disposable-course probes, and exact branch/tag release
+gates remain required; `v0.17.0` is not yet released or installed globally.
+
 The deferred independent Sprint 18 implementation review accepted the 0.15.1
 release line on 2026-08-13. Sprint 19 implementation review returned
 accept-with-fixes; the corrected exact commit passed local, branch, and tag
@@ -119,6 +131,9 @@ the external Codex teaching skill docs:
   appear exactly once with the intent that drove it, mutation status must remain
   distinct from evidence status, and indeterminate outcomes must instruct the
   operator to verify Canvas before retrying.
+- Canvas-changing commands plan on omission. Only `--apply` authorizes a Canvas
+  write; `--dry-run` remains an explicit plan spelling, and local-write sync
+  commands retain a separate no-`--apply` contract.
 - Keep comparison behavior field-specific. Free-text titles and bodies must not
   receive numeric coercion; booleans use a closed vocabulary; datetimes compare
   semantically only through explicit policies. Every supported authored field

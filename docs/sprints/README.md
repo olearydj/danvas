@@ -285,10 +285,12 @@ signed-tag CI passed on that exact commit, and `v0.16.0` is released and
 installed globally. Later implementations still require independent review.
 No history rewrite or live Canvas mutation was used for the release.
 
-The Sprint 20 / `0.17.0` proposal now defines the complete mutation inventory,
-plan-by-default `--apply` contract, conflict-safe file uploads, discussion grade
-plans, and transactional feedback evidence. It is design-only pending
-independent review; no behavior change is accepted or implemented yet.
+The Sprint 20 / `0.17.0` release candidate implements the complete mutation
+inventory, plan-by-default `--apply` contract, conflict-safe file uploads,
+discussion grade plans, and transactional feedback evidence. Groups 1 through
+4 passed independent implementation review. Final Group 5 review, the two
+separately authorized disposable-course probes, and exact branch/tag gates
+remain open; `v0.17.0` has not been tagged or installed globally.
 
 ## Proposed 0.19.0 Agent Interface Follow-On
 

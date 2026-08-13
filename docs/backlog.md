@@ -298,6 +298,20 @@ success, rejection and uncertainty, destination drift, provenance failure,
 partial stable evidence, successful reuse, and stale reuse. Stale all-reuse
 execution again returns bounded failure evidence without mutation.
 
+## 0.17.0 Mutation And Evidence Release Candidate
+
+Sprint 20 is implemented through Group 5 as the `0.17.0` candidate. Its exact
+55-command access inventory and pre-write architecture gate make all remaining
+Canvas-writing commands plan on omission and require `--apply`. Direct
+discussion-grade upload is replaced with a private `grades post` CSV; feedback
+apply now checkpoints and reads back every attempted row; and file upload
+defaults to non-destructive conflict handling with explicit race outcomes.
+
+Independent implementation review has accepted Groups 1 through 4. The final
+Group 5 review, the separately authorized disposable-course file-race and
+feedback-readback probes, and exact branch/tag CI remain open. No `v0.17.0` tag
+or global installation exists yet.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as
@@ -1614,8 +1628,9 @@ Sprint 16 shipped in 0.13.0, dependency maintenance shipped in 0.13.1, Sprint 17
 shipped in 0.14.0, and Sprint 18 shipped in 0.15.0. The accepted public-readiness
 program temporarily supersedes the prior feature order:
 
-1. Review, then implement the proposed Sprint 20
-   [mutation/evidence reconciliation design](sprints/20-mutation-reconciliation.md)
+1. Finish Group 5 review, separately authorized bounded live acceptance, and
+   exact release gates for the implemented Sprint 20
+   [mutation/evidence reconciliation candidate](sprints/20-mutation-reconciliation.md)
    for 0.17.0.
 2. Complete Sprint 21 generalization and packaging before considering the
    public-beta label for 0.18.0.
