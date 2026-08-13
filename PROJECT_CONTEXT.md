@@ -73,23 +73,22 @@ their full text.
 `danvas.__version__` read installed package metadata. Bump the minor version for
 feature sprints or new commands, and the patch version for fixes.
 
-Current tagged release: 0.15.1. Sprint 16 delivered verified Markdown assignment
+Current tagged release: 0.16.0. Sprint 16 delivered verified Markdown assignment
 asset deployment in 0.13.0; 0.13.1 refreshed vulnerable dependencies. Sprint 17
 delivered typed transaction state, architecture checks, supported-Python CI,
 coverage/complexity ratchets, and dependency auditing in 0.14.0. Sprint 18
 removed Auburn and Central Time runtime defaults, added instance profiles and
 explicit precedence, and shipped in 0.15.0. The 0.15.1 patch makes Panopto
-caption authentication honor profile-specific secret names.
+caption authentication honor profile-specific secret names. Sprint 19 shipped
+the private-artifact boundary in 0.16.0.
 
 The deferred independent Sprint 18 implementation review accepted the 0.15.1
-release line on 2026-08-13. The exact branch and tag CI passed supported-Python
-checks, tests, lint, typecheck, dependency audit, and install smoke. The
-user-level CLI is installed from the verified `v0.15.1` tag and reports
-`danvas 0.15.1`.
-
-The Sprint 19 private-artifact implementation candidate uses package version
-0.16.0 and is complete locally. It is not yet tagged or installed globally;
-independent implementation review and release CI remain required.
+release line on 2026-08-13. Sprint 19 implementation review returned
+accept-with-fixes; the corrected exact commit passed local, branch, and tag
+gates on Python 3.12 and 3.14, including lint, typecheck, dependency audit,
+tests, coverage, and isolated install smoke. Signed tag `v0.16.0` resolves to
+`aa66f57520ecd68e689776fcd84ea04fa1e75793`. The user-level CLI is installed
+from that verified tag and reports `danvas 0.16.0`.
 
 Recommended local checks:
 

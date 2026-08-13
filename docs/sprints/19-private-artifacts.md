@@ -1,11 +1,11 @@
 # Private Artifact Boundary
 
-Status: accepted specification with the Sprint 19 / `0.16.0` implementation
-candidate complete locally on 2026-08-13. Independent implementation review
-returned accept-with-fixes; both required pre-tag corrections are implemented
-and locally verified. Release CI and tagging remain pending. The review also
-retrospectively accepted the Sprint 18 implementation and `v0.15.1` correction
-as released. No live Canvas mutation was used for Sprint 19 acceptance.
+Status: released as `v0.16.0` on 2026-08-13. Independent implementation review
+returned accept-with-fixes; both required corrections landed in `aa66f57`.
+Branch and signed-tag CI passed on that exact commit, and the global CLI was
+reinstalled from the verified tag. The review also retrospectively accepted
+the Sprint 18 implementation and `v0.15.1` correction as released. No live
+Canvas mutation was used for Sprint 19 acceptance.
 
 ## Outcome
 
@@ -21,7 +21,7 @@ This is the bounded second release in the accepted public-readiness program:
 | Sprint | Release | Outcome | Public status |
 | --- | --- | --- | --- |
 | 18 | 0.15.x | Instance profiles | Alpha, released |
-| 19 | 0.16.0 | Private artifacts | Alpha, implementation candidate |
+| 19 | 0.16.0 | Private artifacts | Alpha, released |
 | 20 | 0.17.0 | Mutation and evidence | Alpha, design-only |
 | 21 | 0.18.0 | Generalization and packaging | Beta candidate |
 
@@ -674,7 +674,7 @@ Sprint 19 is complete only when all of the following are true:
   project-context workflow.
 - [x] No Sprint 20 mutation-mode behavior or direct discussion-grade upload
   rewrite is included.
-- [ ] The complete local and CI release gates pass on one exact commit.
+- [x] The complete local and CI release gates pass on one exact commit.
 - [x] Deferred independent review covers Sprint 18 implementation, the 0.15.1
   correction, and this Sprint 19 design/implementation before the 0.16.0 tag.
 

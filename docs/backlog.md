@@ -281,6 +281,16 @@ Patch release `v0.15.1` forwards the selected profile's `secret_name` through
 the Panopto caption command's direct authentication path. No other command or
 privacy behavior changes.
 
+## 0.16.0 Private Artifact Release
+
+Sprint 19 is released as `v0.16.0`. It introduces the typed private-artifact
+boundary, secure-at-creation filesystem behavior, private defaults beneath
+`.danvas/private/`, manifest v2, bounded terminal output, and migration support
+for roster and source-map compatibility. Independent implementation review
+returned accept-with-fixes; the corrected `aa66f57` commit passed branch and
+signed-tag CI on Python 3.12 and 3.14, dependency audit, coverage, and isolated
+installation smoke. The global CLI is installed from the verified tag.
+
 Independent review found that the initial self-derived transition tests could
 not detect a missing `would_reuse -> failed` edge. The candidate now carries an
 independently declared state contract plus real execution cases for upload
@@ -1604,12 +1614,10 @@ Sprint 16 shipped in 0.13.0, dependency maintenance shipped in 0.13.1, Sprint 17
 shipped in 0.14.0, and Sprint 18 shipped in 0.15.0. The accepted public-readiness
 program temporarily supersedes the prior feature order:
 
-1. Run release CI on the reviewed and locally corrected Sprint 19 candidate,
-   then tag 0.16.0 only after the exact commit passes.
-2. Complete Sprint 20 mutation/evidence reconciliation for 0.17.0.
-3. Complete Sprint 21 generalization and packaging before considering the
+1. Complete Sprint 20 mutation/evidence reconciliation for 0.17.0.
+2. Complete Sprint 21 generalization and packaging before considering the
    public-beta label for 0.18.0.
-4. Revisit the Page asset adapter and grouped-case setup after the readiness
+3. Revisit the Page asset adapter and grouped-case setup after the readiness
    program, based on concrete workflow demand.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the

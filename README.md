@@ -242,7 +242,7 @@ Install the latest exact tagged release:
 
 ```bash
 uv tool install --force --upgrade --reinstall \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.15.1"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.16.0"
 ```
 
 Verify the installed environment outside the checkout:
@@ -265,7 +265,7 @@ only:
 ```bash
 uv tool install --force --upgrade --reinstall \
   --exclude-newer YYYY-MM-DDTHH:MM:SSZ \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.15.1"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.16.0"
 ```
 
 Do not remove or loosen the global cutoff merely to make resolution succeed.
