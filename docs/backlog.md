@@ -225,6 +225,24 @@ clean isolated frozen suite passes
 all 565 tests; Ruff, ty, lock validation, sprint-document Markdown lint, and
 isolated editable/wheel smoke also pass.
 
+## 0.13.1 Dependency Maintenance
+
+Released as `v0.13.1`, this patch upgrades frozen `idna` and `soupsieve` to
+versions that clear the current dependency audit and adds `pip-audit` to the
+development lock and CI checks. It changes no application code or Canvas
+behavior. The frozen audit reports no known vulnerabilities; all 565 tests,
+Ruff, ty, and lock validation pass. Isolated editable/wheel smoke also passes
+for the exact release.
+
+## 0.14.0 Structural Quality Design
+
+Sprint 17 is designed in
+`docs/sprints/17-transaction-state-quality.md`. It introduces typed asset
+transaction state, decomposes the highest-risk planning and execution paths,
+removes the configuration/Page/source/assignment import cycle, and adds
+branch-coverage, complexity, and supported-Python ratchets. It is intentionally
+behavior-preserving and precedes the Page asset adapter.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as
@@ -1333,7 +1351,8 @@ Recommended goals:
 
    Status: same-page anchors are covered by the delivered renderer and tests.
    Sprint 16 includes a Page link-profile probe, but local Page asset upload and
-   Canvas-bound rewriting remain a follow-on to its assignment implementation.
+   Canvas-bound rewriting remain a follow-on to its assignment implementation
+   and the Sprint 17 structural quality work.
 
    Desired behavior:
 
@@ -1536,13 +1555,15 @@ initiating its native instructor gradebook CSV export.
 
 ### Current Priority Order
 
-Sprint 15 shipped in 0.12.0. Sprint 16 is implemented for 0.13.0:
+Sprint 16 shipped in 0.13.0, and dependency maintenance shipped in 0.13.1. The
+current order is:
 
-1. Complete final Sprint 16 review, then release 0.13.0.
-2. Next, choose between grouped case setup and the Page asset adapter;
-   announcement/discussion adapters remain demand-driven follow-ons. The Page
-   adapter also owns the explicitly recorded Page parser/suffix consolidation
-   debt.
+1. Implement Sprint 17's typed transaction state, acyclic boundaries, and
+   quality ratchets without changing Canvas behavior.
+2. Implement the Page asset adapter on the stabilized transaction. The adapter
+   also owns the explicitly recorded Page parser/suffix migration contract;
+   announcement/discussion adapters remain demand-driven follow-ons.
+3. Reconsider grouped case setup only when a concrete course workflow needs it.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas

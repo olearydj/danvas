@@ -232,3 +232,24 @@ immutability, and independently verified cleanup.
 The clean isolated frozen suite passes all 565 tests; Ruff, ty, lock validation,
 and sprint-document Markdown lint pass. Isolated editable/wheel smoke also
 passes for the released 0.13.0 build.
+
+## 0.13.1 Dependency Maintenance
+
+Released as `v0.13.1`, this maintenance patch refreshes the frozen `idna` and
+`soupsieve` dependencies to fixed versions and adds `pip-audit` to the frozen CI
+gate. It changes no danvas command or Canvas behavior. The audit reports no
+known vulnerabilities, and all 565 tests, Ruff, ty, and lock validation pass.
+Release smoke also passes for the exact release.
+
+## 0.14.0 Structural Quality Design
+
+The next designed structural slice is:
+
+- Sprint 17: [Typed Transaction State And Quality Ratchets](17-transaction-state-quality.md)
+
+Sprint 17 types and decomposes the authored-asset transaction, removes the
+six-module import cycle around configuration, Page sources, snapshots, and
+assignments, and adds branch-coverage, complexity, supported-Python, and
+dependency-audit ratchets. It deliberately adds no Canvas command, mutation,
+asset adapter, or public evidence-schema change. Implementation begins only
+after the separate 0.13.1 dependency patch.
