@@ -400,6 +400,24 @@ def test_create_reads_back_then_writes_source_map(tmp_path: Path, monkeypatch: p
     assert source_map["sources"][0]["last_posted"]["body_sha256"]
 
 
+def test_create_plan_shows_publication_schedule_and_notification(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = write_source(
+        tmp_path / "page.md",
+        "# Example Page\n\nHello",
+        published=True,
+        extra="notify_of_update: true\npublish_at: 2026-09-01T12:00:00Z\n",
+    )
+
+    command_pages_create(args(source, tmp_path, dry_run=True))
+
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["published"] is True
+    assert plan["notify_of_update"] is True
+    assert plan["publish_at"] == "2026-09-01T12:00:00+00:00"
+
+
 def test_update_changes_only_body_and_publication_then_verifies(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

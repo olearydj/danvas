@@ -21,6 +21,7 @@ from danvas.authored_content import (
     comparison_check,
     datetime_values_match,
 )
+from danvas.mutation import assert_canvas_mutation_allowed
 from danvas.page_sources import (
     BODY_NORMALIZER_VERSION as BODY_NORMALIZER_VERSION,
 )
@@ -1030,6 +1031,7 @@ def command_pages_create(args: Any) -> None:
         if plan["status"] == "blocked":
             raise SystemExit(1)
         return
+    assert_canvas_mutation_allowed(args, "pages create")
     print_mutation_banner("create Page", {"course": args.course_id, "title": local.metadata["title"], "published": local.metadata["published"], "source": local.source})
     course = canvas_from_args(args).get_course(args.course_id)
     created = course.create_page(create_payload(local))
@@ -1084,6 +1086,7 @@ def command_pages_update(args: Any) -> None:
         if plan["status"] == "blocked":
             raise SystemExit(1)
         return
+    assert_canvas_mutation_allowed(args, "pages update")
     print_mutation_banner("update Page body/publication", {"course": args.course_id, "page": before["page_id"], "title": before["title"], "published": local.metadata["published"], "source": local.source})
     update_payload = {
         "body": local.html,

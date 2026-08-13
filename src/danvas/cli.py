@@ -59,6 +59,7 @@ from danvas.grades import (
     command_grades_post,
     command_grades_verify,
 )
+from danvas.mutation import APPLY_HELP, DRY_RUN_HELP, MutationMode, resolve_mutation_mode
 from danvas.override_sync import command_assignments_overrides_sync
 from danvas.pages import (
     command_pages_create,
@@ -245,6 +246,48 @@ ApiKeyEnv = Annotated[
 ]
 CourseId = Annotated[int | None, typer.Option("--course-id", help="Canvas course ID.")]
 AssignmentId = Annotated[int, typer.Option("--assignment-id", help="Canvas assignment ID.")]
+CanvasDryRun = Annotated[bool, typer.Option("--dry-run", help=DRY_RUN_HELP)]
+CanvasApply = Annotated[bool, typer.Option("--apply", help=APPLY_HELP)]
+
+
+def mutation_args_from_cli(
+    *,
+    dry_run: bool,
+    apply: bool,
+    legacy_live: bool = False,
+    confirm: str = "",
+    required_confirm: str | set[str] | None = None,
+) -> dict[str, Any]:
+    """Normalize mutation flags before configuration, authentication, or output."""
+    try:
+        mode = resolve_mutation_mode(
+            dry_run=dry_run,
+            apply=apply,
+            legacy_live=legacy_live,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    normalized_confirm = confirm.strip()
+    if normalized_confirm and mode is MutationMode.PLAN:
+        raise typer.BadParameter("--confirm requires --apply.")
+    if mode is MutationMode.APPLY and required_confirm is not None:
+        allowed = (
+            {required_confirm} if isinstance(required_confirm, str) else required_confirm
+        )
+        if normalized_confirm not in allowed:
+            expected = " or ".join(f"--confirm {value}" for value in sorted(allowed))
+            raise typer.BadParameter(f"--apply requires {expected}.")
+    if legacy_live:
+        typer.echo(
+            "Warning: --live is deprecated; use --apply instead. "
+            "It will be removed in danvas 0.18.0.",
+            err=True,
+        )
+    return {
+        "dry_run": mode is MutationMode.PLAN,
+        "mutation_mode": mode.value,
+    }
 
 
 def args_for(**kwargs: Any) -> SimpleNamespace:
@@ -921,7 +964,7 @@ def assignments_overrides(
 
 @assignments_app.command(
     "overrides-sync",
-    help="Reconcile a private referenced override file with Canvas; dry-run by default.",
+    help="Plan override reconciliation; use --apply --confirm apply to write Canvas.",
 )
 def assignments_overrides_sync(
     source: Annotated[
@@ -933,16 +976,18 @@ def assignments_overrides_sync(
         int | None,
         typer.Option("--assignment-id", help="Canvas assignment ID, overriding local provenance."),
     ] = None,
-    dry_run: Annotated[
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
+    live: Annotated[
         bool,
         typer.Option(
-            "--dry-run/--live",
-            help="Plan only (default), or explicitly enable live Canvas writes.",
+            "--live",
+            help="Deprecated alias for --apply; removed in danvas 0.18.0.",
         ),
-    ] = True,
+    ] = False,
     confirm: Annotated[
         OverrideSyncConfirm,
-        typer.Option("--confirm", help="Live writes require the exact value 'apply'."),
+        typer.Option("--confirm", help="Applying requires the exact value 'apply'."),
     ] = "",
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
@@ -966,13 +1011,20 @@ def assignments_overrides_sync(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    mutation = mutation_args_from_cli(
+        dry_run=dry_run,
+        apply=apply,
+        legacy_live=live,
+        confirm=confirm,
+        required_confirm="apply",
+    )
     run_command(
         command_assignments_overrides_sync,
         args_for(
             course_id=course_id,
             source=str(source),
             assignment_id=assignment_id,
-            dry_run=dry_run,
+            **mutation,
             confirm=confirm,
             project_root=str(project_root),
             no_report=no_report,
@@ -991,7 +1043,7 @@ def assignments_overrides_sync(
 
 @assignments_app.command(
     "create",
-    help="Create one Canvas assignment from Markdown. Use --dry-run first to inspect the payload.",
+    help="Plan one assignment from Markdown; use --apply to create it in Canvas.",
 )
 def assignments_create(
     source: Annotated[
@@ -1001,9 +1053,8 @@ def assignments_create(
         ),
     ],
     course_id: CourseId = None,
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Print the Canvas payload without creating anything.")
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
@@ -1038,12 +1089,13 @@ def assignments_create(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
         command_assignments_create,
         args_for(
             course_id=course_id,
             source=str(source),
-            dry_run=dry_run,
+            **mutation,
             project_root=str(project_root),
             asset_folder=asset_folder,
             asset_folder_id=asset_folder_id,
@@ -1123,7 +1175,7 @@ def assignments_verify(
 
 @assignments_app.command(
     "update",
-    help="Update one existing Canvas assignment from Markdown after showing a reviewable diff.",
+    help="Plan one assignment update from Markdown; use --apply to write Canvas.",
 )
 def assignments_update(
     source: Annotated[
@@ -1144,10 +1196,8 @@ def assignments_update(
             help="Resolve by exact Canvas assignment title only when no ID is available.",
         ),
     ] = False,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Show the planned diff without updating Canvas."),
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
@@ -1182,6 +1232,7 @@ def assignments_update(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
         command_assignments_update,
         args_for(
@@ -1189,7 +1240,7 @@ def assignments_update(
             source=str(source),
             assignment_id=assignment_id,
             match_title=match_title,
-            dry_run=dry_run,
+            **mutation,
             project_root=str(project_root),
             asset_folder=asset_folder,
             asset_folder_id=asset_folder_id,
@@ -1229,18 +1280,13 @@ def assignments_upsert(
             help="Resolve by exact Canvas assignment title only when no ID is available.",
         ),
     ] = False,
-    dry_run: Annotated[
-        bool,
-        typer.Option(
-            "--dry-run",
-            help="Plan whether upsert would create or update without mutating Canvas.",
-        ),
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     confirm: Annotated[
         AssignmentUpsertConfirm,
         typer.Option(
             "--confirm",
-            help="Required for live upsert. Must match the planned action: create or update.",
+            help="Required with --apply. Must match the planned action: create or update.",
         ),
     ] = "",
     project_root: Annotated[
@@ -1277,6 +1323,12 @@ def assignments_upsert(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    mutation = mutation_args_from_cli(
+        dry_run=dry_run,
+        apply=apply,
+        confirm=confirm,
+        required_confirm={"create", "update"},
+    )
     run_command(
         command_assignments_upsert,
         args_for(
@@ -1284,7 +1336,7 @@ def assignments_upsert(
             source=str(source),
             assignment_id=assignment_id,
             match_title=match_title,
-            dry_run=dry_run,
+            **mutation,
             confirm=confirm,
             project_root=str(project_root),
             asset_folder=asset_folder,
@@ -2323,7 +2375,7 @@ def discussions_export(
 
 @discussions_app.command(
     "create",
-    help="Create a Canvas discussion from Markdown, optionally with instructor seed replies.",
+    help="Plan a discussion from Markdown; use --apply to create it in Canvas.",
 )
 def discussions_create(
     source: Annotated[Path, typer.Argument(help="Authored discussion Markdown source.")],
@@ -2335,9 +2387,8 @@ def discussions_create(
             help="Confirm posting all --- reply --- sections as instructor entries.",
         ),
     ] = False,
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Write a create plan without changing Canvas.")
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
@@ -2360,13 +2411,14 @@ def discussions_create(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
         command_discussions_create,
         args_for(
             source=str(source),
             course_id=course_id,
             seed_replies=seed_replies,
-            dry_run=dry_run,
+            **mutation,
             project_root=str(project_root),
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
@@ -2438,7 +2490,7 @@ def discussions_verify(
 
 @discussions_app.command(
     "update",
-    help="Safely update an identified Canvas discussion without touching discussion entries.",
+    help="Plan a scoped discussion update; use --apply to write the root topic.",
 )
 def discussions_update(
     source: Annotated[Path, typer.Argument(help="Authored discussion Markdown source.")],
@@ -2454,9 +2506,8 @@ def discussions_update(
             help="Update only the root topic body; never alter seed replies or responses.",
         ),
     ] = False,
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Write an update plan without changing Canvas.")
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
@@ -2479,6 +2530,7 @@ def discussions_update(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
         command_discussions_update,
         args_for(
@@ -2486,7 +2538,7 @@ def discussions_update(
             course_id=course_id,
             discussion_id=discussion_id,
             body_only=body_only,
-            dry_run=dry_run,
+            **mutation,
             project_root=str(project_root),
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
@@ -2761,14 +2813,13 @@ def pages_css_check(
 
 
 @pages_app.command(
-    "create", help="Create one Page after a dry-run plan, then verify Canvas readback."
+    "create", help="Plan one Page; use --apply to create it and verify Canvas readback."
 )
 def pages_create(
     source: Annotated[Path, typer.Argument(help="Markdown or HTML Page source with front matter.")],
     course_id: CourseId = None,
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Plan without creating a Page.")
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
@@ -2791,12 +2842,13 @@ def pages_create(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
         command_pages_create,
         args_for(
             course_id=course_id,
             source=str(source),
-            dry_run=dry_run,
+            **mutation,
             project_root=str(project_root),
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
@@ -2814,7 +2866,7 @@ def pages_create(
 
 @pages_app.command(
     "update",
-    help="Update an existing Page's body, publication, declared roles, and schedule.",
+    help="Plan Page body/publication changes; use --apply to write Canvas.",
 )
 def pages_update(
     source: Annotated[Path, typer.Argument(help="Page source resolvable by ID or source map.")],
@@ -2822,13 +2874,8 @@ def pages_update(
     page_id: Annotated[
         str | None, typer.Option("--page-id", help="Canvas Page numeric ID or URL slug.")
     ] = None,
-    dry_run: Annotated[
-        bool,
-        typer.Option(
-            "--dry-run",
-            help="Show body/publication/roles/scheduling changes without updating.",
-        ),
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
@@ -2851,13 +2898,14 @@ def pages_update(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
         command_pages_update,
         args_for(
             course_id=course_id,
             source=str(source),
             page_id=page_id,
-            dry_run=dry_run,
+            **mutation,
             project_root=str(project_root),
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
@@ -2927,7 +2975,7 @@ def pages_verify(
 
 @announcements_app.command(
     "create",
-    help="Create one Canvas announcement from Markdown. Use --dry-run first to inspect the payload.",
+    help="Plan one announcement from Markdown; use --apply to create it in Canvas.",
 )
 def announcements_create(
     source: Annotated[
@@ -2937,9 +2985,8 @@ def announcements_create(
         ),
     ],
     course_id: CourseId = None,
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="Print the Canvas payload without creating anything.")
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -2947,12 +2994,13 @@ def announcements_create(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
         command_announcements_create,
         args_for(
             course_id=course_id,
             source=str(source),
-            dry_run=dry_run,
+            **mutation,
             profile=profile,
             api_url=api_url,
             secret_name=secret_name,
@@ -3129,7 +3177,7 @@ def announcements_sync(
 
 @announcements_app.command(
     "update",
-    help="Update one existing Canvas announcement from Markdown after showing a reviewable diff.",
+    help="Plan one announcement update from Markdown; use --apply to write Canvas.",
 )
 def announcements_update(
     source: Annotated[
@@ -3146,10 +3194,8 @@ def announcements_update(
             help="Canvas announcement/discussion topic ID. Overrides source canvas_id.",
         ),
     ] = None,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Show the planned diff without updating Canvas."),
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
@@ -3172,13 +3218,14 @@ def announcements_update(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
         command_announcements_update,
         args_for(
             course_id=course_id,
             source=str(source),
             announcement_id=announcement_id,
-            dry_run=dry_run,
+            **mutation,
             project_root=str(project_root),
             no_report=no_report,
             report_root=str(report_root) if report_root else None,

@@ -259,7 +259,7 @@ def test_command_live_updates_and_creates_then_verifies(
 def test_command_live_requires_explicit_confirmation(tmp_path: Path) -> None:
     source, _ = write_project(tmp_path, [])
 
-    with pytest.raises(SystemExit, match="--live --confirm apply"):
+    with pytest.raises(SystemExit, match="--apply --confirm apply"):
         command_assignments_overrides_sync(
             args(source, tmp_path, tmp_path / "report", dry_run=False)
         )

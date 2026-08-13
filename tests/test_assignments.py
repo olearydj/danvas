@@ -299,6 +299,40 @@ def test_command_assignments_create_dry_run_does_not_write_source_map(
     assert not (tmp_path / ".danvas" / "source-map.json").exists()
 
 
+def test_assignment_create_plan_shows_visibility_and_notification_fields(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text(
+        """---
+title: Case 1
+published: true
+hide_in_gradebook: true
+only_visible_to_overrides: true
+notify_of_update: true
+unlock_at: 2026-09-01T12:00:00Z
+lock_at: 2026-09-08T12:00:00Z
+---
+
+Submit the case memo.
+""",
+        encoding="utf-8",
+    )
+
+    command_assignments_create(
+        SimpleNamespace(source=str(source), course_id=101, dry_run=True)
+    )
+
+    output = capsys.readouterr().out
+    projection = json.loads(output[output.index("{") :])
+    assert projection["published"] is True
+    assert projection["hide_in_gradebook"] is True
+    assert projection["only_visible_to_overrides"] is True
+    assert projection["notify_of_update"] is True
+    assert projection["unlock_at"] == "2026-09-01T12:00:00+00:00"
+    assert projection["lock_at"] == "2026-09-08T12:00:00+00:00"
+
+
 def test_command_assignments_create_dry_run_keeps_stable_canvas_file_link(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1782,7 +1816,7 @@ def test_command_assignments_upsert_refuses_non_dry_run(tmp_path: Path) -> None:
     source = tmp_path / "case.md"
     source.write_text("---\ntitle: Case 1\n---\n\nBody\n", encoding="utf-8")
 
-    with pytest.raises(SystemExit, match="requires --confirm"):
+    with pytest.raises(SystemExit, match="requires --apply --confirm"):
         command_assignments_upsert(upsert_args(source, tmp_path / "report", dry_run=False))
 
 

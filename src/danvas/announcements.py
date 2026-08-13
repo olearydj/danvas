@@ -31,6 +31,7 @@ from danvas.authored_content import (
     require_valid_datetimes,
 )
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
+from danvas.mutation import assert_canvas_mutation_allowed
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
 from danvas.utils import (
@@ -229,6 +230,7 @@ def command_announcements_create(args: Any) -> None:
         print("Dry run - no announcement created.")
         print(json.dumps(announcement, indent=2, ensure_ascii=False))
         return
+    assert_canvas_mutation_allowed(args, "announcements create")
     print_mutation_banner(
         "create announcement",
         {
@@ -295,6 +297,7 @@ def command_announcements_update(args: Any) -> None:
         print_announcement_update_summary(report)
         return
 
+    assert_canvas_mutation_allowed(args, "announcements update")
     print_announcement_update_summary(report)
     print_mutation_banner(
         "update announcement",

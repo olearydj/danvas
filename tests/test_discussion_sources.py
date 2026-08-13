@@ -242,6 +242,11 @@ def test_create_dry_run_writes_report_without_canvas(
     assert report["status"] == "would_create"
     assert report["seed_reply_count"] == 2
     assert "message" not in report["topic_payload"]
+    assert report["topic_payload"]["published"] is False
+    assert (
+        report["topic_payload"]["assignment"]["due_at"]
+        == "2026-09-01T04:59:00+00:00"
+    )
     assert not (tmp_path / ".danvas" / "source-map.json").exists()
 
 

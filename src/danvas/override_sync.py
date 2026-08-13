@@ -7,6 +7,11 @@ from typing import Any, cast
 
 from danvas.auth import canvas_from_args
 from danvas.frontmatter import parse_frontmatter
+from danvas.mutation import (
+    MutationMode,
+    assert_canvas_mutation_allowed,
+    mutation_mode_from_args,
+)
 from danvas.overrides import load_local_override_file, normalize_scalar, override_id, value
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.source_map import resolve_source_canvas_id
@@ -22,7 +27,7 @@ def command_assignments_overrides_sync(args: Any) -> None:
     dry_run = bool(getattr(args, "dry_run", True))
     confirm = str(getattr(args, "confirm", "") or "").strip()
     if not dry_run and confirm != "apply":
-        raise SystemExit("Live override sync requires --live --confirm apply.")
+        raise SystemExit("Override sync requires --apply --confirm apply.")
 
     project_root = Path(getattr(args, "project_root", ".")).resolve()
     metadata, _ = parse_frontmatter(
@@ -74,6 +79,8 @@ def command_assignments_overrides_sync(args: Any) -> None:
         write_override_sync_report_run(report_run, report)
         return
 
+    mutation_mode = mutation_mode_from_args(args)
+    assert_canvas_mutation_allowed(mutation_mode, "assignments overrides-sync")
     print_mutation_banner(
         "sync assignment overrides",
         {
@@ -84,7 +91,11 @@ def command_assignments_overrides_sync(args: Any) -> None:
             "source": source,
         },
     )
-    apply_override_sync(assignment, plan)
+    apply_override_sync(
+        assignment,
+        plan,
+        mutation_mode=mutation_mode,
+    )
     verification = plan_override_sync(desired, list(assignment.get_overrides()))
     report["verification"] = summarize_plan(verification)
     report["status"] = "applied" if not verification["errors"] and not (
@@ -309,7 +320,13 @@ def canvas_override_payload(desired: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def apply_override_sync(assignment: Any, plan: dict[str, list[dict[str, Any]]]) -> None:
+def apply_override_sync(
+    assignment: Any,
+    plan: dict[str, list[dict[str, Any]]],
+    *,
+    mutation_mode: MutationMode,
+) -> None:
+    assert_canvas_mutation_allowed(mutation_mode, "assignments overrides-sync")
     for row in plan["updates"]:
         row["_canvas_object"].edit(
             assignment_override=canvas_override_payload(row["_desired"])

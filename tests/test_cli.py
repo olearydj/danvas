@@ -676,6 +676,7 @@ def test_assignments_update_cli_options_and_args(
     assert captured["assignment_id"] == 10
     assert captured["match_title"] is True
     assert captured["dry_run"] is True
+    assert captured["mutation_mode"] == "plan"
     assert captured["project_root"] == "."
     assert captured["no_report"] is False
     assert captured["report_dir"] == str(tmp_path / "report")
@@ -683,6 +684,7 @@ def test_assignments_update_cli_options_and_args(
         "--assignment-id",
         "--match-title",
         "--dry-run",
+        "--apply",
         "--project-root",
         "--no-report",
         "--report-root",
@@ -717,8 +719,6 @@ def test_assignments_upsert_cli_options_and_args(
             "10",
             "--match-title",
             "--dry-run",
-            "--confirm",
-            "update",
             "--report-dir",
             str(tmp_path / "report"),
         ],
@@ -730,7 +730,8 @@ def test_assignments_upsert_cli_options_and_args(
     assert captured["assignment_id"] == 10
     assert captured["match_title"] is True
     assert captured["dry_run"] is True
-    assert captured["confirm"] == "update"
+    assert captured["mutation_mode"] == "plan"
+    assert captured["confirm"] == ""
     assert captured["project_root"] == "."
     assert captured["no_report"] is False
     assert captured["report_dir"] == str(tmp_path / "report")
@@ -738,6 +739,7 @@ def test_assignments_upsert_cli_options_and_args(
         "--assignment-id",
         "--match-title",
         "--dry-run",
+        "--apply",
         "--confirm",
         "--project-root",
         "--no-report",
@@ -770,10 +772,12 @@ def test_assignments_overrides_sync_is_dry_run_by_default(
 
     assert result.exit_code == 0, result.output
     assert captured["dry_run"] is True
+    assert captured["mutation_mode"] == "plan"
     assert captured["confirm"] == ""
     expected = {
         "--assignment-id",
         "--dry-run",
+        "--apply",
         "--live",
         "--confirm",
         "--project-root",
@@ -783,6 +787,235 @@ def test_assignments_overrides_sync_is_dry_run_by_default(
         "--report-slug",
     }
     assert expected <= option_names("assignments", "overrides-sync")
+
+
+GROUP_2_MUTATION_CLI_CASES = [
+    (("assignments", "overrides-sync"), "command_assignments_overrides_sync", []),
+    (("assignments", "create"), "command_assignments_create", []),
+    (("assignments", "update"), "command_assignments_update", []),
+    (("assignments", "upsert"), "command_assignments_upsert", []),
+    (("discussions", "create"), "command_discussions_create", []),
+    (("discussions", "update"), "command_discussions_update", []),
+    (("pages", "create"), "command_pages_create", []),
+    (("pages", "update"), "command_pages_update", []),
+    (("announcements", "create"), "command_announcements_create", []),
+    (("announcements", "update"), "command_announcements_update", []),
+]
+
+
+@pytest.mark.parametrize(
+    ("path", "target", "extra"),
+    GROUP_2_MUTATION_CLI_CASES,
+    ids=lambda value: "-".join(value) if isinstance(value, tuple) else None,
+)
+def test_group_2_mutations_plan_when_invoked_bare(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: tuple[str, str],
+    target: str,
+    extra: list[str],
+) -> None:
+    source = tmp_path / "source.md"
+    source.write_text("---\ntitle: Example\n---\n\nBody\n", encoding="utf-8")
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        f"danvas.cli.{target}",
+        lambda args: captured.update(vars(args)),
+    )
+
+    result = runner.invoke(
+        app,
+        [*path, str(source), "--course-id", "101", *extra],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["dry_run"] is True
+    assert captured["mutation_mode"] == "plan"
+    assert {"--dry-run", "--apply"} <= option_names(*path)
+
+
+@pytest.mark.parametrize(
+    ("path", "target", "confirmation"),
+    [
+        (
+            ("assignments", "overrides-sync"),
+            "command_assignments_overrides_sync",
+            ["--confirm", "apply"],
+        ),
+        (("assignments", "create"), "command_assignments_create", []),
+        (("assignments", "update"), "command_assignments_update", []),
+        (
+            ("assignments", "upsert"),
+            "command_assignments_upsert",
+            ["--confirm", "create"],
+        ),
+        (("discussions", "create"), "command_discussions_create", []),
+        (("discussions", "update"), "command_discussions_update", []),
+        (("pages", "create"), "command_pages_create", []),
+        (("pages", "update"), "command_pages_update", []),
+        (("announcements", "create"), "command_announcements_create", []),
+        (("announcements", "update"), "command_announcements_update", []),
+    ],
+    ids=lambda value: "-".join(value) if isinstance(value, tuple) else None,
+)
+def test_group_2_mutations_require_apply_for_authorization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: tuple[str, str],
+    target: str,
+    confirmation: list[str],
+) -> None:
+    source = tmp_path / "source.md"
+    source.write_text("---\ntitle: Example\n---\n\nBody\n", encoding="utf-8")
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        f"danvas.cli.{target}",
+        lambda args: captured.update(vars(args)),
+    )
+
+    result = runner.invoke(
+        app,
+        [*path, str(source), "--course-id", "101", "--apply", *confirmation],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["dry_run"] is False
+    assert captured["mutation_mode"] == "apply"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [case[0] for case in GROUP_2_MUTATION_CLI_CASES],
+    ids=lambda value: "-".join(value),
+)
+def test_group_2_mutation_flag_conflicts_fail_before_context_resolution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: tuple[str, str],
+) -> None:
+    source = tmp_path / "source.md"
+    monkeypatch.setattr(
+        "danvas.cli.args_for",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
+    )
+
+    result = runner.invoke(
+        app,
+        [*path, str(source), "--dry-run", "--apply"],
+    )
+
+    assert result.exit_code != 0
+    assert "--dry-run and --apply cannot be combined" in result.output
+    assert "context resolved" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("path", "confirmation"),
+    [
+        (("assignments", "overrides-sync"), "apply"),
+        (("assignments", "upsert"), "create"),
+        (("assignments", "upsert"), "update"),
+    ],
+)
+def test_confirmation_without_apply_fails_before_context_resolution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: tuple[str, str],
+    confirmation: str,
+) -> None:
+    source = tmp_path / "source.md"
+    monkeypatch.setattr(
+        "danvas.cli.args_for",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
+    )
+
+    result = runner.invoke(
+        app,
+        [*path, str(source), "--confirm", confirmation],
+    )
+
+    assert result.exit_code != 0
+    assert "--confirm requires --apply" in result.output
+    assert "context resolved" not in result.output
+
+
+def test_override_live_alias_warns_and_normalizes_to_apply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.md"
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "danvas.cli.command_assignments_overrides_sync",
+        lambda args: captured.update(vars(args)),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "assignments",
+            "overrides-sync",
+            str(source),
+            "--course-id",
+            "101",
+            "--live",
+            "--confirm",
+            "apply",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "--live is deprecated" in result.output
+    assert captured["mutation_mode"] == "apply"
+    assert captured["dry_run"] is False
+
+
+@pytest.mark.parametrize("conflicting_flag", ["--dry-run", "--apply"])
+def test_override_live_alias_rejects_new_flag_combinations_before_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    conflicting_flag: str,
+) -> None:
+    source = tmp_path / "source.md"
+    monkeypatch.setattr(
+        "danvas.cli.args_for",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "assignments",
+            "overrides-sync",
+            str(source),
+            "--live",
+            conflicting_flag,
+            "--confirm",
+            "apply",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "cannot be combined" in result.output
+    assert "context resolved" not in result.output
+
+
+def test_override_live_alias_cannot_bypass_confirmation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.md"
+    monkeypatch.setattr(
+        "danvas.cli.args_for",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["assignments", "overrides-sync", str(source), "--live"],
+    )
+
+    assert result.exit_code != 0
+    assert "--apply requires --confirm apply" in result.output
+    assert "context resolved" not in result.output
 
 
 def test_announcements_verify_cli_options_and_args(
@@ -855,12 +1088,14 @@ def test_announcements_update_cli_options_and_args(
     assert captured["source"] == str(source)
     assert captured["announcement_id"] == 10
     assert captured["dry_run"] is True
+    assert captured["mutation_mode"] == "plan"
     assert captured["project_root"] == "."
     assert captured["no_report"] is False
     assert captured["report_dir"] == str(tmp_path / "report")
     expected = {
         "--announcement-id",
         "--dry-run",
+        "--apply",
         "--project-root",
         "--no-report",
         "--report-root",

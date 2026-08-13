@@ -50,6 +50,7 @@ from danvas.canvas_links import (
 )
 from danvas.config import resolve_assignment_group_id
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
+from danvas.mutation import assert_canvas_mutation_allowed, mutation_mode_from_args
 from danvas.overrides import private_assignment_overrides
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.sanitize import sanitize_error, sanitize_public
@@ -131,6 +132,11 @@ ASSIGNMENT_VERIFY_SUPPORTED_FIELDS = {
     "body_text",
 }
 ASSIGNMENT_DATETIME_FIELDS = {"due_at", "unlock_at", "lock_at"}
+ASSIGNMENT_PLAN_VISIBILITY_FIELDS = {
+    "hide_in_gradebook",
+    "notify_of_update",
+    "only_visible_to_overrides",
+}
 ASSIGNMENT_FIELD_POLICIES: dict[str, ComparisonPolicy] = {
     field: SCALAR for field in ASSIGNMENT_VERIFY_SUPPORTED_FIELDS
 }
@@ -407,6 +413,7 @@ def command_assignments_create(args: Any) -> None:
             write_assignment_asset_report(args, "assignments create", source, asset_plan)
         print(json.dumps(projection, indent=2, ensure_ascii=False))
         return
+    assert_canvas_mutation_allowed(args, "assignments create")
     banner_printed = False
     if asset_plan:
         require_live_asset_report(args, asset_plan)
@@ -445,6 +452,7 @@ def create_assignment_from_loaded_source(
     banner_printed: bool = False,
 ) -> None:
     assignment = assignment or local["assignment"]
+    assert_canvas_mutation_allowed(args, "assignments create")
     if not banner_printed:
         print_mutation_banner(
             "create assignment",
@@ -625,6 +633,7 @@ def command_assignments_update(args: Any) -> None:
         print_assignment_update_summary(report)
         return
 
+    assert_canvas_mutation_allowed(args, "assignments update")
     assert canvas_before is not None
     banner_printed = False
     if asset_plan:
@@ -675,6 +684,7 @@ def update_assignment_from_loaded_source(
     banner_printed: bool = False,
     report_run: ReportRun | None = None,
 ) -> None:
+    assert_canvas_mutation_allowed(args, "assignments update")
     canvas_origin = str(getattr(args, "api_url", "") or "")
     update_payload = assignment_update_payload(local["assignment"])
     update_lookup = (
@@ -793,7 +803,7 @@ def command_assignments_upsert(args: Any) -> None:
         raise SystemExit(f"Assignment Markdown source not found: {source}")
     confirm = str(getattr(args, "confirm", "") or "").strip()
     if not args.dry_run and confirm not in {"create", "update"}:
-        raise SystemExit("Live assignments upsert requires --confirm create or --confirm update.")
+        raise SystemExit("Assignments upsert requires --apply --confirm create or update.")
     project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
     canvas_origin = str(getattr(args, "api_url", "") or "")
     local = assignment_update_local_source(
@@ -878,6 +888,7 @@ def command_assignments_upsert(args: Any) -> None:
             f"Upsert planned action is {report['planned_action']!r}; "
             f"refusing --confirm {confirm!r}."
         )
+    assert_canvas_mutation_allowed(args, "assignments upsert")
     banner_printed = False
     if asset_plan:
         require_live_asset_report(args, asset_plan)
@@ -998,6 +1009,8 @@ def execute_assignment_asset_plan(
     *,
     command: str,
 ) -> AssetPlan:
+    mode = mutation_mode_from_args(args)
+    assert_canvas_mutation_allowed(mode, command)
     folder = plan.runtime.folder
     if folder is None and any(
         asset.get("status") in {"would_upload", "would_rename"}
@@ -1012,6 +1025,7 @@ def execute_assignment_asset_plan(
         command=command,
         project_root=Path(getattr(args, "project_root", ".")),
         on_duplicate=str(getattr(args, "asset_on_duplicate", "error")),
+        mutation_mode=mode,
     )
 
 
@@ -1525,7 +1539,11 @@ def safe_assignment_mutation_projection(
         return {}
     result = safe_assignment_value({
         key: assignment.get(key)
-        for key in ASSIGNMENT_VERIFY_SUPPORTED_FIELDS - {"title", "body_text", "canvas_url"}
+        for key in (
+            ASSIGNMENT_VERIFY_SUPPORTED_FIELDS
+            | ASSIGNMENT_PLAN_VISIBILITY_FIELDS
+        )
+        - {"title", "body_text", "canvas_url"}
         if key in assignment
     })
     if "name" in assignment:
@@ -1546,7 +1564,10 @@ def safe_assignment_mutation_projection(
         - {
             "name",
             "description",
-            *(ASSIGNMENT_VERIFY_SUPPORTED_FIELDS - {"title", "body_text", "canvas_url"}),
+            *(
+                (ASSIGNMENT_VERIFY_SUPPORTED_FIELDS | ASSIGNMENT_PLAN_VISIBILITY_FIELDS)
+                - {"title", "body_text", "canvas_url"}
+            ),
         }
     )
     if omitted:

@@ -13,7 +13,6 @@ from danvas.asset_state import AssetItem
 from danvas.authored_assets import (
     asset_associations,
     current_asset_matches,
-    execute_asset_plan,
     mapped_file_record,
     prepare_asset_plan,
     public_asset_evidence,
@@ -23,9 +22,18 @@ from danvas.authored_assets import (
     validate_mapped_file,
     verify_asset_readback,
 )
+from danvas.authored_assets import (
+    execute_asset_plan as _execute_asset_plan,
+)
+from danvas.mutation import MutationMode
 from danvas.source_map import write_source_map_entry
 
 CANVAS_ORIGIN = "https://canvas.example/"
+
+
+def execute_asset_plan(*args: Any, **kwargs: Any):
+    """Exercise the explicitly authorized asset execution primitive in unit tests."""
+    return _execute_asset_plan(*args, mutation_mode=MutationMode.APPLY, **kwargs)
 
 
 def write_config(root: Path, course_id: int = 101) -> None:

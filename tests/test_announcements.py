@@ -412,6 +412,36 @@ Body.
     assert fake_canvas.course.created_payload["message"] == "<p>Body.</p>"
 
 
+def test_announcement_create_plan_shows_visibility_and_schedule(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "announcement.md"
+    source.write_text(
+        """---
+title: Scheduled Update
+published: true
+delayed_post_at: 2026-09-01T12:00:00Z
+lock_at: 2026-09-08T12:00:00Z
+specific_sections: [10, 20]
+---
+
+Body.
+""",
+        encoding="utf-8",
+    )
+
+    command_announcements_create(
+        SimpleNamespace(course_id=101, source=str(source), dry_run=True)
+    )
+
+    output = capsys.readouterr().out
+    plan = json.loads(output[output.index("{") :])
+    assert plan["published"] is True
+    assert plan["delayed_post_at"] == "2026-09-01T12:00:00+00:00"
+    assert plan["lock_at"] == "2026-09-08T12:00:00+00:00"
+    assert plan["specific_sections"] == [10, 20]
+
+
 def test_command_announcements_latest_prints_markdown_by_default(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

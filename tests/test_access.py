@@ -26,7 +26,7 @@ POSITIONAL_OUTPUT_NAMES = {"output", "output_dir", "destination"}
 IMPLICIT_RETAINED_OUTPUT_COMMANDS = {"init"}
 
 CURRENT_DRY_RUN_DEFAULTS = {
-    "assignments overrides-sync": True,
+    "assignments overrides-sync": False,
     "assignments create": False,
     "assignments update": False,
     "assignments upsert": False,
@@ -57,6 +57,7 @@ CURRENT_MUTATION_CALLS = Counter(
         ("authored_assets.py", "upload_one_asset", "upload"): 1,
         ("discussion_sources.py", "command_discussions_create", "create_discussion_topic"): 1,
         ("discussion_sources.py", "command_discussions_update", "topic.update"): 1,
+        ("discussion_sources.py", "post_seed_replies", "post_entry"): 1,
         ("discussions.py", "upload_discussion_scores", "edit"): 1,
         ("files.py", "command_files_upload", "upload"): 1,
         ("grades.py", "apply_grade_action", "edit"): 2,
@@ -68,10 +69,46 @@ CURRENT_MUTATION_CALLS = Counter(
         ("override_sync.py", "apply_override_sync", "create_override"): 1,
         ("pages.py", "command_pages_create", "create_page"): 1,
         ("pages.py", "command_pages_update", "edit"): 1,
+        ("panopto.py", "establish_lti_session", "web.post"): 1,
+        ("panopto.py", "lti_get_sessions", "web.post"): 1,
         ("quiz_import.py", "command_quiz_import_qti", "edit"): 1,
         ("quiz_import.py", "start_qti_migration", "create_content_migration"): 1,
         ("quiz_import.py", "start_qti_migration", "requests.post"): 1,
         ("submissions.py", "command_submissions_feedback", "upload_comment"): 1,
+    }
+)
+
+GROUP_2_APPLY_COMMANDS = {
+    "assignments overrides-sync",
+    "assignments create",
+    "assignments update",
+    "assignments upsert",
+    "discussions create",
+    "discussions update",
+    "pages create",
+    "pages update",
+    "announcements create",
+    "announcements update",
+}
+
+CURRENT_MUTATION_ASSERTIONS = Counter(
+    {
+        ("announcements.py", "command_announcements_create"): 1,
+        ("announcements.py", "command_announcements_update"): 1,
+        ("assignments.py", "create_assignment_from_loaded_source"): 1,
+        ("assignments.py", "command_assignments_create"): 1,
+        ("assignments.py", "command_assignments_update"): 1,
+        ("assignments.py", "command_assignments_upsert"): 1,
+        ("assignments.py", "execute_assignment_asset_plan"): 1,
+        ("assignments.py", "update_assignment_from_loaded_source"): 1,
+        ("authored_assets.py", "execute_asset_plan"): 1,
+        ("discussion_sources.py", "command_discussions_create"): 1,
+        ("discussion_sources.py", "command_discussions_update"): 1,
+        ("discussion_sources.py", "post_seed_replies"): 1,
+        ("override_sync.py", "apply_override_sync"): 1,
+        ("override_sync.py", "command_assignments_overrides_sync"): 1,
+        ("pages.py", "command_pages_create"): 1,
+        ("pages.py", "command_pages_update"): 1,
     }
 )
 
@@ -127,6 +164,7 @@ def mutation_call_name(node: ast.Call) -> str | None:
         "delete_comment",
         "edit",
         "edit_comment",
+        "post_entry",
         "upload",
         "upload_comment",
     }:
@@ -135,12 +173,10 @@ def mutation_call_name(node: ast.Call) -> str | None:
         return "topic.update" if function.value.id == "topic" else None
     if function.attr == "request" and isinstance(function.value, ast.Attribute):
         return "_requester.request" if function.value.attr == "_requester" else None
-    if (
-        function.attr == "post"
-        and isinstance(function.value, ast.Name)
-        and function.value.id == "requests"
-    ):
-        return "requests.post"
+    if function.attr in {"post", "put"}:
+        return f"{ast.unparse(function.value)}.{function.attr}"
+    if function.attr in {"delete", "publish", "submit"}:
+        return function.attr
     return None
 
 
@@ -155,6 +191,21 @@ def canvas_mutation_calls() -> Counter[tuple[str, str, str]]:
                 call_name = mutation_call_name(node)
                 if call_name:
                     found[(path.name, function.name, call_name)] += 1
+    return found
+
+
+def canvas_mutation_assertions() -> Counter[tuple[str, str]]:
+    found: Counter[tuple[str, str]] = Counter()
+    for path in PACKAGE_ROOT.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for function in (node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)):
+            for node in ast.walk(function):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "assert_canvas_mutation_allowed"
+                ):
+                    found[(path.name, function.name)] += 1
     return found
 
 
@@ -178,7 +229,7 @@ def test_access_policy_category_counts_match_reviewed_inventory() -> None:
     ) == 25
     assert sum(policy.dry_run_kind is DryRunKind.LOCAL_WRITE for policy in policies) == 4
     assert sum(policy.canvas_mutation for policy in policies) == 16
-    assert sum(policy.bare_canvas_mutation for policy in policies) == 13
+    assert sum(policy.bare_canvas_mutation for policy in policies) == 5
 
 
 def test_current_dry_run_surface_and_defaults_are_characterized() -> None:
@@ -205,8 +256,9 @@ def test_current_special_mutation_guards_are_characterized() -> None:
     commands = leaf_commands()
 
     overrides = commands["assignments overrides-sync"]
-    assert option(overrides, "--dry-run").default is True
-    assert "--live" in option(overrides, "--dry-run").secondary_opts
+    assert option(overrides, "--dry-run").default is False
+    assert option(overrides, "--live").default is False
+    assert option(overrides, "--apply").default is False
     assert option(overrides, "--confirm").default == ""
     assert option(commands["assignments upsert"], "--confirm").default == ""
     assert option(commands["discussions score"], "--upload").default is False
@@ -220,6 +272,24 @@ def test_retained_output_registry_has_no_missing_or_stale_commands() -> None:
 
 def test_canvas_mutation_call_sites_match_reviewed_baseline() -> None:
     assert canvas_mutation_calls() == CURRENT_MUTATION_CALLS
+
+
+def test_group_2_apply_surface_is_exact() -> None:
+    actual = {
+        name
+        for name, command in leaf_commands().items()
+        if any(
+            "--apply" in (*param.opts, *param.secondary_opts)
+            for param in command.params
+            if isinstance(param, click.Option)
+        )
+    }
+
+    assert actual == GROUP_2_APPLY_COMMANDS
+
+
+def test_common_pre_write_assertion_sites_match_reviewed_baseline() -> None:
+    assert canvas_mutation_assertions() == CURRENT_MUTATION_ASSERTIONS
 
 
 def test_access_policy_rejects_incoherent_declarations() -> None:

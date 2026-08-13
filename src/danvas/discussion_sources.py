@@ -24,6 +24,11 @@ from danvas.authored_content import (
 from danvas.canvas_links import canonical_canvas_object_url
 from danvas.config import resolve_assignment_group_id
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
+from danvas.mutation import (
+    MutationMode,
+    assert_canvas_mutation_allowed,
+    mutation_mode_from_args,
+)
 from danvas.reports import ReportRun, create_report_run, safe_error, should_write_report_run
 from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
 from danvas.utils import canvas_object_to_dict, html_to_text, print_mutation_banner
@@ -134,6 +139,8 @@ def command_discussions_create(args: Any) -> None:
         print_discussion_summary("create", plan)
         return
 
+    mutation_mode = mutation_mode_from_args(args)
+    assert_canvas_mutation_allowed(mutation_mode, "discussions create")
     print_mutation_banner(
         "create discussion",
         {
@@ -171,6 +178,7 @@ def command_discussions_create(args: Any) -> None:
                 created,
                 local["seed_replies"],
                 progress=posted_progress,
+                mutation_mode=mutation_mode,
             )
             if include_seeds
             else []
@@ -346,6 +354,7 @@ def command_discussions_update(args: Any) -> None:
         print_discussion_summary("update", report)
         return
 
+    assert_canvas_mutation_allowed(args, "discussions update")
     print_discussion_summary("update", report)
     print_mutation_banner(
         "update discussion",
@@ -544,7 +553,9 @@ def post_seed_replies(
     replies: list[dict[str, Any]],
     *,
     progress: list[dict[str, Any]] | None = None,
+    mutation_mode: MutationMode,
 ) -> list[dict[str, Any]]:
+    assert_canvas_mutation_allowed(mutation_mode, "discussions create seed replies")
     posted_by_index: dict[int, dict[str, Any]] = {}
     # Canvas displays top-level entries newest-first in the observed teaching workflow.
     # Reverse posting preserves authored source order on screen.

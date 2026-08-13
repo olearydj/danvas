@@ -37,6 +37,7 @@ from danvas.files import (
     upload_result_row,
     validate_upload_destination,
 )
+from danvas.mutation import MutationMode, assert_canvas_mutation_allowed
 from danvas.project_config import find_config_dir, load_project_config
 from danvas.sanitize import sanitize_error
 from danvas.source_map import (
@@ -591,8 +592,10 @@ def execute_asset_plan(
     command: str,
     project_root: Path,
     on_duplicate: str,
+    mutation_mode: MutationMode,
 ) -> AssetPlan:
     """Upload planned assets, recording each identity before the next mutation."""
+    assert_canvas_mutation_allowed(mutation_mode, command)
     if not planned_source_is_current(
         plan,
         course_id=course_id,
