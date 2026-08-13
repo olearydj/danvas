@@ -1614,7 +1614,9 @@ Sprint 16 shipped in 0.13.0, dependency maintenance shipped in 0.13.1, Sprint 17
 shipped in 0.14.0, and Sprint 18 shipped in 0.15.0. The accepted public-readiness
 program temporarily supersedes the prior feature order:
 
-1. Complete Sprint 20 mutation/evidence reconciliation for 0.17.0.
+1. Review, then implement the proposed Sprint 20
+   [mutation/evidence reconciliation design](sprints/20-mutation-reconciliation.md)
+   for 0.17.0.
 2. Complete Sprint 21 generalization and packaging before considering the
    public-beta label for 0.18.0.
 3. Revisit the Page asset adapter and grouped-case setup after the readiness

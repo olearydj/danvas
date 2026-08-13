@@ -269,6 +269,7 @@ The accepted next hardening program is:
 
 - Sprints 18-21: [Public Readiness Program](18-public-readiness.md)
 - Sprint 19: [Private Artifact Boundary](19-private-artifacts.md)
+- Sprint 20: [Mutation And Evidence Reconciliation](20-mutation-reconciliation.md)
 
 The four releases evaluate the boundary between the mature internal
 implementation and a defensible public beta. They separate instance profiles,
@@ -283,6 +284,11 @@ accept-with-fixes; both required corrections landed in `aa66f57`. Branch and
 signed-tag CI passed on that exact commit, and `v0.16.0` is released and
 installed globally. Later implementations still require independent review.
 No history rewrite or live Canvas mutation was used for the release.
+
+The Sprint 20 / `0.17.0` proposal now defines the complete mutation inventory,
+plan-by-default `--apply` contract, conflict-safe file uploads, discussion grade
+plans, and transactional feedback evidence. It is design-only pending
+independent review; no behavior change is accepted or implemented yet.
 
 ## Proposed 0.19.0 Agent Interface Follow-On
 
