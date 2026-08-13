@@ -301,8 +301,8 @@ inventory, gradebook, and Panopto conventions; removes compatibility flags due
 in 0.18.0; completes anonymous packaging and public documentation; and adds the
 declared macOS/Python/security matrix. Independent review selected `danvas-cli`
 as the distribution while preserving the `danvas` import and command. Sprint 22
-design review is complete; Group 0 characterization remains the implementation
-gate.
+design review and Sprint 21 Group 0 characterization are complete. Group 1
+project generalization is next.
 
 ## Accepted 0.19.0 Agent Interface Follow-On Design
 

@@ -330,8 +330,8 @@ inventory defaults, Panopto interrupted-bundle recovery, deprecations due in
 suite, POSIX/macOS and Python support, workflow hardening, secret scanning, and
 the cross-release beta audit. Independent review selected `danvas-cli` as the
 distribution while preserving the `danvas` import package and executable. The
-Sprint 22 design review is complete; the Group 0 characterization baseline
-remains the gate before implementation.
+Sprint 22 design review and Sprint 21 Group 0 characterization are complete.
+Group 1 project generalization is next.
 
 ## Accepted 0.19.0 Agent Interface Design
 
@@ -1667,8 +1667,7 @@ shipped in 0.14.0, Sprint 18 in 0.15.0, Sprint 19 in 0.16.0, and Sprint 20 in
 0.17.0. The accepted public-readiness program temporarily supersedes the prior
 feature order:
 
-1. Complete Sprint 21 Group 0 characterization, then implement the accepted
-   Sprint 21
+1. Implement the accepted Sprint 21
    [generalization, packaging, and public-beta gate](sprints/21-generalization-packaging.md)
    for 0.18.0.
 2. Revisit the Page asset adapter and grouped-case setup after the readiness

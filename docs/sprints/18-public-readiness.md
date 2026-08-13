@@ -3,8 +3,8 @@
 Status: Sprints 18 through 20 are released as `v0.15.x`, `v0.16.0`, and
 `v0.17.0`; their deferred and release-specific independent reviews are closed.
 Sprint 21's separate implementation specification was accepted on 2026-08-13;
-its Sprint 22 design-review gate is closed, while Group 0 characterization
-remains before implementation. No live Canvas mutation, publication, or history
+its Sprint 22 design review and Group 0 characterization gates are closed. Group
+1 implementation is next. No live Canvas mutation, publication, or history
 rewrite is authorized by this program note.
 
 ## Outcome

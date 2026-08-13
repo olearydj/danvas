@@ -3,8 +3,10 @@
 Status: design accepted on 2026-08-13 after independent review. Sprints 18
 through 20 are released as `v0.15.x`, `v0.16.0`, and `v0.17.0`. This sprint is
 the final generalization and packaging slice of the accepted public-readiness
-program and targets `0.18.0`. It does not authorize external publication,
-tagging, repository-setting changes, global installation, or live Canvas use.
+program and targets `0.18.0`. Group 0 characterization is complete at
+`ded6b2e`; runtime implementation has not begun. The sprint does not authorize
+external publication, tagging, repository-setting changes, global installation,
+or live Canvas use.
 
 The reviewed Python distribution name is `danvas-cli`. The Python import
 package and installed command remain `danvas`.
@@ -707,13 +709,15 @@ rewritten merely to claim beta readiness.
 3. [x] Review Sprint 22's design against the chosen distribution, source, help,
    and roster-deprecation surface; feed back only necessary Sprint 21 interface
    amendments.
-4. [ ] Freeze source, inventory, gradebook, Panopto interruption,
+4. [x] Freeze source, inventory, gradebook, Panopto interruption,
    deprecated-option, package, documentation, CI, and current-tree breadcrumb
    baselines.
 
-This group remains the implementation gate. The design decisions and Sprint 22
-review are closed, but implementation does not begin until the characterization
-baseline is also complete.
+Group 0 is complete. Commit `ded6b2e` adds an explicit public-boundary baseline
+and the missing executable Panopto interruption counterexample without changing
+runtime behavior. The exact gate passed 776 tests at 84.70% branch coverage,
+the authored-assets module floor, Ruff, ty, frozen-lock validation, and the
+dependency audit. Group 1 is the next implementation step.
 
 ### Group 1: project generalization
 
