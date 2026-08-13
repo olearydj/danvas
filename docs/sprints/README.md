@@ -262,3 +262,17 @@ The first independent review found and blocked a stale all-reuse transition
 defect. The corrected candidate restores that recovery path, replaces the
 self-derived transition tests with an independent contract and real execution
 matrix, and closes relative-import and async-complexity architecture blind spots.
+
+## Accepted 0.15.0-0.18.0 Public Readiness Program
+
+The accepted next hardening program is:
+
+- Sprints 18-21: [Public Readiness Program](18-public-readiness.md)
+
+The four releases evaluate the boundary between the mature internal
+implementation and a defensible public beta. They separate instance profiles,
+private artifacts, mutation reconciliation, and final generalization/packaging
+into bounded 0.15.0 through 0.18.0 slices. Only 0.18.0 may claim public beta
+after the cross-release threshold passes. Sprint 18 implementation is in
+progress; later slices still require their independent reviews. No publication,
+history rewrite, or live Canvas mutation is authorized.
