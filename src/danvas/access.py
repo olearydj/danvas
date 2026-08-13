@@ -124,6 +124,13 @@ def _policies() -> tuple[CommandAccessPolicy, ...]:
         _policy(
             "files compare", canvas_read=True, local_write=True, authoritative_verification=True
         ),
+        _policy(
+            "discussions score",
+            canvas_read=True,
+            local_write=True,
+            grade_affecting=True,
+            notification_or_visibility=True,
+        ),
     )
     local_write = tuple(
         _policy(
@@ -282,15 +289,6 @@ def _policies() -> tuple[CommandAccessPolicy, ...]:
             bare_canvas_mutation=True,
             destructive=True,
             authoritative_verification=True,
-        ),
-        _policy(
-            "discussions score",
-            canvas_read=True,
-            local_write=True,
-            canvas_mutation=True,
-            dry_run_kind=DryRunKind.CANVAS_MUTATION,
-            grade_affecting=True,
-            notification_or_visibility=True,
         ),
     )
     return (*local_only, *canvas_read, *local_write, *mutation)

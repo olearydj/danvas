@@ -527,7 +527,39 @@ def test_local_report_commands_define_report_options() -> None:
     assert expected <= option_names("discussions", "sync-prompts")
     score_options = option_names("discussions", "score")
     assert "--project-root" in score_options
+    assert "--dry-run" in score_options
+    assert "--upload" in score_options
+    assert "--apply" not in score_options
+    assert "--sleep-seconds" not in score_options
     assert (expected - {"--project-root"}).isdisjoint(score_options)
+
+
+def test_discussions_score_rejects_removed_sleep_option_before_context_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "danvas.cli.args_for",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "discussions",
+            "score",
+            "https://canvas.example/courses/101/discussion_topics/9",
+            "2",
+            "1",
+            "1",
+            "1",
+            "--sleep-seconds",
+            "0.1",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "No such option" in normalized_cli_output(result)
+    assert "context resolved" not in normalized_cli_output(result)
 
 
 def test_status_report_options() -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,8 +16,8 @@ from danvas.discussions import (
     discussion_prompt_records,
     parse_discussion_url,
     score_discussion,
-    upload_discussion_scores,
 )
+from danvas.grades import build_grade_post_plan, load_grade_rows
 
 
 class FakeDiscussionCourse:
@@ -79,6 +80,23 @@ def write_config(root: Path) -> None:
         '[canvas]\ncourse_id = 101\napi_url = "https://canvas.example.edu/"\n',
         encoding="utf-8",
     )
+
+
+def score_args(root: Path, **overrides: Any) -> SimpleNamespace:
+    defaults = {
+        "discussion_url": "https://canvas.example/courses/101/discussion_topics/9",
+        "points_per_original": 2.0,
+        "points_per_response": 1.0,
+        "max_original_comments": 1,
+        "max_responses": 1,
+        "output": None,
+        "overwrite": False,
+        "upload": False,
+        "dry_run": False,
+        "project_root": str(root),
+    }
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
 
 
 def test_parse_discussion_url_extracts_course_and_topic() -> None:
@@ -182,8 +200,15 @@ def test_discussions_score_writes_private_plan_without_student_stdout(
 ) -> None:
     write_config(tmp_path)
     topic = SimpleNamespace(id=9, title="Student Topic", assignment_id=77)
+    submission = SimpleNamespace(grade="1", score=1.0)
+    assignment = SimpleNamespace(
+        id=77,
+        name="Discussion Participation",
+        get_submission=lambda user_id, include=None: submission,
+    )
     course = SimpleNamespace(
         get_discussion_topic=lambda topic_id: topic,
+        get_assignment=lambda assignment_id: assignment,
         get_full_discussion_topic=lambda topic_id: {
             "participants": [{"id": 11, "display_name": "Student One"}],
             "view": [
@@ -202,25 +227,57 @@ def test_discussions_score_writes_private_plan_without_student_stdout(
     canvas = SimpleNamespace(get_course=lambda course_id: course)
     monkeypatch.setattr("danvas.discussions.canvas_from_args", lambda args: canvas)
 
-    command_discussions_score(
-        SimpleNamespace(
-            discussion_url="https://canvas.example/courses/101/discussion_topics/9",
-            points_per_original=2.0,
-            points_per_response=1.0,
-            max_original_comments=1,
-            max_responses=1,
-            output=None,
-            overwrite=False,
-            upload=False,
-            dry_run=False,
-            sleep_seconds=0,
-            project_root=str(tmp_path),
-        )
-    )
+    command_discussions_score(score_args(tmp_path))
 
     output = tmp_path / ".danvas/private/discussions/topic-9/grade-plan.csv"
-    assert "Student One" in output.read_text(encoding="utf-8")
-    assert output.with_name("grade-plan.csv.artifact.json").is_file()
+    with output.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows == [
+        {
+            "CanvasID": "11",
+            "Name": "Student One",
+            "Grade": "2.0",
+            "ExpectedCurrentGrade": "1",
+            "Comment": (
+                "Discussion score: 2.0/3.0\n"
+                "Original posts: 1 x 2.0 pts\n"
+                "Responses: 0 x 1.0 pts"
+            ),
+            "CommentAction": "append",
+            "OriginalComments": "1",
+            "Responses": "0",
+            "TotalPosts": "1",
+        }
+    ]
+    loaded_rows = load_grade_rows(output)
+    assert loaded_rows[0]["ExpectedCurrentGrade"] == "1"
+    grade_plan = build_grade_post_plan(
+        assignment,
+        loaded_rows,
+        expected_assignment_title="Discussion Participation",
+        current_user_id=None,
+    )
+    assert grade_plan["blockers"] == []
+    assert grade_plan["actions"][0]["blockers"] == []
+    assert grade_plan["actions"][0]["proposed_grade"] == "2.0"
+    assert grade_plan["actions"][0]["comment_action"] == "append"
+    sidecar = json.loads(
+        output.with_name("grade-plan.csv.artifact.json").read_text(encoding="utf-8")
+    )
+    assert sidecar["assignment_id"] == 77
+    assert sidecar["assignment_title"] == "Discussion Participation"
+    assert sidecar["scoring"] == {
+        "points_per_original": 2.0,
+        "points_per_response": 1.0,
+        "max_original_comments": 1,
+        "max_responses": 1,
+    }
+    assert sidecar["next_steps"]["preflight"][-2:] == [
+        "--expected-assignment-title",
+        "Discussion Participation",
+    ]
+    assert sidecar["next_steps"]["apply"][-1] == "--apply"
+    assert sidecar["sha256"]
     terminal = capsys.readouterr().out
     assert "Student One" not in terminal
     assert "Private response" not in terminal
@@ -396,52 +453,88 @@ def test_score_discussion_scores_inactive_students_zero() -> None:
     assert rows[0]["total_posts"] == 0
 
 
-def test_upload_discussion_scores_requires_graded_discussion() -> None:
-    topic = SimpleNamespace(assignment_id=None)
+def test_discussions_score_requires_graded_discussion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    topic = SimpleNamespace(id=9, title="Ungraded", assignment_id=None)
+    course = SimpleNamespace(get_discussion_topic=lambda topic_id: topic)
+    canvas = SimpleNamespace(get_course=lambda course_id: course)
+    monkeypatch.setattr("danvas.discussions.canvas_from_args", lambda args: canvas)
 
     with pytest.raises(SystemExit, match="not graded"):
-        upload_discussion_scores(SimpleNamespace(), topic, [], dry_run=False, sleep_seconds=0)
+        command_discussions_score(score_args(tmp_path))
 
 
-def test_upload_discussion_scores_posts_grades_and_comments() -> None:
-    edits: list[tuple[int, dict[str, Any]]] = []
-
-    class FakeAssignment:
-        def get_submission(self, user_id: int) -> Any:
-            class FakeSubmission:
-                def edit(self, **kwargs: Any) -> None:
-                    edits.append((user_id, kwargs))
-
-            return FakeSubmission()
-
-    course = SimpleNamespace(get_assignment=lambda assignment_id: FakeAssignment())
-    topic = SimpleNamespace(assignment_id=77)
-    rows = [{"author_id": 11, "name": "Student One", "score": 4.0, "comment": "Discussion score"}]
-
-    upload_discussion_scores(course, topic, rows, dry_run=False, sleep_seconds=0)
-
-    assert edits == [
-        (
-            11,
-            {
-                "submission": {"posted_grade": 4.0},
-                "comment": {"text_comment": "Discussion score"},
-            },
-        )
-    ]
-
-
-def test_upload_discussion_scores_dry_run_writes_nothing(
+def test_discussions_score_upload_writes_plan_and_exits_nonzero_without_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    class ExplodingAssignment:
-        def get_submission(self, user_id: int) -> Any:
-            raise AssertionError("dry run must not fetch submissions")
+    write_config(tmp_path)
 
-    course = SimpleNamespace(get_assignment=lambda assignment_id: ExplodingAssignment())
-    topic = SimpleNamespace(assignment_id=77)
-    rows = [{"author_id": 11, "name": "Student One", "score": 4.0, "comment": "c"}]
+    class ReadOnlySubmission:
+        grade = "3"
+        score = 3.0
 
-    upload_discussion_scores(course, topic, rows, dry_run=True, sleep_seconds=0)
+        def edit(self, **kwargs: Any) -> None:
+            raise AssertionError("discussions score must never mutate grades")
 
-    assert "Dry run complete: 1 succeeded, 0 failed" in capsys.readouterr().out
+    topic = SimpleNamespace(id=9, title="Student Topic", assignment_id=77)
+    assignment = SimpleNamespace(
+        id=77,
+        name="Discussion Participation",
+        get_submission=lambda user_id: ReadOnlySubmission(),
+    )
+    course = SimpleNamespace(
+        get_discussion_topic=lambda topic_id: topic,
+        get_assignment=lambda assignment_id: assignment,
+        get_full_discussion_topic=lambda topic_id: {"participants": [], "view": []},
+        get_enrollments=lambda **kwargs: [
+            SimpleNamespace(user_id=11, user={"name": "Student One"})
+        ],
+    )
+    canvas = SimpleNamespace(get_course=lambda course_id: course)
+    monkeypatch.setattr("danvas.discussions.canvas_from_args", lambda args: canvas)
+
+    with pytest.raises(SystemExit) as exc_info:
+        command_discussions_score(score_args(tmp_path, upload=True))
+
+    assert exc_info.value.code == 2
+    output = tmp_path / ".danvas/private/discussions/topic-9/grade-plan.csv"
+    assert output.is_file()
+    terminal = capsys.readouterr().out
+    assert "Direct discussion upload was removed" in terminal
+    assert "danvas grades post" in terminal
+    assert "--apply" in terminal
+    assert "Student One" not in terminal
+
+
+def test_discussions_score_dry_run_is_same_plan_only_behavior(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    topic = SimpleNamespace(id=9, title="Student Topic", assignment_id=77)
+    submission = SimpleNamespace(grade=None, score=None)
+    assignment = SimpleNamespace(
+        id=77,
+        name="Discussion Participation",
+        get_submission=lambda user_id: submission,
+    )
+    course = SimpleNamespace(
+        get_discussion_topic=lambda topic_id: topic,
+        get_assignment=lambda assignment_id: assignment,
+        get_full_discussion_topic=lambda topic_id: {"participants": [], "view": []},
+        get_enrollments=lambda **kwargs: [
+            SimpleNamespace(user_id=11, user={"name": "Student One"})
+        ],
+    )
+    canvas = SimpleNamespace(get_course=lambda course_id: course)
+    monkeypatch.setattr("danvas.discussions.canvas_from_args", lambda args: canvas)
+
+    command_discussions_score(score_args(tmp_path, dry_run=True))
+
+    output = tmp_path / ".danvas/private/discussions/topic-9/grade-plan.csv"
+    with output.open(newline="", encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle))
+    assert row["ExpectedCurrentGrade"] == ""

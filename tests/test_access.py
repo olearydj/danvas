@@ -47,6 +47,7 @@ CURRENT_DRY_RUN_DEFAULTS = {
     "recordings panopto-captions": False,
     "discussions score": False,
 }
+PLAN_ONLY_DRY_RUN_COMMANDS = {"discussions score"}
 
 CURRENT_MUTATION_CALLS = Counter(
     {
@@ -58,7 +59,6 @@ CURRENT_MUTATION_CALLS = Counter(
         ("discussion_sources.py", "command_discussions_create", "create_discussion_topic"): 1,
         ("discussion_sources.py", "command_discussions_update", "topic.update"): 1,
         ("discussion_sources.py", "post_seed_replies", "post_entry"): 1,
-        ("discussions.py", "upload_discussion_scores", "edit"): 1,
         ("files.py", "command_files_upload", "upload"): 1,
         ("grades.py", "apply_grade_action", "edit"): 2,
         ("grades.py", "edit_submission_comment", "edit_comment"): 1,
@@ -237,9 +237,9 @@ def test_access_policy_category_counts_match_reviewed_inventory() -> None:
         and not policy.canvas_mutation
         and policy.dry_run_kind is DryRunKind.NONE
         for policy in policies
-    ) == 25
+    ) == 26
     assert sum(policy.dry_run_kind is DryRunKind.LOCAL_WRITE for policy in policies) == 4
-    assert sum(policy.canvas_mutation for policy in policies) == 16
+    assert sum(policy.canvas_mutation for policy in policies) == 15
     assert sum(policy.bare_canvas_mutation for policy in policies) == 2
 
 
@@ -260,7 +260,7 @@ def test_current_dry_run_surface_and_defaults_are_characterized() -> None:
         name
         for name, policy in ACCESS_POLICIES.items()
         if policy.dry_run_kind is not DryRunKind.NONE
-    } == set(actual)
+    } | PLAN_ONLY_DRY_RUN_COMMANDS == set(actual)
 
 
 def test_current_special_mutation_guards_are_characterized() -> None:
@@ -273,7 +273,11 @@ def test_current_special_mutation_guards_are_characterized() -> None:
     assert option(overrides, "--confirm").default == ""
     assert option(commands["assignments upsert"], "--confirm").default == ""
     assert option(commands["discussions score"], "--upload").default is False
-    assert option(commands["discussions score"], "--sleep-seconds").default == 0.3
+    assert all(
+        "--sleep-seconds" not in (*param.opts, *param.secondary_opts)
+        for param in commands["discussions score"].params
+        if isinstance(param, click.Option)
+    )
     assert option(commands["files upload"], "--on-duplicate").default == "overwrite"
 
 

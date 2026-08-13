@@ -3715,7 +3715,9 @@ def recordings_panopto_captions(
 
 @discussions_app.command(
     "score",
-    help="Score student discussion activity from post/reply counts and optionally upload to the graded discussion.",
+    help=(
+        "Score discussion activity and write a private grade plan for the grades post transaction."
+    ),
 )
 def discussions_score(
     discussion_url: Annotated[
@@ -3742,19 +3744,20 @@ def discussions_score(
     upload: Annotated[
         bool,
         typer.Option(
-            "--upload", help="Post scores and comments to the discussion's Canvas assignment."
+            "--upload",
+            help=(
+                "Deprecated migration spelling: write the plan, print the grades post replacement, "
+                "and exit nonzero. Never uploads."
+            ),
         ),
     ] = False,
     dry_run: Annotated[
         bool,
         typer.Option(
             "--dry-run",
-            help="Show upload actions without writing to Canvas. Implies upload preview.",
+            help="Explicit spelling for the default plan-only behavior.",
         ),
     ] = False,
-    sleep_seconds: Annotated[
-        float, typer.Option("--sleep-seconds", help="Delay between Canvas writes.")
-    ] = 0.3,
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
@@ -3777,7 +3780,6 @@ def discussions_score(
             overwrite=overwrite,
             upload=upload,
             dry_run=dry_run,
-            sleep_seconds=sleep_seconds,
             project_root=str(project_root),
             profile=profile,
             api_url=api_url,

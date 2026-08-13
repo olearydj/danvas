@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-import time
+import shlex
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -20,11 +20,11 @@ from danvas.artifacts import (
 )
 from danvas.auth import canvas_from_args
 from danvas.frontmatter import parse_frontmatter
+from danvas.grades import current_grade
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.utils import (
     canvas_object_to_dict,
     html_to_text,
-    print_mutation_banner,
     slugify,
 )
 
@@ -121,6 +121,11 @@ def command_discussions_score(args: Any) -> None:
     canvas = canvas_from_args(args)
     course = canvas.get_course(course_id)
     topic = course.get_discussion_topic(discussion_id)
+    assignment_id = getattr(topic, "assignment_id", None)
+    if not assignment_id:
+        raise SystemExit("Discussion is not graded and has no assignment_id.")
+    assignment = course.get_assignment(assignment_id)
+    assignment_title = str(getattr(assignment, "name", "") or "")
     posts = discussion_posts(course, topic)
     students = student_enrollments(course)
     scored = score_discussion(
@@ -131,42 +136,93 @@ def command_discussions_score(args: Any) -> None:
         args.max_original_comments,
         args.max_responses,
     )
+    grade_rows = discussion_grade_plan_rows(assignment, scored)
     fieldnames = [
-        "author_id",
-        "name",
-        "score",
-        "original_comments",
-        "responses",
-        "total_posts",
-        "comment",
-        "upload_status",
-        "error",
+        "CanvasID",
+        "Name",
+        "Grade",
+        "ExpectedCurrentGrade",
+        "Comment",
+        "CommentAction",
+        "OriginalComments",
+        "Responses",
+        "TotalPosts",
     ]
+    next_steps = discussion_grade_next_steps(
+        course_id=course_id,
+        assignment_id=int(assignment_id),
+        assignment_title=assignment_title,
+        plan_path=resolved.path,
+    )
     write_private_rows(
         resolved.path,
-        scored,
+        grade_rows,
         fieldnames,
         command="discussions score",
         overwrite=bool(getattr(args, "overwrite", False)),
-        sidecar_fields={"course_id": course_id, "discussion_id": discussion_id},
+        sidecar_fields={
+            "course_id": course_id,
+            "discussion_id": discussion_id,
+            "assignment_id": int(assignment_id),
+            "assignment_title": assignment_title,
+            "scoring": {
+                "points_per_original": args.points_per_original,
+                "points_per_response": args.points_per_response,
+                "max_original_comments": args.max_original_comments,
+                "max_responses": args.max_responses,
+            },
+            "next_steps": next_steps,
+        },
     )
-    failed = 0
-    if args.upload or args.dry_run:
-        _, failed = upload_discussion_scores(
-            course, topic, scored, dry_run=args.dry_run, sleep_seconds=args.sleep_seconds
-        )
-        write_private_rows(
-            resolved.path,
-            scored,
-            fieldnames,
-            command="discussions score",
-            overwrite=True,
-            sidecar_fields={"course_id": course_id, "discussion_id": discussion_id},
-        )
-    print(f"Scored: {len(scored)}; upload failures: {failed}")
+    print(f"Scored: {len(scored)}; grade plan rows: {len(grade_rows)}")
     print(f"Private artifact: {resolved.path}")
-    if failed:
-        raise SystemExit(1)
+    if bool(getattr(args, "upload", False)):
+        print("Direct discussion upload was removed; use the grade transaction instead.")
+        print(f"Replacement: {shlex.join(next_steps['apply'])}")
+        raise SystemExit(2)
+
+
+def discussion_grade_plan_rows(
+    assignment: Any, scored: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in scored:
+        canvas_id = int(row["author_id"])
+        submission = assignment.get_submission(canvas_id)
+        expected = current_grade(submission)
+        rows.append(
+            {
+                "CanvasID": canvas_id,
+                "Name": row["name"],
+                "Grade": row["score"],
+                "ExpectedCurrentGrade": "" if expected is None else expected,
+                "Comment": row["comment"],
+                "CommentAction": "append",
+                "OriginalComments": row["original_comments"],
+                "Responses": row["responses"],
+                "TotalPosts": row["total_posts"],
+            }
+        )
+    return rows
+
+
+def discussion_grade_next_steps(
+    *, course_id: int, assignment_id: int, assignment_title: str, plan_path: Path
+) -> dict[str, list[str]]:
+    preflight = [
+        "danvas",
+        "grades",
+        "post",
+        "--course-id",
+        str(course_id),
+        "--assignment-id",
+        str(assignment_id),
+        "--grades-csv",
+        str(plan_path),
+        "--expected-assignment-title",
+        assignment_title,
+    ]
+    return {"preflight": preflight, "apply": [*preflight, "--apply"]}
 
 
 def _refuse_discussion_target(path: Path, overwrite: bool) -> None:
@@ -541,44 +597,3 @@ def score_discussion(
         )
     rows.sort(key=lambda row: row["name"])
     return rows
-
-
-def upload_discussion_scores(
-    course: Any, topic: Any, rows: list[dict[str, Any]], *, dry_run: bool, sleep_seconds: float
-) -> tuple[int, int]:
-    assignment_id = getattr(topic, "assignment_id", None)
-    if not assignment_id:
-        raise SystemExit("Discussion is not graded and has no assignment_id.")
-    if not dry_run:
-        print_mutation_banner(
-            "post discussion scores",
-            {
-                "course": getattr(course, "id", ""),
-                "assignment": assignment_id,
-                "students": len(rows),
-            },
-        )
-    assignment = course.get_assignment(assignment_id)
-    success = failed = 0
-    for row in rows:
-        if dry_run:
-            row["upload_status"] = "planned"
-            row["error"] = ""
-            success += 1
-            continue
-        try:
-            assignment.get_submission(row["author_id"]).edit(
-                submission={"posted_grade": row["score"]},
-                comment={"text_comment": row["comment"]},
-            )
-            row["upload_status"] = "uploaded"
-            row["error"] = ""
-            success += 1
-            time.sleep(sleep_seconds)
-        except Exception as exc:  # noqa: BLE001
-            failed += 1
-            row["upload_status"] = "failed"
-            row["error"] = f"{type(exc).__name__}"
-    label = "Dry run" if dry_run else "Upload"
-    print(f"{label} complete: {success} succeeded, {failed} failed")
-    return success, failed
