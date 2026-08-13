@@ -239,6 +239,47 @@ def test_download_lti_caption_writes_sanitized_caption_file(tmp_path: Path) -> N
     }
 
 
+def test_interrupted_bundle_currently_redownloads_with_unique_suffix(tmp_path: Path) -> None:
+    web = FakePanoptoSession(
+        caption_content=b"caption text\n",
+        caption_headers={"content-disposition": 'attachment; filename="Lecture One.txt"'},
+    )
+    session = {
+        "SessionID": "session-one",
+        "SessionName": "Lecture 1",
+        "DeliveryID": "delivery-one",
+        "HasCaptions": True,
+        "StartTime": "2026-06-01T18:00:00",
+    }
+
+    interrupted_path = download_lti_caption(
+        web,
+        "https://panopto.example",
+        session,
+        output_dir=tmp_path,
+        language="English_USA",
+    )
+    assert not (tmp_path / "artifact-manifest.json").exists()
+
+    write_caption_outputs(
+        web,
+        [session],
+        "https://panopto.example",
+        output_dir=tmp_path,
+        dry_run=False,
+        language="English_USA",
+        course_id=101,
+        panopto_tool={"id": 303, "name": "Panopto Video"},
+    )
+
+    manifest = json.loads((tmp_path / "artifact-manifest.json").read_text(encoding="utf-8"))
+    retried_name = manifest["sessions"][0]["caption_path"]
+    assert retried_name == f"{interrupted_path.stem}-2{interrupted_path.suffix}"
+    assert interrupted_path.name not in manifest["files"]
+    assert retried_name in manifest["files"]
+    assert len(web.get_calls) == 2
+
+
 def test_write_caption_outputs_dry_run_writes_manifests_without_downloading(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
