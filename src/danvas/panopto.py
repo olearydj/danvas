@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import json
+import csv
+import io
 import re
 from collections.abc import Iterable
 from datetime import datetime
@@ -13,8 +14,15 @@ from urllib.parse import unquote, urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from danvas.artifacts import (
+    ensure_private_directory,
+    resolve_private_path,
+    warn_if_external_private_path,
+    write_private_json,
+    write_private_pair,
+    write_private_text,
+)
 from danvas.auth import resolve_api_key
-from danvas.utils import write_rows
 
 
 class HttpSession(Protocol):
@@ -47,6 +55,7 @@ class HttpResponse(Protocol):
     @property
     def headers(self) -> Any: ...
 
+
 CAPTION_MANIFEST_FIELDS = [
     "session_id",
     "name",
@@ -54,7 +63,6 @@ CAPTION_MANIFEST_FIELDS = [
     "duration",
     "folder_id",
     "folder_name",
-    "viewer_url",
     "has_caption",
     "caption_path",
     "status",
@@ -62,6 +70,14 @@ CAPTION_MANIFEST_FIELDS = [
 
 
 def command_panopto_captions(args: Any) -> None:
+    resolved = resolve_private_path(
+        explicit=getattr(args, "output_dir", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative="recordings/panopto-captions",
+        option_name="--output-dir",
+    )
+    warn_if_external_private_path(resolved)
+    preflight_caption_bundle(resolved.path, overwrite=bool(getattr(args, "overwrite", False)))
     api_key, provider_name = resolve_api_key(
         provider=args.secret_provider,
         op_reference=args.op_reference,
@@ -92,11 +108,12 @@ def command_panopto_captions(args: Any) -> None:
         web,
         sessions,
         panopto_base_url,
-        output_dir=Path(args.output_dir),
+        output_dir=resolved.path,
         dry_run=args.dry_run,
         language=args.caption_language,
         course_id=args.course_id,
         panopto_tool=panopto_tool,
+        overwrite=bool(getattr(args, "overwrite", False)),
     )
 
 
@@ -288,11 +305,13 @@ def write_caption_outputs(
     language: str,
     course_id: int,
     panopto_tool: dict[str, Any],
+    overwrite: bool = False,
 ) -> None:
     if not sessions:
         raise SystemExit("No Panopto sessions found.")
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+    ensure_private_directory(output_dir)
+    preflight_caption_bundle(output_dir, overwrite=overwrite)
     rows: list[dict[str, Any]] = []
     for session in sessions:
         record = lti_session_record(session)
@@ -306,13 +325,25 @@ def write_caption_outputs(
                 session,
                 output_dir=output_dir,
                 language=language,
+                overwrite=overwrite,
             )
-            record["caption_path"] = caption_path.as_posix()
+            record["caption_path"] = caption_path.name
             record["status"] = "downloaded"
         rows.append(record)
-        print(f"{record['status']}: {record['name']} ({record['session_id']})")
 
-    write_manifest(output_dir, course_id, panopto_base_url, panopto_tool, dry_run, rows)
+    write_manifest(
+        output_dir,
+        course_id,
+        panopto_base_url,
+        panopto_tool,
+        dry_run,
+        rows,
+        overwrite=overwrite,
+    )
+    downloaded = sum(row["status"] == "downloaded" for row in rows)
+    available = sum(bool(row["has_caption"]) for row in rows)
+    print(f"Sessions: {len(rows)}; captions available: {available}; downloaded: {downloaded}")
+    print(f"Private artifact bundle: {output_dir}")
 
 
 def lti_session_record(session: dict[str, Any]) -> dict[str, Any]:
@@ -323,7 +354,6 @@ def lti_session_record(session: dict[str, Any]) -> dict[str, Any]:
         "duration": session.get("Duration") or "",
         "folder_id": session.get("FolderID") or "",
         "folder_name": session.get("FolderName") or "",
-        "viewer_url": session.get("ViewerUrl") or "",
     }
 
 
@@ -334,6 +364,7 @@ def download_lti_caption(
     *,
     output_dir: Path,
     language: str,
+    overwrite: bool = False,
 ) -> Path:
     delivery_id = session.get("DeliveryID")
     if not delivery_id:
@@ -351,7 +382,13 @@ def download_lti_caption(
     filename = caption_filename_from_response(response) or "captions.txt"
     prefix = parse_panopto_date(session.get("StartTime")) or str(session.get("SessionID") or "")
     target = unique_path(output_dir / safe_filename(f"{prefix}-{filename}"))
-    target.write_bytes(response.content)
+    write_private_pair(
+        target,
+        response.content,
+        command="recordings panopto-captions",
+        overwrite=overwrite,
+        sidecar_fields={"session_id": session.get("SessionID") or ""},
+    )
     return target
 
 
@@ -405,7 +442,14 @@ def write_manifest(
     panopto_tool: dict[str, Any],
     dry_run: bool,
     rows: list[dict[str, Any]],
+    *,
+    overwrite: bool,
 ) -> None:
+    files = ["manifest.csv"]
+    for row in rows:
+        caption_path = str(row.get("caption_path") or "")
+        if caption_path:
+            files.extend([caption_path, f"{caption_path}.artifact.json"])
     manifest = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "course_id": course_id,
@@ -413,15 +457,39 @@ def write_manifest(
         "panopto_tool": {
             "id": panopto_tool.get("id"),
             "name": panopto_tool.get("name"),
-            "domain": panopto_tool.get("domain"),
-            "url": panopto_tool.get("url"),
         },
         "dry_run": dry_run,
         "sessions": rows,
+        "files": files,
     }
-    manifest_path = output_dir / "manifest.json"
+    manifest_path = output_dir / "artifact-manifest.json"
     csv_path = output_dir / "manifest.csv"
-    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
-    write_rows(csv_path, rows, CAPTION_MANIFEST_FIELDS)
-    print(f"Wrote {manifest_path}")
-    print(f"Wrote {csv_path}")
+    write_private_text(
+        csv_path,
+        render_caption_csv(rows),
+        overwrite=overwrite,
+    )
+    write_private_json(
+        manifest_path,
+        manifest,
+        command="recordings panopto-captions",
+        overwrite=overwrite,
+    )
+
+
+def render_caption_csv(rows: list[dict[str, Any]]) -> str:
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=CAPTION_MANIFEST_FIELDS)
+    writer.writeheader()
+    writer.writerows(rows)
+    return stream.getvalue()
+
+
+def preflight_caption_bundle(output_dir: Path, *, overwrite: bool) -> None:
+    if output_dir.is_symlink():
+        raise SystemExit(f"Refusing private artifact symlink: {output_dir}")
+    if overwrite:
+        return
+    targets = (output_dir / "artifact-manifest.json", output_dir / "manifest.csv")
+    if any(path.exists() or path.is_symlink() for path in targets):
+        raise SystemExit(f"Refusing to overwrite existing private caption bundle: {output_dir}")

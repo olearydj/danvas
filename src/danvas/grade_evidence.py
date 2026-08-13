@@ -8,9 +8,14 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from danvas.artifacts import (
+    ensure_private_directory,
+    write_private_json,
+    write_private_pair,
+    write_private_rows,
+)
 from danvas.reports import ReportRun, create_report_run, safe_error, should_write_report_run
 from danvas.sanitize import contains_sensitive_text
-from danvas.utils import mark_private, write_json, write_rows
 
 SUCCESS_OUTCOMES = {"verified_applied", "already_applied"}
 HALT_OUTCOMES = {"partially_applied", "applied_unverified", "indeterminate"}
@@ -250,9 +255,7 @@ def safe_observation(observation: dict[str, Any]) -> dict[str, Any]:
         ],
         "posted_at_available": bool(observation.get("posted_at_available")),
         "posted_at": observation.get("posted_at"),
-        "assignment_visible_available": bool(
-            observation.get("assignment_visible_available")
-        ),
+        "assignment_visible_available": bool(observation.get("assignment_visible_available")),
         "assignment_visible": observation.get("assignment_visible"),
     }
 
@@ -264,6 +267,7 @@ def write_recovery_artifacts(
     mode: str,
     actions: list[dict[str, Any]],
     results: list[dict[str, Any]],
+    private_dir: Path | None,
 ) -> list[Path]:
     action_by_id: dict[int, dict[str, Any]] = {}
     for action in actions:
@@ -282,7 +286,7 @@ def write_recovery_artifacts(
         "private_student_data": True,
         "generated_at": dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z"),
         "mode": mode,
-        "source": str(source),
+        "source_name": source.name,
         "rows": recovery_rows,
     }
     csv_rows = [
@@ -293,36 +297,41 @@ def write_recovery_artifacts(
     paths: list[Path] = []
     if report_run is not None:
         paths.append(report_run.write_json("grades-recovery.json", payload))
-        paths.append(
-            report_run.write_text("grades-recovery.md", render_recovery_markdown(payload))
-        )
+        paths.append(report_run.write_text("grades-recovery.md", render_recovery_markdown(payload)))
         if csv_rows:
             fields = POST_RECOVERY_FIELDS if mode == "post" else CLEAR_RECOVERY_FIELDS
             paths.append(report_run.write_rows("grades-recovery-forward.csv", csv_rows, fields))
         print_recovery_paths(paths)
         return paths
 
-    base = collision_safe_recovery_base(source)
+    if private_dir is None:
+        raise RuntimeError("Grade recovery evidence requires a private destination.")
+    directory = ensure_private_directory(private_dir)
+    base = collision_safe_recovery_base(directory)
     json_path = Path(f"{base}.json")
     md_path = Path(f"{base}.md")
-    write_json(json_path, payload)
-    md_path.write_text(render_recovery_markdown(payload), encoding="utf-8")
-    mark_private(json_path)
-    mark_private(md_path)
+    write_private_json(json_path, payload, command="grades recovery")
+    write_private_pair(
+        md_path,
+        render_recovery_markdown(payload).encode("utf-8"),
+        command="grades recovery",
+    )
     paths.extend([json_path, md_path])
     if csv_rows:
         csv_path = Path(f"{base}.forward.csv")
         fields = POST_RECOVERY_FIELDS if mode == "post" else CLEAR_RECOVERY_FIELDS
-        write_rows(csv_path, csv_rows, fields)
-        mark_private(csv_path)
+        write_private_rows(
+            csv_path,
+            csv_rows,
+            fields,
+            command="grades recovery",
+        )
         paths.append(csv_path)
     print_recovery_paths(paths)
     return paths
 
 
-def recovery_record(
-    action: dict[str, Any], result: dict[str, Any], *, mode: str
-) -> dict[str, Any]:
+def recovery_record(action: dict[str, Any], result: dict[str, Any], *, mode: str) -> dict[str, Any]:
     observed = result.get("observed") or {}
     authoritative = bool(observed.get("readback_available"))
     record = {
@@ -351,9 +360,7 @@ def recovery_record(
         "forward_recovery_row": None,
     }
     if authoritative:
-        record["forward_recovery_row"] = candidate_recovery_row(
-            action, result, mode=mode
-        )
+        record["forward_recovery_row"] = candidate_recovery_row(action, result, mode=mode)
     return record
 
 
@@ -438,9 +445,7 @@ def render_grade_markdown(report: dict[str, Any]) -> str:
     if rows:
         lines.extend(["", "## Targeted Rows", ""])
         for row in rows:
-            outcome = row.get("outcome") or (
-                "blocked" if row.get("blockers") else "planned"
-            )
+            outcome = row.get("outcome") or ("blocked" if row.get("blockers") else "planned")
             lines.append(f"- {row.get('name') or row.get('canvas_id')}: {outcome}")
     lines.extend(["", "This report contains private student grade evidence."])
     return "\n".join(lines) + "\n"
@@ -470,9 +475,7 @@ def render_recovery_markdown(payload: dict[str, Any]) -> str:
 
 def recovery_observation(observation: dict[str, Any]) -> dict[str, Any]:
     return {
-        key: value
-        for key, value in observation.items()
-        if key not in {"comments", "error"}
+        key: value for key, value in observation.items() if key not in {"comments", "error"}
     } | {
         "comments": [recovery_comment(comment) for comment in observation.get("comments") or []],
         "error": safe_error(str(observation["error"])) if observation.get("error") else None,
@@ -480,9 +483,9 @@ def recovery_observation(observation: dict[str, Any]) -> dict[str, Any]:
 
 
 def recovery_comment(comment: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: value for key, value in comment.items() if key != "comment"
-    } | {"comment": recovery_text(comment.get("comment"))}
+    return {key: value for key, value in comment.items() if key != "comment"} | {
+        "comment": recovery_text(comment.get("comment"))
+    }
 
 
 def recovery_text(value: Any) -> str | dict[str, Any]:
@@ -496,17 +499,24 @@ def recovery_text(value: Any) -> str | dict[str, Any]:
 
 
 def print_recovery_paths(paths: list[Path]) -> None:
-    for path in paths:
-        print(f"Wrote private recovery evidence: {path}")
+    if paths:
+        print(f"Private recovery evidence: {paths[0].parent}")
 
 
-def collision_safe_recovery_base(source: Path) -> Path:
+def collision_safe_recovery_base(directory: Path) -> Path:
     stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
-    base = source.parent / f"{source.stem}.recovery-{stamp}"
+    base = directory / f"recovery-{stamp}"
     suffix = 0
-    while any(Path(f"{base}{ending}").exists() for ending in (".json", ".md", ".forward.csv")):
+    endings = (
+        ".json",
+        ".md",
+        ".md.artifact.json",
+        ".forward.csv",
+        ".forward.csv.artifact.json",
+    )
+    while any(Path(f"{base}{ending}").exists() for ending in endings):
         suffix += 1
-        base = source.parent / f"{source.stem}.recovery-{stamp}-{suffix:02d}"
+        base = directory / f"recovery-{stamp}-{suffix:02d}"
     return base
 
 

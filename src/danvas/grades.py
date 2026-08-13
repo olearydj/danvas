@@ -12,6 +12,13 @@ from typing import Any
 
 from canvasapi.util import combine_kwargs
 
+from danvas.artifacts import (
+    ensure_private_directory,
+    resolve_private_path,
+    warn_if_external_private_path,
+    write_private_json,
+    write_private_rows,
+)
 from danvas.auth import canvas_from_args
 from danvas.grade_evidence import (
     HALT_OUTCOMES,
@@ -28,11 +35,9 @@ from danvas.grade_evidence import (
     write_recovery_artifacts,
 )
 from danvas.reports import safe_error
-from danvas.utils import mark_private, print_mutation_banner, write_json, write_rows
+from danvas.utils import print_mutation_banner
 
-DEDUCTION_RE = re.compile(
-    r"(?i)\b(\d+(?:\.\d+)?)\s*(?:-|\s)?points?\s+additional\s+deduction\b"
-)
+DEDUCTION_RE = re.compile(r"(?i)\b(\d+(?:\.\d+)?)\s*(?:-|\s)?points?\s+additional\s+deduction\b")
 ROLLBACK_FIELDS = [
     "CanvasID",
     "Name",
@@ -49,6 +54,7 @@ def command_grades_post(args: Any) -> None:
         print_offline_preview(rows)
         return
 
+    rollback_dir = None if args.dry_run else resolve_grade_rollback_directory(args)
     report_run = make_grade_report_run(args, command="grades post", source=source)
     try:
         canvas = canvas_from_args(args)
@@ -84,7 +90,11 @@ def command_grades_post(args: Any) -> None:
         return
 
     rollback_paths = capture_grade_rollback(
-        source, plan, args=args, report_run=report_run, command="grades post"
+        source,
+        plan,
+        rollback_dir=rollback_dir,
+        report_run=report_run,
+        command="grades post",
     )
     print_mutation_banner(
         "post grades",
@@ -93,18 +103,17 @@ def command_grades_post(args: Any) -> None:
             "assignment": args.assignment_id,
             "assignment_title": plan["assignment_title"],
             "rows": len(rows),
-            "rollback": rollback_paths[0],
+            "rollback_directory": rollback_paths[0].parent,
         },
     )
-    results = apply_grade_plan(
-        assignment, plan, mode="post", sleep_seconds=args.sleep_seconds
-    )
+    results = apply_grade_plan(assignment, plan, mode="post", sleep_seconds=args.sleep_seconds)
     recovery_paths, recovery_error = capture_grade_recovery(
         report_run=report_run,
         source=source,
         mode="post",
         actions=plan["actions"],
         results=results,
+        private_dir=rollback_dir,
     )
     report = build_grade_result_report(
         plan,
@@ -118,9 +127,7 @@ def command_grades_post(args: Any) -> None:
     success = recovery_error is None and all(
         result["outcome"] in SUCCESS_OUTCOMES for result in results
     )
-    write_grade_report(
-        report_run, report, artifact="grades-result", success=success
-    )
+    write_grade_report(report_run, report, artifact="grades-result", success=success)
     if not success:
         raise SystemExit(1)
 
@@ -128,6 +135,7 @@ def command_grades_post(args: Any) -> None:
 def command_grades_clear(args: Any) -> None:
     source = Path(args.grades_csv)
     rows = load_clear_rows(source)
+    rollback_dir = None if args.dry_run else resolve_grade_rollback_directory(args)
     report_run = make_grade_report_run(args, command="grades clear", source=source)
     try:
         canvas = canvas_from_args(args)
@@ -163,7 +171,11 @@ def command_grades_clear(args: Any) -> None:
         return
 
     rollback_paths = capture_grade_rollback(
-        source, plan, args=args, report_run=report_run, command="grades clear"
+        source,
+        plan,
+        rollback_dir=rollback_dir,
+        report_run=report_run,
+        command="grades clear",
     )
     print_mutation_banner(
         "clear grades/comments",
@@ -172,18 +184,17 @@ def command_grades_clear(args: Any) -> None:
             "assignment": args.assignment_id,
             "assignment_title": plan["assignment_title"],
             "rows": len(rows),
-            "rollback": rollback_paths[0],
+            "rollback_directory": rollback_paths[0].parent,
         },
     )
-    results = apply_grade_plan(
-        assignment, plan, mode="clear", sleep_seconds=args.sleep_seconds
-    )
+    results = apply_grade_plan(assignment, plan, mode="clear", sleep_seconds=args.sleep_seconds)
     recovery_paths, recovery_error = capture_grade_recovery(
         report_run=report_run,
         source=source,
         mode="clear",
         actions=plan["actions"],
         results=results,
+        private_dir=rollback_dir,
     )
     report = build_grade_result_report(
         plan,
@@ -197,14 +208,23 @@ def command_grades_clear(args: Any) -> None:
     success = recovery_error is None and all(
         result["outcome"] in SUCCESS_OUTCOMES for result in results
     )
-    write_grade_report(
-        report_run, report, artifact="grades-result", success=success
-    )
+    write_grade_report(report_run, report, artifact="grades-result", success=success)
     if not success:
         raise SystemExit(1)
 
 
 def command_grades_comments(args: Any) -> None:
+    resolved = resolve_private_path(
+        explicit=getattr(args, "output", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative=(
+            f"grades/assignment-{args.assignment_id}/user-{args.canvas_id}/comments.json"
+        ),
+        option_name="--output",
+    )
+    warn_if_external_private_path(resolved)
+    if resolved.path.exists() and not getattr(args, "overwrite", False):
+        raise SystemExit(f"Refusing to overwrite existing private output: {resolved.path}")
     canvas = canvas_from_args(args)
     current_user_id = current_user_id_for(canvas)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
@@ -215,16 +235,24 @@ def command_grades_comments(args: Any) -> None:
         "assignment_title": str(getattr(assignment, "name", "") or ""),
         "canvas_id": args.canvas_id,
         "comments": [
-            {**comment_record(comment), "owned_by_current_user": comment_author_id(comment) == current_user_id}
+            {
+                **comment_record(comment),
+                "owned_by_current_user": comment_author_id(comment) == current_user_id,
+            }
             for comment in submission_comments(submission)
         ],
     }
-    output = Path(args.output)
-    if output.exists() and not getattr(args, "overwrite", False):
-        raise SystemExit(f"Refusing to overwrite existing output: {output}")
-    write_json(output, payload)
-    mark_private(output)
-    print(f"Wrote {output}")
+    write_private_json(
+        resolved.path,
+        payload,
+        command="grades comments",
+        overwrite=bool(getattr(args, "overwrite", False)),
+    )
+    bounded_root = (
+        resolved.path.parent.parent if resolved.used_project_default else resolved.path.parent
+    )
+    print(f"Comments exported: {len(payload['comments'])}")
+    print(f"Private artifact root: {bounded_root}")
 
 
 def command_grades_verify(args: Any) -> None:
@@ -243,8 +271,6 @@ def command_grades_verify(args: Any) -> None:
             comment = row.get("Comment", "").strip()
             comment_ok = not comment or comment_exists(submission, comment)
             desired_verified = grade_ok and comment_ok
-            status = "OK" if desired_verified else "MISMATCH"
-            print(f"  {row.get('Name') or row['CanvasID']}: {status}")
             results.append(
                 {
                     "canvas_id": int(row["CanvasID"]),
@@ -278,6 +304,7 @@ def command_grades_verify(args: Any) -> None:
     )
     print_release_state(release_state)
     failures = sum(not result["desired_verified"] for result in results)
+    print(f"Verified: {len(results) - failures}; mismatches: {failures}")
     report = {
         "command": "grades verify",
         "status": "verified" if not failures else "mismatch",
@@ -322,7 +349,9 @@ def build_grade_post_plan(
                 f"Expected current grade {expected!r}, found {current_grade(submission)!r}."
             )
         comment = row.get("Comment", "").strip()
-        comment_action = (row.get("CommentAction") or ("append" if comment else "none")).strip().lower()
+        comment_action = (
+            (row.get("CommentAction") or ("append" if comment else "none")).strip().lower()
+        )
         action["comment_action"] = comment_action
         action["comment"] = comment
         if comment_action not in {"none", "append", "replace_exact"}:
@@ -371,7 +400,10 @@ def build_grade_clear_plan(
             )
         action["clear_grade"] = parse_bool(row.get("ClearGrade", "true"), default=True)
         action["proposed_grade"] = "" if action["clear_grade"] else current_grade(submission)
-        action["grade_change"] = action["clear_grade"] and current_grade(submission) not in {None, ""}
+        action["grade_change"] = action["clear_grade"] and current_grade(submission) not in {
+            None,
+            "",
+        }
         comment_id = row.get("CommentID", "").strip()
         exact_text = row.get("Comment", "").strip()
         action["comment"] = exact_text
@@ -414,7 +446,9 @@ def base_action(row: dict[str, str], submission: Any) -> dict[str, Any]:
         "name": row.get("Name", "").strip(),
         "current_grade": current_grade(submission),
         "current_score": getattr(submission, "score", None),
-        "current_comments": [comment_record(comment) for comment in submission_comments(submission)],
+        "current_comments": [
+            comment_record(comment) for comment in submission_comments(submission)
+        ],
         "prewrite_observation": observe_submission(submission),
         "submission": submission,
         "blockers": [],
@@ -460,12 +494,10 @@ def apply_grade_plan(
     results: list[dict[str, Any]] = []
     halted = False
     for action in plan["actions"]:
-        label = action_label(action)
         if halted:
             result = base_result(action, "not_attempted")
             result["phase"] = "halted"
             results.append(result)
-            print(f"  {label}: not attempted after an unsafe prior outcome")
             continue
         if not action["grade_change"] and not action["comment_change"]:
             result = base_result(action, "already_applied")
@@ -473,7 +505,6 @@ def apply_grade_plan(
             result["desired_verified"] = True
             result["phase"] = "preflight"
             results.append(result)
-            print(f"  {label}: already applied")
             continue
 
         error: Exception | None = None
@@ -505,9 +536,7 @@ def apply_grade_plan(
             )
         else:
             effect_status = classify_action_effects(action, observed, mode=mode)
-            outcome, detail = classify_effect_outcome(
-                effect_status, had_error=error is not None
-            )
+            outcome, detail = classify_effect_outcome(effect_status, had_error=error is not None)
             result = base_result(action, outcome)
             result.update(
                 {
@@ -520,7 +549,6 @@ def apply_grade_plan(
                 }
             )
         results.append(result)
-        print_grade_result(label, result)
         if result["outcome"] in HALT_OUTCOMES:
             halted = True
         if result["outcome"] == "verified_applied":
@@ -545,9 +573,7 @@ def apply_grade_action(action: dict[str, Any], *, mode: str) -> None:
             submission.edit(**kwargs)
         if action["comment_action"] == "replace_exact" and action["comment_change"]:
             action["_mutation_phase"] = "comment_replace"
-            edit_submission_comment(
-                submission, action["target_comment"]["id"], action["comment"]
-            )
+            edit_submission_comment(submission, action["target_comment"]["id"], action["comment"])
         return
 
     if action["grade_change"]:
@@ -585,18 +611,20 @@ def classify_action_effects(
             comment_status = "desired" if desired else ("original" if original else "other")
         else:
             target = action.get("target_comment") or {}
-            observed_target = find_comment_record(
-                comments, comment_id_value=target.get("id")
-            )
+            observed_target = find_comment_record(comments, comment_id_value=target.get("id"))
             if mode == "clear":
                 comment_status = "desired" if not observed_target else "original"
-            elif observed_target and str(observed_target.get("comment") or "").strip() == str(
-                action.get("comment") or ""
-            ).strip():
+            elif (
+                observed_target
+                and str(observed_target.get("comment") or "").strip()
+                == str(action.get("comment") or "").strip()
+            ):
                 comment_status = "desired"
-            elif observed_target and str(observed_target.get("comment") or "").strip() == str(
-                target.get("comment") or ""
-            ).strip():
+            elif (
+                observed_target
+                and str(observed_target.get("comment") or "").strip()
+                == str(target.get("comment") or "").strip()
+            ):
                 comment_status = "original"
             else:
                 comment_status = "other"
@@ -645,9 +673,7 @@ def comment_record_exists(
     text: Any = None,
     comment_id_value: Any = None,
 ) -> bool:
-    return find_comment_record(
-        comments, text=text, comment_id_value=comment_id_value
-    ) is not None
+    return find_comment_record(comments, text=text, comment_id_value=comment_id_value) is not None
 
 
 def find_comment_record(
@@ -657,12 +683,10 @@ def find_comment_record(
     comment_id_value: Any = None,
 ) -> dict[str, Any] | None:
     for comment in comments:
-        id_matches = comment_id_value is None or str(comment.get("id")) == str(
-            comment_id_value
+        id_matches = comment_id_value is None or str(comment.get("id")) == str(comment_id_value)
+        text_matches = (
+            text is None or str(comment.get("comment") or "").strip() == str(text).strip()
         )
-        text_matches = text is None or str(comment.get("comment") or "").strip() == str(
-            text
-        ).strip()
         if id_matches and text_matches:
             return comment
     return None
@@ -688,9 +712,7 @@ def base_result(action: dict[str, Any], outcome: str) -> dict[str, Any]:
     }
 
 
-def build_grade_plan_report(
-    plan: dict[str, Any], *, command: str, status: str
-) -> dict[str, Any]:
+def build_grade_plan_report(plan: dict[str, Any], *, command: str, status: str) -> dict[str, Any]:
     release_rows = [
         {"observed": action["prewrite_observation"], "desired_verified": True}
         for action in plan["actions"]
@@ -704,9 +726,7 @@ def build_grade_plan_report(
     summary = {
         "target_rows": len(plan["actions"]),
         "grade_changes": sum(bool(action.get("grade_change")) for action in plan["actions"]),
-        "comment_changes": sum(
-            bool(action.get("comment_change")) for action in plan["actions"]
-        ),
+        "comment_changes": sum(bool(action.get("comment_change")) for action in plan["actions"]),
         "blocked_rows": sum(bool(action.get("blockers")) for action in plan["actions"]),
         "assignment_blockers": len(plan["blockers"]),
     }
@@ -761,22 +781,16 @@ def capture_grade_rollback(
     source: Path,
     plan: dict[str, Any],
     *,
-    args: Any,
+    rollback_dir: Path | None,
     report_run: Any,
     command: str,
 ) -> tuple[Path, Path]:
+    if rollback_dir is None:
+        raise RuntimeError("Live grade mutation requires a private rollback directory.")
     try:
-        return write_grade_rollback(
-            source,
-            plan,
-            rollback_dir=(
-                Path(args.rollback_dir) if getattr(args, "rollback_dir", None) else None
-            ),
-        )
+        return write_grade_rollback(source, plan, rollback_dir=rollback_dir)
     except Exception as exc:  # noqa: BLE001
-        write_failed_grade_report(
-            report_run, command=command, error=exc, artifact="grades-result"
-        )
+        write_failed_grade_report(report_run, command=command, error=exc, artifact="grades-result")
         raise SystemExit(f"Grade rollback capture failed: {safe_error(str(exc))}") from exc
 
 
@@ -787,6 +801,7 @@ def capture_grade_recovery(
     mode: str,
     actions: list[dict[str, Any]],
     results: list[dict[str, Any]],
+    private_dir: Path | None,
 ) -> tuple[list[Path], str | None]:
     try:
         return (
@@ -796,6 +811,7 @@ def capture_grade_recovery(
                 mode=mode,
                 actions=actions,
                 results=results,
+                private_dir=private_dir,
             ),
             None,
         )
@@ -809,12 +825,6 @@ def plan_has_blockers(plan: dict[str, Any]) -> bool:
     return bool(plan["blockers"]) or any(action["blockers"] for action in plan["actions"])
 
 
-def print_grade_result(label: str, result: dict[str, Any]) -> None:
-    detail = f" ({result['detail']})" if result.get("detail") else ""
-    error = f": {result['error']}" if result.get("error") else ""
-    print(f"  {label}: {result['outcome']}{detail}{error}")
-
-
 def print_release_state(release_state: dict[str, Any]) -> None:
     conclusion = release_state["conclusion"]
     reason = f" ({release_state['reason']})" if release_state.get("reason") else ""
@@ -822,16 +832,20 @@ def print_release_state(release_state: dict[str, Any]) -> None:
 
 
 def write_grade_rollback(
-    source: Path, plan: dict[str, Any], *, rollback_dir: Path | None
+    source: Path, plan: dict[str, Any], *, rollback_dir: Path
 ) -> tuple[Path, Path]:
-    directory = rollback_dir or source.parent
-    directory.mkdir(parents=True, exist_ok=True)
+    del source
+    directory = ensure_private_directory(rollback_dir)
     stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
-    base = directory / f"{source.stem}.rollback-{stamp}"
+    base = directory / f"rollback-{stamp}"
     suffix = 0
-    while Path(f"{base}.json").exists() or Path(f"{base}.csv").exists():
+    while (
+        Path(f"{base}.json").exists()
+        or Path(f"{base}.csv").exists()
+        or Path(f"{base}.csv.artifact.json").exists()
+    ):
         suffix += 1
-        base = directory / f"{source.stem}.rollback-{stamp}-{suffix:02d}"
+        base = directory / f"rollback-{stamp}-{suffix:02d}"
     json_path = Path(f"{base}.json")
     csv_path = Path(f"{base}.csv")
     payload = {
@@ -841,13 +855,26 @@ def write_grade_rollback(
         "assignment_title": plan["assignment_title"],
         "rows": [rollback_record(action) for action in plan["actions"]],
     }
-    write_json(json_path, payload)
-    write_rows(csv_path, payload["rows"], ROLLBACK_FIELDS)
-    mark_private(json_path)
-    mark_private(csv_path)
-    print(f"Wrote private rollback evidence: {json_path}")
-    print(f"Wrote private rollback evidence: {csv_path}")
+    write_private_json(json_path, payload, command="grades rollback")
+    write_private_rows(
+        csv_path,
+        payload["rows"],
+        ROLLBACK_FIELDS,
+        command="grades rollback",
+    )
+    print(f"Private rollback evidence: {directory}")
     return json_path, csv_path
+
+
+def resolve_grade_rollback_directory(args: Any) -> Path:
+    resolved = resolve_private_path(
+        explicit=getattr(args, "rollback_dir", None),
+        project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
+        default_relative=f"grades/assignment-{args.assignment_id}/rollback",
+        option_name="--rollback-dir",
+    )
+    warn_if_external_private_path(resolved)
+    return resolved.path
 
 
 def rollback_record(action: dict[str, Any]) -> dict[str, Any]:
@@ -863,30 +890,25 @@ def rollback_record(action: dict[str, Any]) -> dict[str, Any]:
 def fail_for_blocked_plan(plan: dict[str, Any]) -> None:
     blockers = list(plan["blockers"])
     for action in plan["actions"]:
-        blockers.extend(f"{action_label(action)}: {item}" for item in action["blockers"])
+        blockers.extend(action["blockers"])
     if blockers:
-        print("Preflight blocked:")
-        for blocker in blockers:
-            print(f"  - {blocker}")
+        print(f"Preflight blocked for {len(blockers)} private row condition(s).")
+        print("Review the private grade plan report for row-level details.")
         raise SystemExit(1)
 
 
 def print_grade_plan(plan: dict[str, Any], *, dry_run: bool) -> None:
     print("Grade preflight - no Canvas writes:" if dry_run else "Grade preflight:")
     print(f"  Assignment: {plan['assignment_title']} (ID {plan['assignment_id']})")
-    for action in plan["actions"]:
-        delta = numeric_delta(action["current_grade"], action.get("proposed_grade"))
-        delta_text = f", delta {delta:+g}" if delta is not None else ""
-        print(
-            f"  {action_label(action)}: {action['current_grade']!r} -> "
-            f"{action.get('proposed_grade')!r}{delta_text}; comment={action.get('comment_action', 'none')}"
-        )
+    actions = plan["actions"]
+    changes = sum(bool(action["grade_change"] or action["comment_change"]) for action in actions)
+    blocked = sum(bool(action["blockers"]) for action in actions) + bool(plan["blockers"])
+    print(f"  Target rows: {len(actions)}; changes: {changes}; blocked: {blocked}")
 
 
 def print_offline_preview(rows: list[dict[str, str]]) -> None:
     print("Offline preview - Canvas was not contacted:")
-    for row in rows:
-        print(f"  {row.get('Name') or row['CanvasID']} (CanvasID {row['CanvasID']}): {row['Grade']}")
+    print(f"  Private grade rows parsed: {len(rows)}")
 
 
 def load_grade_rows(path: Path) -> list[dict[str, str]]:
@@ -938,11 +960,7 @@ def load_csv_rows(
             if require_grade_value and not str(raw_row.get("Grade") or "").strip():
                 raise SystemExit(f"Grades CSV row {reader.line_num} must include Grade.")
             seen_canvas_ids[canvas_id] = reader.line_num
-            row = {
-                str(key): str(value or "")
-                for key, value in raw_row.items()
-                if key is not None
-            }
+            row = {str(key): str(value or "") for key, value in raw_row.items() if key is not None}
             row["CanvasID"] = str(canvas_id)
             if require_grade_value:
                 row["Grade"] = row["Grade"].strip()
@@ -970,13 +988,6 @@ def current_numeric_grade(submission: Any) -> Any:
     return score if score not in {None, ""} else getattr(submission, "grade", None)
 
 
-def numeric_delta(current: Any, proposed: Any) -> float | None:
-    try:
-        return float(proposed) - float(current)
-    except (TypeError, ValueError):
-        return None
-
-
 def grade_matches(submission: Any, expected: str) -> bool:
     expected = expected.strip()
     for value in (getattr(submission, "score", None), getattr(submission, "grade", None)):
@@ -996,7 +1007,9 @@ def submission_comments(submission: Any) -> list[Any]:
 
 
 def comment_text(comment: Any) -> str:
-    return str(comment.get("comment", "") if isinstance(comment, dict) else getattr(comment, "comment", ""))
+    return str(
+        comment.get("comment", "") if isinstance(comment, dict) else getattr(comment, "comment", "")
+    )
 
 
 def comment_id(comment: Any) -> int | None:
@@ -1005,7 +1018,11 @@ def comment_id(comment: Any) -> int | None:
 
 
 def comment_author_id(comment: Any) -> int | None:
-    raw = comment.get("author_id") if isinstance(comment, dict) else getattr(comment, "author_id", None)
+    raw = (
+        comment.get("author_id")
+        if isinstance(comment, dict)
+        else getattr(comment, "author_id", None)
+    )
     return int(raw) if raw not in {None, ""} else None
 
 
@@ -1028,7 +1045,10 @@ def comment_record(comment: Any) -> dict[str, Any]:
 
 
 def comment_exists(submission: Any, expected: str) -> bool:
-    return any(comment_text(comment).strip() == expected.strip() for comment in submission_comments(submission))
+    return any(
+        comment_text(comment).strip() == expected.strip()
+        for comment in submission_comments(submission)
+    )
 
 
 def resolve_owned_comment(
@@ -1089,7 +1109,3 @@ def parse_bool(value: str, *, default: bool) -> bool:
     if text in {"0", "false", "no", "n"}:
         return False
     raise SystemExit(f"Expected boolean value, found {value!r}.")
-
-
-def action_label(action: dict[str, Any]) -> str:
-    return f"{action['name'] or action['canvas_id']} (CanvasID {action['canvas_id']})"

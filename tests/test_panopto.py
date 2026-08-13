@@ -80,7 +80,7 @@ class FakePanoptoSession:
         return FakeResponse(content=self.caption_content, headers=self.caption_headers)
 
 
-def test_command_uses_profile_secret_name(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_command_uses_profile_secret_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, str] = {}
 
     def fake_resolve_api_key(**kwargs: str) -> tuple[str, str]:
@@ -102,6 +102,9 @@ def test_command_uses_profile_secret_name(monkeypatch: pytest.MonkeyPatch) -> No
                 secret_name="canvas-institution",
                 api_url="https://canvas.example/",
                 course_id=101,
+                output_dir=str(tmp_path / "captions"),
+                project_root=None,
+                overwrite=False,
             )
         )
 
@@ -224,6 +227,8 @@ def test_download_lti_caption_writes_sanitized_caption_file(tmp_path: Path) -> N
     )
 
     assert target.read_bytes() == b"caption text\n"
+    assert target.with_name(f"{target.name}.artifact.json").is_file()
+    assert target.stat().st_mode & 0o077 == 0
     assert ":" not in target.name
     assert "Lecture" in target.name
     assert web.get_calls[0]["params"] == {
@@ -234,7 +239,7 @@ def test_download_lti_caption_writes_sanitized_caption_file(tmp_path: Path) -> N
 
 
 def test_write_caption_outputs_dry_run_writes_manifests_without_downloading(
-    tmp_path: Path,
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     web = FakePanoptoSession(caption_content=b"caption text\n")
     sessions = [
@@ -261,9 +266,41 @@ def test_write_caption_outputs_dry_run_writes_manifests_without_downloading(
         panopto_tool={"id": 448843, "name": "Panopto Video"},
     )
 
-    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    manifest_path = tmp_path / "artifact-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["dry_run"] is True
+    assert manifest["artifact_class"] == "private"
     assert manifest["sessions"][0]["status"] == "caption_available"
     assert manifest["sessions"][0]["caption_path"] == ""
+    assert "viewer" not in json.dumps(manifest).lower()
+    assert "ViewerUrl" not in (tmp_path / "manifest.csv").read_text(encoding="utf-8")
     assert (tmp_path / "manifest.csv").is_file()
+    assert manifest_path.stat().st_mode & 0o077 == 0
+    assert (tmp_path / "manifest.csv").stat().st_mode & 0o077 == 0
     assert web.get_calls == []
+    terminal = capsys.readouterr().out
+    assert "Lecture 1" not in terminal
+    assert "session-one" not in terminal
+    assert "viewer" not in terminal.lower()
+
+
+def test_panopto_requires_private_destination_before_auth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail(**kwargs: str) -> tuple[str, str]:
+        raise AssertionError("credentials must not resolve before private path")
+
+    monkeypatch.setattr("danvas.panopto.resolve_api_key", fail)
+
+    with pytest.raises(SystemExit, match="Pass --output-dir"):
+        command_panopto_captions(
+            SimpleNamespace(
+                output_dir=None,
+                project_root=str(tmp_path),
+                overwrite=False,
+                secret_provider="env",
+                op_reference="",
+                api_key_env="TOKEN",
+                secret_name="canvas",
+            )
+        )

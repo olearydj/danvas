@@ -2024,7 +2024,10 @@ def grades_post(
         Path | None,
         typer.Option(
             "--rollback-dir",
-            help="Directory for private rollback CSV/JSON. Defaults beside the input CSV.",
+            help=(
+                "Private rollback directory. Defaults beneath .danvas/private/grades; "
+                "required outside a project for a live run."
+            ),
         ),
     ] = None,
     sleep_seconds: Annotated[
@@ -2108,7 +2111,10 @@ def grades_clear(
         Path | None,
         typer.Option(
             "--rollback-dir",
-            help="Directory for private rollback CSV/JSON. Defaults beside the input CSV.",
+            help=(
+                "Private rollback directory. Defaults beneath .danvas/private/grades; "
+                "required outside a project for a live run."
+            ),
         ),
     ] = None,
     sleep_seconds: Annotated[
@@ -2166,12 +2172,23 @@ def grades_comments(
     assignment_id: AssignmentId,
     canvas_id: Annotated[int, typer.Option("--canvas-id", help="Canvas user ID.")],
     output: Annotated[
-        Path, typer.Option("--output", "-o", help="Private JSON output path.")
-    ] = Path("submission-comments.json"),
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help=(
+                "Private JSON output. Defaults beneath .danvas/private/grades; "
+                "required outside a project."
+            ),
+        ),
+    ] = None,
     overwrite: Annotated[
         bool, typer.Option("--overwrite", help="Replace an existing output file.")
     ] = False,
     course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
     secret_name: SecretName = None,
@@ -2185,8 +2202,9 @@ def grades_comments(
             course_id=course_id,
             assignment_id=assignment_id,
             canvas_id=canvas_id,
-            output=str(output),
+            output=str(output) if output else None,
             overwrite=overwrite,
+            project_root=str(project_root),
             profile=profile,
             api_url=api_url,
             secret_name=secret_name,
@@ -3572,13 +3590,16 @@ def files_upload(
 def recordings_panopto_captions(
     course_id: CourseId = None,
     output_dir: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--output-dir",
             "-o",
-            help="Directory for caption files plus manifest.json and manifest.csv.",
+            help=(
+                "Private caption bundle. Defaults beneath .danvas/private/recordings; "
+                "required outside a project."
+            ),
         ),
-    ] = Path("panopto-captions"),
+    ] = None,
     folder_id: Annotated[
         str | None,
         typer.Option(
@@ -3586,6 +3607,12 @@ def recordings_panopto_captions(
             help="Optional Panopto folder GUID. Omit to list visible recent sessions.",
         ),
     ] = None,
+    overwrite: Annotated[
+        bool, typer.Option("--overwrite", help="Replace existing private bundle manifests.")
+    ] = False,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
     session_id: Annotated[
         list[str] | None,
         typer.Option(
@@ -3626,13 +3653,15 @@ def recordings_panopto_captions(
         command_panopto_captions,
         args_for(
             course_id=course_id,
-            output_dir=str(output_dir),
+            output_dir=str(output_dir) if output_dir else None,
             folder_id=folder_id,
             session_id=session_id or [],
             limit=limit,
             dry_run=dry_run,
             caption_language=caption_language,
             panopto_base_url=panopto_base_url,
+            overwrite=overwrite,
+            project_root=str(project_root),
             profile=profile,
             api_url=api_url,
             secret_name=secret_name,

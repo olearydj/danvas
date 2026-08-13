@@ -95,6 +95,14 @@ def write_grades_csv(path: Path, rows: list[str]) -> None:
 def post_args(grades_csv: Path, **overrides: Any) -> Any:
     from types import SimpleNamespace
 
+    config_dir = grades_csv.parent / ".danvas"
+    config_dir.mkdir(exist_ok=True)
+    config = config_dir / "config.toml"
+    if not config.exists():
+        config.write_text(
+            '[canvas]\ncourse_id = 101\napi_url = "https://canvas.example.edu/"\n',
+            encoding="utf-8",
+        )
     defaults = {
         "course_id": 101,
         "assignment_id": 5,
@@ -208,8 +216,8 @@ def test_grades_post_skips_existing_and_posts_missing(
     out = capsys.readouterr().out
     assert "== Canvas write: post grades ==" in out
     assert "rows: 2" in out
-    assert "already applied" in out
     assert "already_applied: 1, verified_applied: 1" in out
+    assert "Doe, Jane" not in out
 
 
 def test_grades_post_letter_grade_rerun_is_idempotent(
@@ -281,7 +289,9 @@ def test_grades_post_dry_run_reads_canvas_without_writing(
     out = capsys.readouterr().out
     assert "Grade preflight - no Canvas writes" in out
     assert "Case Study 1" in out
-    assert "delta +10" in out
+    assert "Target rows: 1; changes: 1; blocked: 0" in out
+    assert "Doe, Jane" not in out
+    assert "90" not in out
     assert submission.edits == []
 
 
@@ -327,7 +337,9 @@ def test_grades_verify_exits_nonzero_on_mismatch(
     with pytest.raises(SystemExit):
         command_grades_verify(post_args(grades_csv))
 
-    assert "MISMATCH" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "mismatches: 1" in out
+    assert "Doe, Jane" not in out
 
 
 def test_grades_post_blocks_expected_grade_and_comment_delta_mismatch(
@@ -349,7 +361,9 @@ def test_grades_post_blocks_expected_grade_and_comment_delta_mismatch(
         command_grades_post(post_args(grades_csv, dry_run=True))
 
     out = capsys.readouterr().out
-    assert "Comment states 14 point additional deduction; grade delta is 9" in out
+    assert "Preflight blocked for 1 private row condition" in out
+    assert "14 point additional deduction" not in out
+    assert "Doe, Jane" not in out
     assert submission.edits == []
 
 
@@ -368,7 +382,7 @@ def test_grades_post_blocks_wrong_expected_assignment_title(
             post_args(grades_csv, dry_run=True, expected_assignment_title="Other Assignment")
         )
 
-    assert "Expected assignment title" in capsys.readouterr().out
+    assert "Preflight blocked for 1 private row condition" in capsys.readouterr().out
 
 
 def test_grades_post_writes_rollback_before_change(
@@ -384,12 +398,36 @@ def test_grades_post_writes_rollback_before_change(
 
     command_grades_post(post_args(grades_csv))
 
-    rollback_json = list(tmp_path.glob("patch.rollback-*.json"))
-    rollback_csv = list(tmp_path.glob("patch.rollback-*.csv"))
+    rollback_dir = tmp_path / ".danvas/private/grades/assignment-5/rollback"
+    rollback_json = [
+        path
+        for path in rollback_dir.glob("rollback-*.json")
+        if not path.name.endswith(".artifact.json")
+    ]
+    rollback_csv = list(rollback_dir.glob("rollback-*.csv"))
     assert len(rollback_json) == 1
     assert len(rollback_csv) == 1
     assert '"OriginalGrade": "80"' in rollback_json[0].read_text(encoding="utf-8")
+    assert rollback_csv[0].with_name(f"{rollback_csv[0].name}.artifact.json").is_file()
     assert submission.score == 90.0
+
+
+def test_grades_post_requires_private_rollback_destination_before_canvas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    grades_csv = input_dir / "patch.csv"
+    write_grades_csv(grades_csv, ['1,"Doe, Jane",90,'])
+    args = post_args(grades_csv, project_root=str(tmp_path / "not-a-project"))
+
+    def fail(args: Any) -> Any:
+        raise AssertionError("canvas_from_args must not run before private path resolution")
+
+    monkeypatch.setattr("danvas.grades.canvas_from_args", fail)
+
+    with pytest.raises(SystemExit, match="Pass --rollback-dir"):
+        command_grades_post(args)
 
 
 def test_grades_post_replaces_exact_owned_comment(
@@ -420,8 +458,7 @@ def test_grades_clear_clears_grade_and_exact_owned_comment(
 ) -> None:
     clear_csv = tmp_path / "clear.csv"
     clear_csv.write_text(
-        "CanvasID,Name,ExpectedCurrentGrade,CommentID\n"
-        '1,"Doe, Jane",80,7\n',
+        'CanvasID,Name,ExpectedCurrentGrade,CommentID\n1,"Doe, Jane",80,7\n',
         encoding="utf-8",
     )
     submission = FakeSubmission(
@@ -458,7 +495,7 @@ def test_grades_clear_refuses_comment_owned_by_other_user(
     with pytest.raises(SystemExit):
         command_grades_clear(post_args(clear_csv, dry_run=True))
 
-    assert "not owned by the authenticated user" in capsys.readouterr().out
+    assert "Preflight blocked for 1 private row condition" in capsys.readouterr().out
 
 
 def test_grades_comments_marks_current_user_ownership(
@@ -485,11 +522,48 @@ def test_grades_comments_marks_current_user_ownership(
             canvas_id=1,
             output=str(output),
             overwrite=False,
+            project_root=None,
         )
     )
 
     payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["artifact_class"] == "private"
     assert [row["owned_by_current_user"] for row in payload["comments"]] == [True, False]
+
+
+def test_grades_comments_default_is_private_and_stdout_is_aggregate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    grades_csv = tmp_path / "grades.csv"
+    write_grades_csv(grades_csv, ['1,"Doe, Jane",90,'])
+    post_args(grades_csv)
+    submission = FakeSubmission(
+        comments=[{"id": "7", "author_id": "99", "comment": "Private feedback."}]
+    )
+    monkeypatch.setattr(
+        "danvas.grades.canvas_from_args",
+        lambda args: FakeCanvas(FakeAssignment({1: submission})),
+    )
+
+    from types import SimpleNamespace
+
+    command_grades_comments(
+        SimpleNamespace(
+            course_id=101,
+            assignment_id=5,
+            canvas_id=1,
+            output=None,
+            overwrite=False,
+            project_root=str(tmp_path),
+        )
+    )
+
+    output = tmp_path / ".danvas/private/grades/assignment-5/user-1/comments.json"
+    assert output.is_file()
+    assert output.stat().st_mode & 0o077 == 0
+    terminal = capsys.readouterr().out
+    assert "Private feedback" not in terminal
+    assert "user-1" not in terminal
 
 
 def test_edit_submission_comment_uses_canvasapi_requester_parameter_shape() -> None:
@@ -535,9 +609,7 @@ def test_grades_post_replace_exact_uses_production_requester_fallback(
             self.grade = "80"
             self.posted_at = None
             self.assignment_visible = True
-            self.submission_comments = [
-                {"id": "7", "author_id": "99", "comment": "Original."}
-            ]
+            self.submission_comments = [{"id": "7", "author_id": "99", "comment": "Original."}]
             self.course_id = 101
             self.assignment_id = 5
             self.user_id = 1
@@ -599,14 +671,20 @@ def test_grades_post_reports_partial_grade_only_and_halts_remaining_rows(
         command_grades_post(post_args(grades_csv))
 
     out = capsys.readouterr().out
-    assert "partially_applied (grade_only)" in out
-    assert "not attempted after an unsafe prior outcome" in out
+    assert "not_attempted: 1, partially_applied: 1" in out
+    assert "Doe, Jane" not in out
+    assert "Smith, Pat" not in out
     assert "secret" not in out
     assert first.grade == "90"
     assert first.submission_comments[0]["comment"] == "Original."
     assert second.edits == []
-    recovery_json = list(tmp_path.glob("patch.recovery-*.json"))
-    recovery_csv = list(tmp_path.glob("patch.recovery-*.forward.csv"))
+    recovery_dir = tmp_path / ".danvas/private/grades/assignment-5/rollback"
+    recovery_json = [
+        path
+        for path in recovery_dir.glob("recovery-*.json")
+        if not path.name.endswith(".artifact.json")
+    ]
+    recovery_csv = list(recovery_dir.glob("recovery-*.forward.csv"))
     assert len(recovery_json) == 1
     assert len(recovery_csv) == 1
     recovery = json.loads(recovery_json[0].read_text(encoding="utf-8"))
@@ -640,7 +718,7 @@ def test_grades_post_unchanged_failure_continues_to_later_rows(
     out = capsys.readouterr().out
     assert "unchanged_failure" in out
     assert second.grade == "85"
-    assert "not attempted" not in out
+    assert "not_attempted" not in out
 
 
 def test_grades_post_success_response_with_mismatch_halts(
@@ -667,7 +745,7 @@ def test_grades_post_success_response_with_mismatch_halts(
 
     out = capsys.readouterr().out
     assert "applied_unverified" in out
-    assert "not attempted" in out
+    assert "not_attempted" in out
     assert second.edits == []
 
 
@@ -678,8 +756,7 @@ def test_grades_clear_reports_partial_grade_only_with_guarded_recovery(
 ) -> None:
     clear_csv = tmp_path / "clear.csv"
     clear_csv.write_text(
-        "CanvasID,Name,ExpectedCurrentGrade,CommentID\n"
-        '1,"Doe, Jane",80,7\n',
+        'CanvasID,Name,ExpectedCurrentGrade,CommentID\n1,"Doe, Jane",80,7\n',
         encoding="utf-8",
     )
 
@@ -700,8 +777,9 @@ def test_grades_clear_reports_partial_grade_only_with_guarded_recovery(
     with pytest.raises(SystemExit):
         command_grades_clear(post_args(clear_csv))
 
-    assert "partially_applied (grade_only)" in capsys.readouterr().out
-    recovery_csv = list(tmp_path.glob("clear.recovery-*.forward.csv"))
+    assert "partially_applied" in capsys.readouterr().out
+    recovery_dir = tmp_path / ".danvas/private/grades/assignment-5/rollback"
+    recovery_csv = list(recovery_dir.glob("recovery-*.forward.csv"))
     assert len(recovery_csv) == 1
     assert "false" in recovery_csv[0].read_text(encoding="utf-8")
 
@@ -721,27 +799,28 @@ def test_grades_post_indeterminate_readback_halts_without_executable_recovery(
             super().__init__({1: first, 2: second})
             self.calls: dict[int, int] = {1: 0, 2: 0}
 
-        def get_submission(
-            self, user_id: int, include: list[str] | None = None
-        ) -> FakeSubmission:
+        def get_submission(self, user_id: int, include: list[str] | None = None) -> FakeSubmission:
             self.calls[user_id] += 1
             if user_id == 1 and self.calls[user_id] > 1:
                 raise RuntimeError("readback unavailable")
             return self.submissions[user_id]
 
     assignment = ReadbackFailureAssignment()
-    monkeypatch.setattr(
-        "danvas.grades.canvas_from_args", lambda args: FakeCanvas(assignment)
-    )
+    monkeypatch.setattr("danvas.grades.canvas_from_args", lambda args: FakeCanvas(assignment))
 
     with pytest.raises(SystemExit):
         command_grades_post(post_args(grades_csv))
 
     out = capsys.readouterr().out
     assert "indeterminate" in out
-    assert "not attempted" in out
-    assert not list(tmp_path.glob("patch.recovery-*.forward.csv"))
-    recovery_json = list(tmp_path.glob("patch.recovery-*.json"))
+    assert "not_attempted" in out
+    recovery_dir = tmp_path / ".danvas/private/grades/assignment-5/rollback"
+    assert not list(recovery_dir.glob("recovery-*.forward.csv"))
+    recovery_json = [
+        path
+        for path in recovery_dir.glob("recovery-*.json")
+        if not path.name.endswith(".artifact.json")
+    ]
     recovery = json.loads(recovery_json[0].read_text(encoding="utf-8"))
     assert recovery["rows"][0]["readback_error"] == "readback unavailable"
 
@@ -752,9 +831,7 @@ def test_grades_dry_run_writes_private_plan_receipt_without_comment_text(
     grades_csv = tmp_path / "patch.csv"
     write_grades_csv(grades_csv, ['1,"Doe, Jane",90,"Private feedback text"'])
     assignment = FakeAssignment({1: FakeSubmission(score=80.0, grade="80")})
-    monkeypatch.setattr(
-        "danvas.grades.canvas_from_args", lambda args: FakeCanvas(assignment)
-    )
+    monkeypatch.setattr("danvas.grades.canvas_from_args", lambda args: FakeCanvas(assignment))
     report_dir = tmp_path / "grade-plan-report"
 
     command_grades_post(
@@ -793,9 +870,7 @@ def test_grades_post_rollback_failure_finishes_failed_private_report(
     report_dir = tmp_path / "failed-report"
 
     with pytest.raises(SystemExit, match="Grade rollback capture failed"):
-        command_grades_post(
-            post_args(grades_csv, no_report=False, report_dir=str(report_dir))
-        )
+        command_grades_post(post_args(grades_csv, no_report=False, report_dir=str(report_dir)))
 
     manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
     report = json.loads((report_dir / "grades-result.json").read_text(encoding="utf-8"))
@@ -822,9 +897,7 @@ def test_grades_verify_receipt_records_verified_visible(
     )
     report_dir = tmp_path / "grade-verify-report"
 
-    command_grades_verify(
-        post_args(grades_csv, no_report=False, report_dir=str(report_dir))
-    )
+    command_grades_verify(post_args(grades_csv, no_report=False, report_dir=str(report_dir)))
 
     report = json.loads((report_dir / "grades-verify.json").read_text("utf-8"))
     assert report["release_state"]["conclusion"] == "verified_visible"
