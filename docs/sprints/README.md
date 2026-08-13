@@ -241,9 +241,9 @@ gate. It changes no danvas command or Canvas behavior. The audit reports no
 known vulnerabilities, and all 565 tests, Ruff, ty, and lock validation pass.
 Release smoke also passes for the exact release.
 
-## 0.14.0 Structural Quality Design
+## 0.14.0 Structural Quality Release
 
-The next designed structural slice is:
+The released structural slice is:
 
 - Sprint 17: [Typed Transaction State And Quality Ratchets](17-transaction-state-quality.md)
 
@@ -251,5 +251,14 @@ Sprint 17 types and decomposes the authored-asset transaction, removes the
 six-module import cycle around configuration, Page sources, snapshots, and
 assignments, and adds branch-coverage, complexity, supported-Python, and
 dependency-audit ratchets. It deliberately adds no Canvas command, mutation,
-asset adapter, or public evidence-schema change. Implementation begins only
-after the separate 0.13.1 dependency patch.
+asset adapter, or public evidence-schema change. The frozen Python 3.12 and 3.14
+lanes each pass all 602 tests, Ruff, ty, and the dependency audit; global and
+`authored_assets` branch-aware coverage pass their 82 percent floors. Final
+editable/wheel smoke, local Markdown-link validation, and sprint-document lint
+also pass. Independent review found one blocking stale-reuse transition defect;
+the corrected candidate passed the complete gate before release as `v0.14.0`.
+
+The first independent review found and blocked a stale all-reuse transition
+defect. The corrected candidate restores that recovery path, replaces the
+self-derived transition tests with an independent contract and real execution
+matrix, and closes relative-import and async-complexity architecture blind spots.

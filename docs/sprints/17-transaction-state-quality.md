@@ -1,7 +1,7 @@
 # Sprint 17: Typed Transaction State And Quality Ratchets
 
-Status: designed for 0.14.0 following the released 0.13.1
-dependency-maintenance patch; implementation is pending.
+Status: released as `v0.14.0` following the 0.13.1 dependency-maintenance patch
+and an independent correction review.
 
 ## Outcome
 
@@ -411,7 +411,7 @@ Enable Ruff `C901` with a maximum complexity of 15. Refactor
 The current functions still above 15 outside the sprint's behavioral scope are:
 
 - `authored_content.comparable_value`;
-- `pages.check_css`;
+- `page_sources.check_css`, moved intact from `pages`;
 - `pages.build_pages_sync_plan`; and
 - `status.compare_pages`.
 
@@ -471,7 +471,8 @@ converted into a normal transaction status.
 6. Introduce typed asset records plus explicit public projections without
    changing orchestration.
 7. Split asset planning and execution into bounded phases.
-8. Add the generated transition matrix and raise asset branch coverage.
+8. Add the independent transition contract and reachable execution matrix, then
+   raise asset branch coverage.
 9. Enable branch coverage, C901, and supported-Python CI ratchets.
 10. Re-run the complete compatibility suite and isolated release smoke.
 11. Update repository documentation and revalidate the external teaching-danvas
@@ -480,10 +481,39 @@ converted into a normal transaction status.
 
 ## Automated Acceptance
 
+Local implementation verification currently establishes:
+
+- all 602 tests pass under frozen Python 3.12 and 3.14 environments;
+- Ruff, ty, lock validation, and the dependency audit pass;
+- the package import graph is acyclic and every forbidden edge is absent;
+- an implementation-independent transition contract pins plan, asset, mutation,
+  content-mutation, evidence, and verification state transitions;
+- real execution cases cover upload success, rejection and uncertainty,
+  destination drift, provenance failure, partial stable evidence, successful
+  reuse, and stale reuse;
+- `prepare_asset_plan` and `execute_asset_plan` pass the complexity-15 gate;
+  their orchestration bodies contain 20 and 12 statements respectively;
+- global branch-aware coverage is 83.75 percent and `authored_assets` coverage
+  is 88.84 percent;
+- the four named legacy functions are the only `C901` suppressions;
+- lock validation, isolated editable/wheel smoke for 0.14.0, local Markdown-link
+  validation, and sprint-document lint pass; and
+- the external teaching-danvas skill and command reference were revalidated
+  without edits because no operator-facing behavior changed.
+
+Independent review completed before push and tag.
+
+The independent review found that a self-derived matrix could not expose
+a missing `would_reuse -> failed` edge. The corrected implementation restores
+the pre-refactor stale-reuse failure evidence, replaces the self-referential
+matrix, and expands the architecture parser to cover relative imports and async
+function suppressions. The correction passed the same release gates before
+commit.
+
 - The full pre-refactor suite remains green without rewriting expectations to
   accept behavior drift.
-- The generated transition matrix covers every reachable conclusion named in
-  this design.
+- The independent transition contract and real execution matrix cover every
+  reachable asset-plan conclusion named in this design.
 - No `danvas` import cycle remains when function-local imports are included.
 - No forbidden architecture edge remains.
 - `public_asset_evidence` and source-map projections are allowlisted and contain

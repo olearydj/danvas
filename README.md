@@ -231,7 +231,7 @@ temporary uv tool directories:
 
 ```bash
 scripts/release-smoke.sh
-scripts/release-smoke.sh --expected-version 0.13.1
+scripts/release-smoke.sh --expected-version 0.14.0
 ```
 
 The smoke script honors normal uv configuration and freshness rules, never
@@ -241,7 +241,7 @@ Install the latest exact tagged release:
 
 ```bash
 uv tool install --force --upgrade --reinstall \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.13.1"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.14.0"
 ```
 
 Verify the installed environment outside the checkout:
@@ -264,7 +264,7 @@ only:
 ```bash
 uv tool install --force --upgrade --reinstall \
   --exclude-newer YYYY-MM-DDTHH:MM:SSZ \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.13.1"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.14.0"
 ```
 
 Do not remove or loosen the global cutoff merely to make resolution succeed.
@@ -769,9 +769,13 @@ Live Canvas writes print a `== Canvas write: ... ==` banner showing the course, 
 uv run ruff check .
 uv run ty check
 uv run pip-audit --skip-editable
-uv run pytest
+uv run pytest --cov=danvas --cov-branch --cov-report=term-missing \
+  --cov-report=json:/tmp/danvas-coverage.json --cov-fail-under=82
+uv run python scripts/check-module-coverage.py \
+  /tmp/danvas-coverage.json src/danvas/authored_assets.py 82
 uv run danvas --help
 ```
 
-CI runs the same lint, type, dependency-audit, and test checks on push and pull
-request.
+CI runs the same frozen lint, type, dependency-audit, and branch-coverage checks
+on Python 3.12 and 3.14, then verifies editable and wheel installs once after
+both lanes pass.

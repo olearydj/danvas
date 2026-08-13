@@ -234,14 +234,41 @@ behavior. The frozen audit reports no known vulnerabilities; all 565 tests,
 Ruff, ty, and lock validation pass. Isolated editable/wheel smoke also passes
 for the exact release.
 
-## 0.14.0 Structural Quality Design
+## 0.14.0 Structural Quality Release
 
-Sprint 17 is designed in
+Sprint 17 is released as `v0.14.0` and recorded in
 `docs/sprints/17-transaction-state-quality.md`. It introduces typed asset
-transaction state, decomposes the highest-risk planning and execution paths,
-removes the configuration/Page/source/assignment import cycle, and adds
-branch-coverage, complexity, and supported-Python ratchets. It is intentionally
-behavior-preserving and precedes the Page asset adapter.
+transaction and runtime state, decomposes the highest-risk planning and
+execution paths, removes the configuration/Page/source/assignment import cycle,
+and adds branch-coverage, complexity, dependency-audit, and supported-Python
+ratchets. It deliberately changes no Canvas command, mutation, evidence schema,
+or operator workflow.
+
+The frozen Python 3.12 and 3.14 lanes each pass all 602 tests, Ruff, ty, and the
+dependency audit. Combined branch-aware coverage is 83.75 percent and
+`authored_assets` coverage is 88.84 percent; the enforced floors are 82 percent.
+Lock validation, isolated editable/wheel smoke for 0.14.0, local Markdown-link
+validation, and sprint-document lint also pass. Independent review found one
+blocking transition defect; the corrected candidate passed the complete gate
+before release.
+
+Four pre-existing complexity hotspots are the only allowed `C901` suppressions:
+
+- `authored_content.comparable_value`;
+- `page_sources.check_css` (moved intact from `pages`);
+- `pages.build_pages_sync_plan`; and
+- `status.compare_pages`.
+
+They remain named refactor debt. The architecture test fails if another
+suppression is added or one of these exceptions moves without updating the
+durable decision.
+
+Independent review found that the initial self-derived transition tests could
+not detect a missing `would_reuse -> failed` edge. The candidate now carries an
+independently declared state contract plus real execution cases for upload
+success, rejection and uncertainty, destination drift, provenance failure,
+partial stable evidence, successful reuse, and stale reuse. Stale all-reuse
+execution again returns bounded failure evidence without mutation.
 
 ## Delivered Baseline
 
@@ -1555,15 +1582,13 @@ initiating its native instructor gradebook CSV export.
 
 ### Current Priority Order
 
-Sprint 16 shipped in 0.13.0, and dependency maintenance shipped in 0.13.1. The
-current order is:
+Sprint 16 shipped in 0.13.0, dependency maintenance shipped in 0.13.1, and
+Sprint 17 shipped in 0.14.0. The current order is:
 
-1. Implement Sprint 17's typed transaction state, acyclic boundaries, and
-   quality ratchets without changing Canvas behavior.
-2. Implement the Page asset adapter on the stabilized transaction. The adapter
+1. Implement the Page asset adapter on the stabilized transaction. The adapter
    also owns the explicitly recorded Page parser/suffix migration contract;
    announcement/discussion adapters remain demand-driven follow-ons.
-3. Reconsider grouped case setup only when a concrete course workflow needs it.
+2. Reconsider grouped case setup only when a concrete course workflow needs it.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas
