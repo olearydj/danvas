@@ -34,6 +34,9 @@ their full text.
 
 - `src/danvas/cli.py`: Typer command surface.
 - `src/danvas/auth.py`: Canvas API auth/client creation.
+- `src/danvas/profiles.py`: user profile loading plus profile, instance, and
+  credential-reference precedence.
+- `src/danvas/timezones.py`: bounded Canvas/Rails-to-IANA timezone mapping.
 - `src/danvas/config.py`: `.danvas` config, course snapshots, and snapshot diffs.
 - `src/danvas/reports.py`: report-run directories, manifests, and report
   discovery helpers.
@@ -70,24 +73,19 @@ their full text.
 `danvas.__version__` read installed package metadata. Bump the minor version for
 feature sprints or new commands, and the patch version for fixes.
 
-Current tagged release: 0.12.0. Sprint 15 consolidates authored-content
-comparison and datetime primitives, unifies sanitization, treats
-`InvalidAccessToken` as credential-wide failure, and adds opt-in
-`--require-complete` exit-3 signaling for partial snapshots. Repeated review
-passes restored compatibility contracts and replaced example-fitted sanitizer
-coverage with generated credential/prose matrices. Ruff, ty, `uv lock --check`,
-529 tests, sprint-document Markdown lint, and isolated editable and wheel smoke
-for 0.12.0 pass. A bounded sandbox acceptance confirmed section-inclusive
-announcement readback.
+Current tagged release: 0.15.1. Sprint 16 delivered verified Markdown assignment
+asset deployment in 0.13.0; 0.13.1 refreshed vulnerable dependencies. Sprint 17
+delivered typed transaction state, architecture checks, supported-Python CI,
+coverage/complexity ratchets, and dependency auditing in 0.14.0. Sprint 18
+removed Auburn and Central Time runtime defaults, added instance profiles and
+explicit precedence, and shipped in 0.15.0. The 0.15.1 patch makes Panopto
+caption authentication honor profile-specific secret names.
 
-The prior `v0.11.0` release delivered authored discussion create, verify, and
-safe update after bounded disposable-topic Canvas acceptance. The preceding
-0.10.x line delivered truthful grade mutation evidence, assignment release
-verification, authorization-resilient snapshots, installed-artifact release
-smoke, and the 0.10.2 assignment-alias/evidence hotfix. Versions 0.8.0, 0.9.0,
-and 0.10.1 were development identifiers rather than tagged releases. The
-user-level CLI remains on `danvas 0.11.0` until the verified 0.12.0 exact tag is
-installed during release closeout.
+The deferred independent Sprint 18 implementation review accepted the 0.15.1
+release line on 2026-08-13. The exact branch and tag CI passed supported-Python
+checks, tests, lint, typecheck, dependency audit, and install smoke. The
+user-level CLI is installed from the verified `v0.15.1` tag and reports
+`danvas 0.15.1`.
 
 Recommended local checks:
 
@@ -143,8 +141,10 @@ the external Codex teaching skill docs:
   Default partial snapshots remain usable with warnings; `--require-complete`
   exits 3 according to each command's documented write timing. An
   `InvalidAccessToken` is fatal and must not replace prior state.
-- Raw exports, rosters, submissions, grades, file downloads, and caption downloads
-  should keep explicit output paths by default instead of becoming report runs.
+- Non-private raw exports and downloads keep explicit output behavior. An
+  accepted Sprint 19 amendment allows sensitive exports/downloads to default
+  beneath `.danvas/private/` when a project is discoverable; without a project,
+  private output still requires an explicit destination before Canvas access.
 - Report runs are operational evidence and should be collision-safe and
   append-only by default.
 - Report runs classified as containing private student data must create their
@@ -165,9 +165,10 @@ the external Codex teaching skill docs:
 - For creates, record returned Canvas identity before dependent writes or
   readback so a partial failure cannot produce an unbound orphan and duplicate
   on retry. Finalize provenance only after the documented verification boundary.
-- Keep `grading/` for private grading workflow artifacts. Do not silently move
-  grading evidence into `.danvas/reports/` unless the command is explicitly a
-  private report/audit workflow.
+- Existing user-maintained `grading/` inputs remain supported. New generated
+  private grading artifacts default beneath `.danvas/private/`; private report
+  runs use `.danvas/private/reports/`, while legacy runs in `.danvas/reports/`
+  remain discoverable.
 - Use local-file-first gradebook and quiz audit behavior. Add live Canvas
   gradebook export only when a concrete workflow justifies the extra API and
   privacy surface.
@@ -209,6 +210,21 @@ Classify every new command before implementation:
   captions. These should keep explicit output files or directories by default.
 - `stdout-first`: quick inspection commands. Preserve existing terminal behavior
   and add report output only through explicit report options.
+
+Artifact sensitivity is an orthogonal classification: `shareable`,
+`course_internal`, or `private`. Private output uses the central artifact
+boundary for no-clobber behavior, classification metadata, bounded terminal
+output, and creation-time permissions. On supported POSIX systems, danvas-owned
+private directories and files are `0700` and `0600` from creation, including
+temporary and interrupted paths; post-write chmod is not the enforcement
+boundary.
+
+For the private subset of `explicit-output` commands, a discoverable project may
+provide a safe default beneath `.danvas/private/`. Without a project, an
+explicit destination remains mandatory. This does not convert raw exports into
+report runs. New private report runs use `.danvas/private/reports/`; report
+discovery reads both that root and legacy `.danvas/reports/` without rewriting
+old evidence.
 
 Report-run-first commands should normally support `--no-report`, `--report-root`,
 `--report-dir`, and a command-specific slug. They should write `manifest.json`,

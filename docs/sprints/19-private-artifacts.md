@@ -1,9 +1,10 @@
 # Private Artifact Boundary
 
-Status: proposed implementation specification for Sprint 19 / `0.16.0`.
-Independent design review is deferred while the reviewer service is unavailable
-and must be batched with the later public-readiness review before this sprint is
-accepted or implemented. This document authorizes no Canvas mutation.
+Status: accepted implementation specification for Sprint 19 / `0.16.0` after
+independent design review on 2026-08-13. The same review retrospectively
+accepted the Sprint 18 implementation and `v0.15.1` correction as released,
+subject to the durable-context correction landed with this acceptance. This
+document authorizes implementation but no live Canvas mutation.
 
 ## Outcome
 
@@ -79,11 +80,14 @@ This sprint document is not a substitute for that update.
 Every command that writes retained output must declare one of three content
 classes in a central registry:
 
-| Class | Meaning | Public-repository guidance |
-| --- | --- | --- |
-| `shareable` | Sanitized operational evidence intentionally safe to share | May be committed after normal review |
-| `course_internal` | Course/account configuration or authored content without student-private data | Not automatically safe to publish; existing storage behavior may remain |
-| `private` | Student data, grades, submissions, identities, protected media/access data, or raw payloads that may contain them | Must use the complete private-artifact contract |
+- `shareable`: sanitized operational evidence intentionally safe to share.
+  May be committed to a repository after normal review.
+- `course_internal`: course/account configuration or authored content without
+  student-private data. Not automatically safe to publish; existing storage
+  behavior may remain.
+- `private`: student data, grades, submissions, identities, protected
+  media/access data, or raw payloads that may contain them. Must use the
+  complete private-artifact contract.
 
 `course_internal` is not a euphemism for shareable. It allows the inventory to
 state that a course list, authored Page, or file inventory may expose course
@@ -109,21 +113,36 @@ also catch output-producing commands added or missed during implementation.
 
 ### Private outputs
 
-| Command or command family | Private content | Sprint 19 behavior |
-| --- | --- | --- |
-| `roster` | names, Canvas IDs, login IDs, SIS IDs | Safe project default; explicit path required without a project; schema correction |
-| `assignments overrides` | differentiated assignment membership | Safe project default; explicit path remains supported |
-| `assignments overrides-sync` | membership plans and results | Private report root and secure writes |
-| `gradebook check`, `gradebook audit` | student rows, scores, and grade diagnostics | Explicit output and report-run forms use the same boundary |
-| `quiz analysis` | student analysis and answer-linked rows | Explicit output and report-run forms use the same boundary |
-| `submissions export`, `submissions grades` | submission metadata, grades, comments, attachments, optional raw payloads | Safe project defaults; secure JSON/CSV/raw output |
-| `submissions media` | student-named files, attachments, media, sidecars, and manifests | Safe project directory; secure partial and final files |
-| `submissions feedback` | roster-to-feedback mapping and per-student results | Private plan/result evidence; aggregate terminal output |
-| `grades post`, `grades clear`, `grades comments`, `grades verify` | grades, comments, release state, rollback and recovery evidence | Private reports, explicit outputs, and rollback material |
-| `discussions export` | names, IDs, and full post bodies | Safe project default; secure output |
-| `discussions score` | identities, participation counts, scores, and grade plan | Private plan/results; aggregate terminal output |
-| `announcements export` | selected reply-user identity and reply bodies | Private because `--reply-user-id` can select any participant |
-| `recordings panopto-captions` | protected sessions, captions, and access metadata | Safe project directory; sanitized private manifests |
+Each entry names the private content, then the Sprint 19 behavior:
+
+- `roster`: names, Canvas IDs, login IDs, SIS IDs. Safe project default;
+  explicit path required without a project; schema correction.
+- `assignments overrides`: differentiated assignment membership. Safe project
+  default; explicit path remains supported.
+- `assignments overrides-sync`: membership plans and results. Private report
+  root and secure writes.
+- `gradebook check`, `gradebook audit`: student rows, scores, and grade
+  diagnostics. Explicit output and report-run forms use the same boundary.
+- `quiz analysis`: student analysis and answer-linked rows. Explicit output
+  and report-run forms use the same boundary.
+- `submissions export`, `submissions grades`: submission metadata, grades,
+  comments, attachments, optional raw payloads. Safe project defaults; secure
+  JSON/CSV/raw output.
+- `submissions media`: student-named files, attachments, media, sidecars, and
+  manifests. Safe project directory; secure partial and final files.
+- `submissions feedback`: roster-to-feedback mapping and per-student results.
+  Private plan/result evidence; aggregate terminal output.
+- `grades post`, `grades clear`, `grades comments`, `grades verify`: grades,
+  comments, release state, rollback and recovery evidence. Private reports,
+  explicit outputs, and rollback material.
+- `discussions export`: names, IDs, and full post bodies. Safe project
+  default; secure output.
+- `discussions score`: identities, participation counts, scores, and grade
+  plan. Private plan/results; aggregate terminal output.
+- `announcements export`: selected reply-user identity and reply bodies.
+  Private because `--reply-user-id` can select any participant.
+- `recordings panopto-captions`: protected sessions, captions, and access
+  metadata. Safe project directory; sanitized private manifests.
 
 Any raw-output option attached to these commands is also `private`, regardless
 of its filename or serialization format.
@@ -143,10 +162,20 @@ does not ordinarily contain enrollment rows or protected student data. Its
 existing `courses.csv` default is retained in Sprint 19. Help must state that
 the file is course-internal and is not automatically safe to publish.
 
+`announcements latest` is deliberately `course_internal`: it retains an
+announcement body and author metadata but requests no participant replies.
+`announcements export` remains conservatively `private` even in its common
+authenticated-instructor case because the same output contract permits an
+arbitrary `--reply-user-id`; classification must not vary silently with one
+option value.
+
 Canvas file downloads may contain licensed or otherwise restricted course
 material. They remain `course_internal`, not `shareable`, and retain their
-existing destination behavior. This sprint does not attempt to infer copyright
-or institutional sharing rights from a Canvas file.
+existing destination behavior. Canvas does not provide enough information to
+prove that an arbitrary downloaded file lacks student data, so command help and
+the migration guide must tell operators to choose a private destination when
+the file content is sensitive. This sprint does not attempt to inspect payload
+content or infer copyright or institutional sharing rights from a Canvas file.
 
 ### Shareable outputs
 
@@ -176,7 +205,7 @@ existing artifact:
 | `submissions grades` | `submissions/assignment-<id>/grades.csv` |
 | `submissions media` | `submissions/assignment-<id>/media/` |
 | `submissions feedback` | `submissions/assignment-<id>/feedback-plan.json` |
-| `grades comments` | `grades/assignment-<id>-user-<id>-comments.json` |
+| `grades comments` | `grades/assignment-<id>/user-<id>/comments.json` |
 | `discussions export` | `discussions/topic-<id>/posts.json` |
 | `discussions score` | `discussions/topic-<id>/grade-plan.csv` |
 | `announcements export` | `announcements/announcements.json` |
@@ -184,9 +213,18 @@ existing artifact:
 | private report runs | `reports/YYYY-MM-DD-NNN-<slug>/` |
 
 The command may preserve an explicitly requested format by changing the suffix
-of its safe default. IDs used in paths must be validated numeric IDs or bounded
-slugs; user names, login IDs, titles, and free text never become default path
-components.
+of its safe default. Danvas-chosen default bundle roots and top-level artifact
+names may contain validated numeric Canvas object or user IDs and bounded
+non-personal slugs. They never derive components from user names, login IDs,
+titles, or free text.
+
+That rule does not prohibit student-derived leaf filenames inside an already
+private bundle when those names are operationally necessary, as in
+`submissions media`. Such leaves remain beneath a validated bundle root, use
+the secure writer, may appear only in private bundle metadata, and are never
+printed in routine terminal output. Numeric user IDs used to distinguish
+private per-user artifacts are likewise permitted below the command's bundle
+root.
 
 Grade rollback and recovery material belongs under the private grade/report
 tree rather than beside an input CSV by default. An explicit `--rollback-dir`
@@ -284,23 +322,44 @@ Every private bundle includes classification metadata:
 }
 ```
 
-The metadata contains no absolute path, arguments, student identifier, student
-name, source body, token, signed URL, or raw exception. Bundle metadata is
-`artifact-manifest.json`. A standalone JSON artifact may embed the same
-classification fields. A standalone CSV, text, or binary output receives a
-same-directory `<filename>.artifact.json` sidecar because changing data rows or
-adding comment lines would break consumer schemas.
+The reusable classification envelope contains no absolute path, arguments,
+student identifier, student name, source body, token, signed URL, or raw
+exception. Bundle metadata is `artifact-manifest.json`. A private bundle
+manifest may additionally list relative student-derived filenames or stable IDs
+needed to verify its contained files; that semantic metadata remains private
+and must never be projected into a public report manifest. A private file
+already covered by the bundle manifest does not receive a redundant generic
+artifact sidecar. A standalone JSON artifact may embed the same classification
+fields. A standalone CSV, text, or binary output receives a same-directory
+`<filename>.artifact.json` sidecar because changing data rows or adding comment
+lines would break consumer schemas.
 
-Sidecars are part of the no-clobber transaction. If either target exists, the
-default write stops before replacing either one. The implementation must not
-leave a newly written data file without its required metadata after a handled
-failure; use a staging directory or equivalent bounded commit sequence for
-multi-file bundles.
+`submissions media` retains exactly one semantic `<filename>.info.json`
+sidecar per downloaded file. That existing sidecar becomes the authoritative
+per-file artifact metadata and absorbs the classification fields; no second
+`<filename>.artifact.json` is created. The bundle manifest records both the
+media file and its `.info.json` sidecar.
+
+Every standalone or semantic sidecar records the exact data file's SHA-256
+digest and is committed after the data file. Missing metadata or a digest
+mismatch makes the artifact detectably invalid. If either no-clobber target
+already exists, the write stops before changing either one. A handled failure
+removes incomplete outputs when that is safely possible; otherwise it leaves a
+detectably invalid pair and reports the recovery action. It does not promise to
+restore the prior pair during an explicit overwrite. A process crash between
+the two commits may likewise leave a detectably invalid pair, but never an
+apparently valid sidecar for different content. Multi-file bundles use a
+private staging directory and commit the bundle manifest last under the same
+validity rule.
 
 CLI option help for every private raw output begins with `Private` and states
 the project default or explicit-path requirement. Completion messages identify
 the artifact as private and print its bounded root path, not individual
-student-derived filenames.
+student-derived filenames. The bounded root is the command-level directory
+above any per-user or student-derived leaf, such as
+`.danvas/private/grades/assignment-<id>/` or
+`.danvas/private/submissions/assignment-<id>/media/`; it therefore never prints
+the `user-<id>` component of the comments artifact.
 
 ## Terminal And Diagnostic Contract
 
@@ -343,7 +402,7 @@ The v2 manifest:
   when needed, snapshot timestamp, status, safe error, and relative file list;
 - removes `argv`, absolute `run_directory`, and absolute `project_root`;
 - replaces `input_paths` with project-relative path references or a bounded
-  `{\"scope\": \"external\"}` placeholder;
+  `{"scope": "external"}` placeholder;
 - rejects recorded files outside the report bundle instead of falling back to
   an absolute path; and
 - never retains tokens, signed/verifier URLs, raw exceptions, or private row
@@ -354,6 +413,13 @@ Private report runs move from `.danvas/reports/` to
 discover existing v1 runs in `.danvas/reports/` as well as v2 public and private
 runs. Readers treat a missing version as v1 and retain the existing legacy
 privacy boolean. They do not rewrite old evidence in place.
+
+Discovery identifies a run by `(storage_scope, relative_run_directory)`, where
+`storage_scope` distinguishes the ordinary and private report roots. Two roots
+may independently contain the same `YYYY-MM-DD-NNN-<slug>` directory name; list
+and JSON output retain both without collision. Latest selection orders by the
+manifest timestamp and then that stable scoped identity rather than silently
+deduplicating equal directory names.
 
 Persisted report-discovery JSON uses paths relative to the selected reports
 root. Existing terminal discovery may resolve a local path for operator use,
@@ -377,6 +443,11 @@ rejected during preflight, before Canvas mutation, whenever the command would
 read or write source-map provenance. Dry-run and live resolution use the same
 containment rule so a plan cannot promise a live transaction that will later
 fail only while writing provenance.
+
+The stable diagnostic is: `Source is outside the danvas project root; move it
+into the project or pass the correct --project-root.` The migration guide must
+reproduce that exact text so existing external-source workflows can recognize
+and remediate the compatibility break.
 
 This release does not introduce opaque hashes for external paths because they
 would make provenance non-resolvable and disguise a project-layout error. Users
@@ -444,17 +515,26 @@ not added in this sprint.
 guide must enumerate each affected command rather than describing the change as
 generic privacy hardening.
 
-| Existing behavior | New behavior |
-| --- | --- |
-| Private default writes into the current directory | Project use defaults beneath `.danvas/private/` |
-| A private command without a project may use a generic default | It requires an explicit destination before Canvas access |
-| Private files are often chmodded after writing | They are mode `0600` from creation |
-| Private reports live under `.danvas/reports/` | New runs live under `.danvas/private/reports/`; old runs remain discoverable |
-| Roster labels `login_id` as `Email` | Default is `LoginID`; `--schema legacy-v1` preserves the old header |
-| Discussion/feedback/media paths print student-level details | Terminal output is aggregate; details are retained privately |
-| Panopto manifests include `viewer_url` | Reusable access URLs are omitted |
-| Report manifests contain absolute paths and full argv | V2 manifests contain bounded relative provenance |
-| Out-of-project sources become absolute source-map keys | They fail preflight with project-root guidance |
+Existing behavior changes as follows:
+
+- Private defaults that wrote into the current directory now resolve beneath
+  `.danvas/private/` when a course project is available.
+- A private command without a project no longer uses a generic default; it
+  requires an explicit destination before Canvas access.
+- Private files are no longer chmodded after writing; they are mode `0600`
+  from creation.
+- New private report runs live under `.danvas/private/reports/` instead of
+  `.danvas/reports/`; old runs remain discoverable.
+- Roster stops labeling `login_id` as `Email`; the default header is `LoginID`
+  and `--schema legacy-v1` preserves the old header.
+- Discussion, feedback, and media paths stop printing student-level details;
+  terminal output is aggregate and details are retained privately.
+- Panopto manifests no longer include `viewer_url`; reusable access URLs are
+  omitted.
+- Report manifests stop retaining absolute paths and full argv; v2 manifests
+  contain bounded relative provenance.
+- Out-of-project sources no longer become absolute source-map keys; they fail
+  preflight with project-root guidance.
 
 Explicit private output paths remain supported and become securely created.
 Existing v1 reports, existing source maps with relative paths, and the legacy
@@ -485,9 +565,9 @@ The sprint is implemented and reviewed in these bounded groups:
    through the primitive. Remove post-write chmod as the enforcement path.
 5. **Output correction.** Apply `LoginID`, aggregate private terminal output,
    Panopto URL removal, secure sidecars, and raw-output help text.
-6. **Initialization and migration docs.** Add the private ignore, command-by-
-   command migration table, tracking guidance, examples, and durable-context
-   amendment.
+6. **Initialization and migration docs.** Add the private ignore, the
+   command-by-command migration table, tracking guidance, examples, and
+   durable-context amendment.
 7. **Release gate.** Run the complete frozen suite and isolated install smoke,
    then obtain the deferred independent review before tagging `0.16.0`.
 
@@ -503,7 +583,11 @@ repairs, but must not pull Sprint 20 mutation-mode work into this release.
   private from creation.
 - A forced exception after first-byte write never exposes a permissive file.
 - No-clobber rejects an existing target or sidecar without changing either.
+- A pre-existing `.part`, staging, or temporary target is refused and never
+  unlinked as though the current process created it.
 - Explicit overwrite uses a private temporary file and atomic replacement.
+- An injected crash between data and sidecar commit leaves a missing or
+  SHA-256-mismatched sidecar and is detected as invalid on the next read.
 - Default-root traversal and existing/new symlinks are rejected.
 - An explicit external destination does not chmod unrelated ancestors.
 - Unsupported platforms fail before network access or filesystem mutation.
@@ -525,6 +609,8 @@ repairs, but must not pull Sprint 20 mutation-mode work into this release.
 - Files outside a report bundle cannot be recorded as an absolute fallback.
 - V1 public/private and v2 public/private runs remain discoverable in date/slug
   order across both roots.
+- Equal run-directory names in the ordinary and private roots remain distinct
+  through their scoped identities and deterministic latest ordering.
 - Persisted discovery output uses relative paths.
 - Out-of-project source paths fail before a mocked Canvas write; project-
   relative paths remain stable across two checkout locations.
@@ -534,10 +620,12 @@ repairs, but must not pull Sprint 20 mutation-mode work into this release.
 - Every command in the private inventory uses the shared boundary for default,
   explicit, raw, report, rollback, manifest, sidecar, partial, and failure
   outputs.
+- Registry coverage includes `announcements latest` and every other inspection
+  command exposing an explicit or implicit retained-output option.
 - Explicit gradebook and quiz-analysis paths match report-run protections.
 - Roster default and legacy schemas are exact and internal readers accept both.
 - Discussion scoring and submission feedback stdout contain no fixture student
-  name, Canvas ID, login ID, score, comment, or matched filename.
+  name, Canvas user ID, login ID, score, comment, or matched filename.
 - Submission media and Panopto failure paths leave no permissive partial file.
 - Panopto manifests contain no viewer, signed, verifier, launch, or session URL.
 - A raw private export is classified in data/sidecar metadata and CLI help.
