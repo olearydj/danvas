@@ -65,13 +65,13 @@ def test_private_assignment_overrides_includes_member_ids() -> None:
 
 def test_invalid_override_yaml_does_not_echo_student_ids(tmp_path: Path) -> None:
     path = tmp_path / "overrides.yaml"
-    path.write_text("canvas_user_ids: [123456,\n", encoding="utf-8")
+    path.write_text("canvas_user_ids: [202,\n", encoding="utf-8")
 
     payload, error = load_local_override_file(tmp_path, "overrides.yaml")
 
     assert payload is None
     assert error == "invalid override reference overrides.yaml: YAML parse error"
-    assert "123456" not in error
+    assert "202" not in error
 
 
 def test_command_assignments_overrides_writes_yaml(

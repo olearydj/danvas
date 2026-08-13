@@ -190,7 +190,7 @@ def test_plan_reserves_explicit_ids_before_title_fallback() -> None:
 def test_command_dry_run_writes_private_redacted_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    source, _ = write_project(tmp_path, [student_override("ProctorU", [501234])])
+    source, _ = write_project(tmp_path, [student_override("ProctorU", [202])])
     assignment = FakeAssignment([])
     canvas = SimpleNamespace(
         get_course=lambda course_id: SimpleNamespace(
@@ -207,7 +207,7 @@ def test_command_dry_run_writes_private_redacted_report(
     report = json.loads(report_text)
     assert report["status"] == "would_apply"
     assert report["summary"]["creates"] == 1
-    assert "501234" not in report_text
+    assert "202" not in report_text
     assert assignment.created == []
     assert manifest["may_contain_private_student_data"] is True
 

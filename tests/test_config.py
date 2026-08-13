@@ -11,7 +11,7 @@ from danvas.cli import args_for
 
 
 class FakeCourse:
-    id = 1742717
+    id = 101
     name = "INSY 6600"
     course_code = "INSY6600"
 
@@ -32,7 +32,7 @@ class FakeCourse:
                 unlock_at="",
                 lock_at="2026-06-15T04:59:59Z",
                 published=True,
-                html_url="https://canvas.test/assignments/100",
+                html_url="https://canvas.example.edu/assignments/100",
                 submission_types=["online_upload"],
                 description="<p>Submit files.</p>",
                 all_dates=[
@@ -80,7 +80,7 @@ class FakeCourse:
                 content_type="application/pdf",
                 created_at="2026-06-01T00:00:00Z",
                 updated_at="2026-06-02T00:00:00Z",
-                url="https://canvas.test/files/300/download?verifier=secret-token",
+                url="https://canvas.example.edu/files/300/download?verifier=secret-token",
             )
         ]
 
@@ -90,7 +90,7 @@ class FakeCourse:
                 SimpleNamespace(
                     id=401,
                     title="Welcome",
-                    html_url="https://canvas.test/announcements/401",
+                    html_url="https://canvas.example.edu/announcements/401",
                     posted_at="2026-06-01T12:00:00Z",
                     message="<p>Hello class</p>",
                     published=True,
@@ -100,7 +100,7 @@ class FakeCourse:
             SimpleNamespace(
                 id=402,
                 title="Case Discussion",
-                html_url="https://canvas.test/discussion_topics/402",
+                html_url="https://canvas.example.edu/discussion_topics/402",
                 assignment_id=99,
                 published=True,
                 locked=False,
@@ -124,7 +124,7 @@ class FakeCourse:
                 published=True,
                 time_limit=30,
                 allowed_attempts=2,
-                html_url="https://canvas.test/quizzes/500",
+                html_url="https://canvas.example.edu/quizzes/500",
             )
         ]
 
@@ -164,28 +164,28 @@ class FakeCourse:
         return SimpleNamespace(
             page_id=601,
             url="resources",
-            html_url="https://canvas.test/courses/1742717/pages/resources",
+            html_url="https://canvas.example.edu/courses/101/pages/resources",
             title="Resources",
             published=True,
             front_page=False,
             editing_roles="teachers",
             updated_at="2026-06-10T00:00:00Z",
             body=(
-                '<p><a href="https://canvas.test/courses/1742717/files/300/download'
+                '<p><a href="https://canvas.example.edu/courses/101/files/300/download'
                 '?verifier=secret-token">File</a></p>'
             ),
         )
 
 
 def test_write_project_config_and_snapshot(tmp_path: Path) -> None:
-    snapshot = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    snapshot = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
     config_path = tmp_path / ".danvas" / "config.toml"
     snapshot_path = tmp_path / ".danvas" / "course.json"
 
     config.write_project_config(
         config_path,
         course_snapshot=snapshot,
-        api_url="https://auburn.instructure.com/",
+        api_url="https://canvas.example.edu/",
         timezone="America/Chicago",
     )
     config.write_course_snapshot(snapshot_path, snapshot)
@@ -194,11 +194,11 @@ def test_write_project_config_and_snapshot(tmp_path: Path) -> None:
     assert "[canvas]" in text
     assert 'course_name = "INSY 6600"' in text
     assert '"Case Studies" = 20' in text
-    assert config.resolve_course_id(None, start=tmp_path) == 1742717
+    assert config.resolve_course_id(None, start=tmp_path) == 101
     assert config.resolve_assignment_group_id("Case Studies", start=tmp_path) == 20
 
     payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
-    assert payload["course"]["id"] == 1742717
+    assert payload["course"]["id"] == 101
     assert payload["assignments"][0]["assignment_group_name"] == "Case Studies"
     assert payload["assignments"][0]["has_overrides"] is True
     assert payload["assignments"][0]["all_dates"][1]["assignee_count"] == 2
@@ -264,7 +264,7 @@ def test_init_timezone_leaves_unknown_unconfigured(capsys) -> None:
 
 
 def test_build_course_snapshot_includes_expanded_sections() -> None:
-    snapshot = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    snapshot = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
 
     assert snapshot["schema_version"] == config.SNAPSHOT_SCHEMA_VERSION
 
@@ -304,7 +304,7 @@ def test_build_course_snapshot_includes_expanded_sections() -> None:
 
 
 def test_build_course_snapshot_contains_no_secrets_or_member_lists() -> None:
-    snapshot = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    snapshot = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
     text = json.dumps(snapshot)
 
     assert "verifier" not in text
@@ -318,10 +318,10 @@ def test_build_course_snapshot_contains_no_secrets_or_member_lists() -> None:
 def test_build_course_snapshot_marks_optional_forbidden_collection_unavailable() -> None:
     class ForbiddenCategoriesCourse(FakeCourse):
         def get_group_categories(self):
-            raise Forbidden("secret response https://canvas.test/?verifier=sentinel")
+            raise Forbidden("secret response https://canvas.example.edu/?verifier=sentinel")
 
     snapshot = config.build_course_snapshot(
-        ForbiddenCategoriesCourse(), canvas_origin="https://canvas.test/"
+        ForbiddenCategoriesCourse(), canvas_origin="https://canvas.example.edu/"
     )
 
     assert snapshot["schema_version"] == 5
@@ -451,7 +451,7 @@ def test_invalid_token_preserves_existing_snapshot(
 
     with pytest.raises(SystemExit, match="access token is invalid"):
         config.command_refresh(
-            SimpleNamespace(project_root=str(tmp_path), course_id=1742717, diff=False)
+            SimpleNamespace(project_root=str(tmp_path), course_id=101, diff=False)
         )
 
     assert snapshot_path.read_bytes() == previous
@@ -511,7 +511,7 @@ def test_required_collection_failure_leaves_previous_snapshot_unchanged(
             return ForbiddenAssignmentsCourse()
 
     monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
-    args = SimpleNamespace(project_root=str(tmp_path), course_id=1742717, diff=False)
+    args = SimpleNamespace(project_root=str(tmp_path), course_id=101, diff=False)
 
     with pytest.raises(SystemExit, match="assignments.*unavailable"):
         config.command_refresh(args)
@@ -528,14 +528,14 @@ def test_command_refresh_writes_partial_snapshot_with_bounded_warning(
 
     class ForbiddenCategoriesCourse(FakeCourse):
         def get_group_categories(self):
-            raise Forbidden("secret response https://canvas.test/?verifier=sentinel")
+            raise Forbidden("secret response https://canvas.example.edu/?verifier=sentinel")
 
     class FakeCanvas:
         def get_course(self, course_id: int):
             return ForbiddenCategoriesCourse()
 
     monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
-    args = SimpleNamespace(project_root=str(tmp_path), course_id=1742717, diff=False)
+    args = SimpleNamespace(project_root=str(tmp_path), course_id=101, diff=False)
 
     config.command_refresh(args)
 
@@ -572,7 +572,7 @@ def test_refresh_require_complete_preserves_previous_snapshot_and_skips_report(
     monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
     args = SimpleNamespace(
         project_root=str(tmp_path),
-        course_id=1742717,
+        course_id=101,
         diff=True,
         require_complete=True,
         report_root=None,
@@ -602,7 +602,7 @@ def test_complete_refresh_succeeds_with_require_complete(
     config.command_refresh(
         SimpleNamespace(
             project_root=str(tmp_path),
-            course_id=1742717,
+            course_id=101,
             diff=False,
             require_complete=True,
         )
@@ -628,10 +628,10 @@ def test_init_require_complete_writes_no_project_state(
     monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
     args = SimpleNamespace(
         project_root=str(tmp_path),
-        course_id=1742717,
+        course_id=101,
         force=False,
         require_complete=True,
-        api_url="https://canvas.test/",
+        api_url="https://canvas.example.edu/",
         timezone="America/Chicago",
     )
 
@@ -650,7 +650,7 @@ def test_init_records_profile_and_canvas_metadata_timezone(
 
     class FakeCanvas:
         def get_course(self, course_id: int):
-            assert course_id == 1742717
+            assert course_id == 101
             return ZonedCourse()
 
     monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
@@ -658,7 +658,7 @@ def test_init_records_profile_and_canvas_metadata_timezone(
     config.command_init(
         SimpleNamespace(
             project_root=str(tmp_path),
-            course_id=1742717,
+            course_id=101,
             force=False,
             require_complete=True,
             api_url="https://canvas.example/",
@@ -675,7 +675,7 @@ def test_init_records_profile_and_canvas_metadata_timezone(
 
 
 def test_diff_snapshots_reports_added_removed_changed() -> None:
-    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
     new = json.loads(json.dumps(old))
     new["assignments"][0]["points_possible"] = 50
     new["quizzes"] = []
@@ -694,7 +694,7 @@ def test_diff_snapshots_reports_added_removed_changed() -> None:
 
 
 def test_diff_snapshots_skips_non_authoritative_section_without_false_removals() -> None:
-    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
     new = json.loads(json.dumps(old))
     new["snapshot_status"] = "partial"
     new["group_categories"] = []
@@ -723,7 +723,7 @@ def test_diff_snapshots_skips_non_authoritative_section_without_false_removals()
 
 
 def test_diff_snapshots_marks_restored_section_without_historical_change_claims() -> None:
-    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
     old = json.loads(json.dumps(new))
     old["snapshot_status"] = "partial"
     old["group_categories"] = []
@@ -868,7 +868,7 @@ def test_diff_snapshots_does_not_compare_page_hashes_across_normalizers() -> Non
 
 def test_diff_snapshots_refuses_schema_mismatch() -> None:
     old = {"schema_version": 1, "generated_at": "2026-06-01T00:00:00Z"}
-    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
 
     assert config.diff_snapshots(old, new) is None
     assert "diff unavailable" in config.render_snapshot_diff(None)[0]
@@ -876,7 +876,7 @@ def test_diff_snapshots_refuses_schema_mismatch() -> None:
 
 def test_build_refresh_diff_report_handles_schema_mismatch(tmp_path: Path) -> None:
     old = {"schema_version": 1, "generated_at": "2026-06-01T00:00:00Z"}
-    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
 
     report = config.build_refresh_diff_report(old, new, tmp_path / ".danvas" / "course.json")
 
@@ -888,7 +888,7 @@ def test_build_refresh_diff_report_handles_schema_mismatch(tmp_path: Path) -> No
 
 
 def test_build_refresh_diff_report_handles_missing_previous_snapshot(tmp_path: Path) -> None:
-    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    new = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
 
     report = config.build_refresh_diff_report(None, new, tmp_path / ".danvas" / "course.json")
 
@@ -902,7 +902,7 @@ def test_command_refresh_with_diff_prints_summary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / ".danvas").mkdir()
-    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
     old["assignments"][0]["points_possible"] = 50
     config.write_course_snapshot(tmp_path / ".danvas" / "course.json", old)
 
@@ -911,7 +911,7 @@ def test_command_refresh_with_diff_prints_summary(
             return FakeCourse()
 
     monkeypatch.setattr("danvas.config.canvas_from_args", lambda args: FakeCanvas())
-    args = SimpleNamespace(project_root=str(tmp_path), course_id=1742717, diff=True)
+    args = SimpleNamespace(project_root=str(tmp_path), course_id=101, diff=True)
 
     config.command_refresh(args)
 
@@ -925,7 +925,7 @@ def test_command_refresh_with_diff_writes_report_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / ".danvas").mkdir()
-    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.test/")
+    old = config.build_course_snapshot(FakeCourse(), canvas_origin="https://canvas.example.edu/")
     old["assignments"][0]["points_possible"] = 50
     config.write_course_snapshot(tmp_path / ".danvas" / "course.json", old)
 
@@ -937,7 +937,7 @@ def test_command_refresh_with_diff_writes_report_dir(
     report_dir = tmp_path / "refresh-report"
     args = SimpleNamespace(
         project_root=str(tmp_path),
-        course_id=1742717,
+        course_id=101,
         diff=True,
         report_root=None,
         report_dir=str(report_dir),
@@ -956,7 +956,7 @@ def test_command_refresh_with_diff_writes_report_dir(
     assert "# Refresh Diff Report" in markdown
     manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["command"] == "refresh --diff"
-    assert manifest["course_id"] == 1742717
+    assert manifest["course_id"] == 101
     assert manifest["snapshot_timestamp"] == payload["new_generated_at"]
     assert manifest["files"] == ["refresh-diff.json", "refresh-diff.md"]
 
@@ -964,7 +964,7 @@ def test_command_refresh_with_diff_writes_report_dir(
 def test_command_refresh_report_requires_diff(tmp_path: Path) -> None:
     args = SimpleNamespace(
         project_root=str(tmp_path),
-        course_id=1742717,
+        course_id=101,
         diff=False,
         report_root=None,
         report_dir=str(tmp_path / "report"),
@@ -1048,7 +1048,7 @@ def test_assignment_group_name_resolves_in_dry_run(tmp_path: Path, capsys) -> No
     (tmp_path / ".danvas" / "config.toml").write_text(
         """
 [canvas]
-course_id = 1742717
+course_id = 101
 
 [assignment_groups]
 "Case Studies" = 20
@@ -1069,7 +1069,7 @@ points_possible: 100
     )
 
     command_assignments_create(
-        SimpleNamespace(source=str(source), dry_run=True, course_id=1742717)
+        SimpleNamespace(source=str(source), dry_run=True, course_id=101)
     )
 
     out = capsys.readouterr().out
@@ -1088,7 +1088,7 @@ def test_args_for_resolves_course_id_from_source_path(
         """
 [canvas]
 api_url = "https://canvas.example/"
-course_id = 1742717
+course_id = 101
 """,
         encoding="utf-8",
     )
@@ -1098,7 +1098,7 @@ course_id = 1742717
 
     args = args_for(course_id=None, source=str(source), api_url=None)
 
-    assert args.course_id == 1742717
+    assert args.course_id == 101
     assert args.api_url == "https://canvas.example/"
 
 
@@ -1107,7 +1107,7 @@ def test_assignment_group_name_conflicts_with_id(tmp_path: Path) -> None:
     (tmp_path / ".danvas" / "config.toml").write_text(
         """
 [canvas]
-course_id = 1742717
+course_id = 101
 
 [assignment_groups]
 "Case Studies" = 20
@@ -1129,5 +1129,5 @@ assignment_group_name: Case Studies
 
     with pytest.raises(SystemExit, match="Use either assignment_group_id"):
         command_assignments_create(
-            SimpleNamespace(source=str(source), dry_run=True, course_id=1742717)
+            SimpleNamespace(source=str(source), dry_run=True, course_id=101)
         )

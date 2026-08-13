@@ -188,6 +188,31 @@ def test_invalid_existing_sources_fail_before_canvas_context(
         config_module.command_init(init_args(tmp_path, force=True))
 
 
+def test_cli_invalid_init_timezone_fails_before_canvas_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "danvas.cli.resolve_canvas_context",
+        lambda **kwargs: pytest.fail("Canvas context must not be resolved"),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "init",
+            "101",
+            "--project-root",
+            str(tmp_path),
+            "--timezone",
+            "Not/A-Timezone",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Unknown timezone in --timezone" in result.output
+    assert not (tmp_path / ".danvas").exists()
+
+
 def test_source_output_directory_uses_config_then_unambiguous_include_parent(
     tmp_path: Path,
 ) -> None:

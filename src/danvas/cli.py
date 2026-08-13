@@ -34,7 +34,12 @@ from danvas.assignments import (
     command_assignments_verify,
 )
 from danvas.auth import command_auth_doctor
-from danvas.config import command_init, command_refresh, resolve_course_id
+from danvas.config import (
+    command_init,
+    command_refresh,
+    resolve_course_id,
+    validate_explicit_init_timezone,
+)
 from danvas.courses import command_courses, command_roster
 from danvas.discussion_sources import (
     command_discussions_create,
@@ -568,12 +573,13 @@ def init_project(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    validated_timezone = validate_explicit_init_timezone(timezone)
     run_command(
         command_init,
         args_for(
             course_id=course_id,
             project_root=str(project_root),
-            timezone=timezone,
+            timezone=validated_timezone,
             source_layout=source_layout,
             force=force,
             require_complete=require_complete,

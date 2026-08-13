@@ -243,7 +243,7 @@ def test_deprecated_options_and_panopto_language_default_are_frozen() -> None:
     )
 
 
-def test_invalid_init_timezone_currently_reaches_canvas_before_validation(
+def test_invalid_init_timezone_fails_before_canvas_context(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[str] = []
@@ -269,7 +269,7 @@ def test_invalid_init_timezone_currently_reaches_canvas_before_validation(
             )
         )
 
-    assert calls == ["canvas", "course:101"]
+    assert calls == []
     assert not (tmp_path / ".danvas").exists()
 
 
@@ -345,7 +345,7 @@ def test_ci_and_secret_scan_gaps_are_frozen() -> None:
     assert not any("gitleaks" in path.name.lower() for path in (ROOT / "scripts").iterdir())
 
 
-def test_current_tree_identity_breadcrumbs_are_frozen() -> None:
+def test_public_fixtures_use_placeholder_hosts_and_ids() -> None:
     canvas_host = "auburn." + "instructure.com"
     panopto_host = "auburn." + "hosted.panopto.com"
     searchable = [
@@ -374,20 +374,9 @@ def test_current_tree_identity_breadcrumbs_are_frozen() -> None:
     }
     numeric_occurrences = {path: values for path, values in numeric_occurrences.items() if values}
 
-    assert canvas_occurrences == {"tests/test_config.py": 1}
-    assert panopto_occurrences == {"tests/test_panopto.py": 5}
+    assert canvas_occurrences == {}
+    assert panopto_occurrences == {}
     assert numeric_occurrences == {
-        "docs/course-yaml.md": ["14702073", "14702074", "14875304", "14875406"],
-        "tests/test_config.py": ["1742717"],
-        "tests/test_override_sync.py": ["501234"],
-        "tests/test_overrides.py": ["123456"],
         "tests/test_pages.py": ["123456"],
-        "tests/test_panopto.py": ["448843", "99999999999999999"],
-        "tests/test_submissions.py": [
-            "0000001",
-            "4024825",
-            "4025725",
-            "5113936",
-            "9999999",
-        ],
+        "tests/test_panopto.py": ["99999999999999999"],
     }

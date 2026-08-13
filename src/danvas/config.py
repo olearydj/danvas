@@ -86,6 +86,9 @@ def command_init(args: Any) -> None:
     config_exists = config.exists()
     if config_exists and not args.force:
         raise SystemExit(f"Config already exists: {config}. Use --force to replace it.")
+    validated_explicit_timezone = validate_explicit_init_timezone(
+        getattr(args, "timezone", None)
+    )
     existing_config = load_config_dir(config.parent) if config_exists else {}
     source_config = source_config_for_init(
         existing_config=existing_config,
@@ -95,7 +98,9 @@ def command_init(args: Any) -> None:
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
     existing_timezone = (existing_config.get("canvas") or {}).get("timezone")
-    if getattr(args, "timezone", None) is None and existing_timezone:
+    if validated_explicit_timezone is not None:
+        timezone = validated_explicit_timezone
+    elif existing_timezone:
         timezone = require_timezone(
             str(existing_timezone), source="the existing project configuration"
         )
@@ -526,6 +531,13 @@ def resolve_init_timezone(args: Any, course: Any) -> str | None:
         file=sys.stderr,
     )
     return None
+
+
+def validate_explicit_init_timezone(value: str | None) -> str | None:
+    """Validate an explicit init timezone before Canvas context resolution."""
+    if value is None:
+        return None
+    return require_timezone(value, source="--timezone")
 
 
 def write_project_config(

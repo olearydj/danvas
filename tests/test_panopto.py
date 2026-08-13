@@ -130,9 +130,9 @@ def test_discover_panopto_tool_from_visible_course_nav() -> None:
                 [
                     {"id": 11, "name": "Grades", "domain": ""},
                     {
-                        "id": 448843,
+                        "id": 202,
                         "name": "Panopto Video",
-                        "domain": "auburn.hosted.panopto.com",
+                        "domain": "media.example.edu",
                     },
                 ]
             )
@@ -141,7 +141,7 @@ def test_discover_panopto_tool_from_visible_course_nav() -> None:
 
     tool = discover_panopto_tool(canvas, "https://canvas.example/", 101)
 
-    assert tool["id"] == 448843
+    assert tool["id"] == 202
     assert canvas.get_calls[0]["url"].endswith(
         "/api/v1/courses/101/external_tools/visible_course_nav_tools"
     )
@@ -149,12 +149,12 @@ def test_discover_panopto_tool_from_visible_course_nav() -> None:
 
 def test_normalize_panopto_base_url_accepts_domains_and_lti_urls() -> None:
     assert (
-        normalize_panopto_base_url("auburn.hosted.panopto.com/Panopto/LTI/LTI.aspx")
-        == "https://auburn.hosted.panopto.com"
+        normalize_panopto_base_url("media.example.edu/Panopto/LTI/LTI.aspx")
+        == "https://media.example.edu"
     )
     assert (
-        normalize_panopto_base_url("https://auburn.hosted.panopto.com/Panopto/Pages/Home.aspx")
-        == "https://auburn.hosted.panopto.com"
+        normalize_panopto_base_url("https://media.example.edu/Panopto/Pages/Home.aspx")
+        == "https://media.example.edu"
     )
 
 
@@ -305,7 +305,7 @@ def test_write_caption_outputs_dry_run_writes_manifests_without_downloading(
         dry_run=True,
         language="English_USA",
         course_id=101,
-        panopto_tool={"id": 448843, "name": "Panopto Video"},
+        panopto_tool={"id": 202, "name": "Panopto Video"},
     )
 
     manifest_path = tmp_path / "artifact-manifest.json"

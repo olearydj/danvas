@@ -470,10 +470,9 @@ Completed scope:
 - Tag the green revision as `v0.6.0`.
 - Keep `PROJECT_CONTEXT.md` and `docs/backlog.md` current when release status
   changes during close-out.
-- Recheck the updated external Codex teaching skill docs after any future
-  command-surface change:
-  - `/Users/djo/.codex/skills/teaching-danvas/SKILL.md`
-  - `/Users/djo/.codex/skills/teaching-danvas/references/danvas-commands.md`
+- Recheck any maintainer-owned external teaching overlay after a future
+  command-surface change, without making that private overlay part of the
+  public documentation authority chain.
 
 Definition of done:
 
@@ -546,8 +545,8 @@ Recommended goals:
 4. Add targeted file comparison improvements.
 
    ```bash
-   danvas files download-one --course-id 1742719 --file-id 284879389 --output /private/tmp/example.canvas.pptx
-   danvas files compare --course-id 1742719 --file-id 284879389 --local content/slides/example.pptx
+   danvas files download-one --course-id 101 --file-id 303 --output /private/tmp/example.canvas.pptx
+   danvas files compare --course-id 101 --file-id 303 --local content/slides/example.pptx
    ```
 
    Status: delivered for current scope. The only item not implemented is Office
@@ -657,9 +656,9 @@ Recommended goals:
 
    ```bash
    danvas assignments verify content/cases/case-1.md
-   danvas assignments verify --assignment-id 19862404
+   danvas assignments verify --assignment-id 202
    danvas announcements verify content/announcements/04-case-open.md
-   danvas announcements latest --course-id 1742719 --format markdown
+   danvas announcements latest --course-id 101 --format markdown
    ```
 
    Status: done. Delivered: `danvas announcements verify SOURCE` verifies one
@@ -730,15 +729,15 @@ Recommended goals:
    ```json
    {
      "schema_version": 1,
-     "course_id": 1742719,
+     "course_id": 101,
      "generated_at": "2026-06-24T12:00:00-05:00",
      "sources": [
        {
          "kind": "assignment",
          "path": "content/cases/case-1.md",
          "canvas": {
-           "id": 19862404,
-           "url": "https://auburn.instructure.com/courses/1742719/assignments/19862404"
+           "id": 202,
+           "url": "https://canvas.example.edu/courses/101/assignments/202"
          },
          "last_posted": {
            "command": "assignments update",
@@ -851,10 +850,10 @@ Recommended goals:
 1. Add Canvas group category and membership commands.
 
    ```bash
-   danvas groups categories --course-id 1742719
-   danvas groups categories rename --course-id 1742719 154244 "Case 1 Groups" --dry-run
-   danvas groups import --course-id 1742719 --category-id 154244 content/cases/case-1-groups.csv --dry-run
-   danvas groups verify --course-id 1742719 --category-id 154244 --expected content/cases/case-1-groups.csv
+   danvas groups categories --course-id 101
+   danvas groups categories rename --course-id 101 202 "Case 1 Groups" --dry-run
+   danvas groups import --course-id 101 --category-id 202 content/cases/case-1-groups.csv --dry-run
+   danvas groups verify --course-id 101 --category-id 202 --expected content/cases/case-1-groups.csv
    ```
 
    Desired behavior:
@@ -894,7 +893,7 @@ Recommended goals:
    discussion workflow.
 
    ```bash
-   danvas discussions create --course-id 1742719 discussion.md --seed-replies --dry-run
+   danvas discussions create --course-id 101 discussion.md --seed-replies --dry-run
    ```
 
    Desired behavior:
@@ -935,7 +934,7 @@ Recommended goals:
 1. Add read-only grade/comment pull.
 
    ```bash
-   danvas submissions grades --assignment-id 19838584 \
+   danvas submissions grades --assignment-id 201 \
      --output grading/case1-graded-comments.csv
    ```
 
@@ -1064,7 +1063,7 @@ Recommended goals:
    Status: delivered by `danvas submissions export`.
 
    ```bash
-   danvas submissions export --assignment-id 19901542 --output .danvas/proctoru-submissions.json
+   danvas submissions export --assignment-id 203 --output .danvas/proctoru-submissions.json
    ```
 
    Desired behavior:
@@ -1081,7 +1080,7 @@ Recommended goals:
    preserves Canvas-only overrides rather than deleting them.
 
    ```bash
-   danvas assignments overrides --assignment-id 19901488
+   danvas assignments overrides --assignment-id 202
    ```
 
    Desired behavior:
@@ -1100,7 +1099,7 @@ Recommended goals:
      differentiated student windows:
 
      ```yaml
-     assignment_id: 19838584
+     assignment_id: 201
      source: content/cases/case1-assignment.md
 
      base:
@@ -1108,7 +1107,7 @@ Recommended goals:
        lock_at: 2026-06-15T04:59:59Z
 
      overrides:
-       - canvas_override_id: 900773
+       - canvas_override_id: 303
          title: "extension group 1"
          due_at: 2026-06-17T04:59:59Z
          lock_at: null
@@ -1175,10 +1174,10 @@ Recommended goals:
    ```bash
    danvas exams reconcile \
      --roster .danvas/roster.csv \
-     --variant in_class:assignment_override:19901488 \
-     --variant zoom:override_or_submission:19901485 \
-     --variant proctoru:submission:19901542 \
-     --upload-assignment 19901660 \
+     --variant in_class:assignment_override:202 \
+     --variant zoom:override_or_submission:204 \
+     --variant proctoru:submission:203 \
+     --upload-assignment 205 \
      --upload-window-minutes 15
    ```
 
@@ -1234,8 +1233,8 @@ Why this belongs in its own command family:
 Delivered command set:
 
 ```bash
-danvas pages list --course-id 1742812
-danvas pages export --course-id 1742812 --output .danvas/pages.json
+danvas pages list --course-id 101
+danvas pages export --course-id 101 --output .danvas/pages.json
 danvas pages render content/pages/example-page.md --output /tmp/example-page.html
 danvas pages css-check content/pages/example-page.canvas.css
 danvas pages create content/pages/example-page.md --dry-run
@@ -1308,7 +1307,7 @@ Recommended goals:
    ```yaml
    ---
    title: "Additional Resources"
-   page_id: 1234567
+   page_id: 202
    published: false
    front_page: false
    editing_roles:
@@ -1723,8 +1722,8 @@ ordering.
    root topic message, and neither update scope mutates discussion entries.
 
    ```bash
-   danvas discussions verify content/discussions/unit-4.md --discussion-id 10819092
-   danvas discussions update content/discussions/unit-4.md --discussion-id 10819092 --body-only --dry-run
+   danvas discussions verify content/discussions/unit-4.md --discussion-id 202
+   danvas discussions update content/discussions/unit-4.md --discussion-id 202 --body-only --dry-run
    ```
 
    Desired behavior:
@@ -1771,7 +1770,7 @@ ordering.
    cleanup, and readback verification.
 
    ```bash
-   danvas grades clear --assignment-id 19952228 \
+   danvas grades clear --assignment-id 202 \
      --grades-csv grades-to-clear.csv --dry-run
    ```
 

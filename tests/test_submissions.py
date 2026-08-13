@@ -24,8 +24,8 @@ from danvas.submissions import (
 def write_roster(path: Path) -> None:
     path.write_text(
         "CanvasID,Name,Email,SIS_ID\n"
-        '4024825,"Lawson, Jack",jack@example.edu,JL1\n'
-        '5113936,"Reyes, Ana",ana@example.edu,AR1\n',
+        '202,"Lawson, Jack",jack@example.edu,JL1\n'
+        '303,"Reyes, Ana",ana@example.edu,AR1\n',
         encoding="utf-8",
     )
 
@@ -72,7 +72,7 @@ class FakeFeedbackSubmission:
             )
         if behavior == "missing_file":
             raise FileNotFoundError(file)
-        attachment_id = 900 + self.canvas_id
+        attachment_id = 202 + self.canvas_id
         self.assignment.accepted.add(self.canvas_id)
         return True, {"id": attachment_id, "filename": Path(file).name}
 
@@ -194,17 +194,17 @@ def test_load_roster_ids_rejects_invalid_or_duplicate_ids(
 
 
 def test_match_files_to_students_matches_unique_embedded_ids(tmp_path: Path) -> None:
-    canvas_ids = {4024825: "Lawson, Jack", 5113936: "Reyes, Ana"}
-    matched_file = tmp_path / "4024825-feedback.pdf"
-    repeated_id = tmp_path / "4024825-4024825-feedback.pdf"
-    two_students = tmp_path / "4024825-5113936-feedback.pdf"
-    unknown_id = tmp_path / "9999999-feedback.pdf"
+    canvas_ids = {202: "Lawson, Jack", 303: "Reyes, Ana"}
+    matched_file = tmp_path / "202-feedback.pdf"
+    repeated_id = tmp_path / "202-202-feedback.pdf"
+    two_students = tmp_path / "202-303-feedback.pdf"
+    unknown_id = tmp_path / "909-feedback.pdf"
     no_id = tmp_path / "feedback.pdf"
     files = [matched_file, repeated_id, two_students, unknown_id, no_id]
 
     matched, unmatched = match_files_to_students(files, canvas_ids)
 
-    assert matched == [(4024825, matched_file), (4024825, repeated_id)]
+    assert matched == [(202, matched_file), (202, repeated_id)]
     assert unmatched == [two_students, unknown_id, no_id]
 
 
@@ -215,8 +215,8 @@ def test_submissions_feedback_dry_run_previews_without_canvas(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"x")
-    (feedback_dir / "0000001-feedback.pdf").write_bytes(b"x")
+    (feedback_dir / "202-feedback.pdf").write_bytes(b"x")
+    (feedback_dir / "00001-feedback.pdf").write_bytes(b"x")
     (feedback_dir / "notes.txt").write_bytes(b"x")
 
     def fail(args: Any) -> Any:
@@ -230,13 +230,13 @@ def test_submissions_feedback_dry_run_previews_without_canvas(
     out = capsys.readouterr().out
     assert "Matched: 1" in out
     assert "Unmatched: 1" in out
-    assert "0000001-feedback.pdf" not in out
+    assert "00001-feedback.pdf" not in out
     assert "notes.txt" not in out
     evidence = json.loads((feedback_dir / "feedback-plan.json").read_text(encoding="utf-8"))
     assert evidence["status"] == "blocked"
-    assert evidence["matched"][0]["canvas_user_id"] == 4024825
+    assert evidence["matched"][0]["canvas_user_id"] == 202
     assert evidence["matched"][0]["feedback_sha256"]
-    assert evidence["unmatched_files"] == ["0000001-feedback.pdf"]
+    assert evidence["unmatched_files"] == ["00001-feedback.pdf"]
     assert evidence["next_steps"]["apply"][-1] == "--apply"
     assert any(
         value.endswith("feedback-results.json")
@@ -251,8 +251,8 @@ def test_submissions_feedback_apply_blocks_unmatched_files_before_canvas(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"matched")
-    (feedback_dir / "9999999-feedback.pdf").write_bytes(b"unmatched")
+    (feedback_dir / "202-feedback.pdf").write_bytes(b"matched")
+    (feedback_dir / "909-feedback.pdf").write_bytes(b"unmatched")
     monkeypatch.setattr(
         "danvas.submissions.canvas_from_args",
         lambda args: (_ for _ in ()).throw(AssertionError("Canvas contacted")),
@@ -265,7 +265,7 @@ def test_submissions_feedback_apply_blocks_unmatched_files_before_canvas(
         (feedback_dir / "feedback-results.json").read_text(encoding="utf-8")
     )
     assert evidence["status"] == "blocked"
-    assert evidence["unmatched_files"] == ["9999999-feedback.pdf"]
+    assert evidence["unmatched_files"] == ["909-feedback.pdf"]
 
 
 def test_submissions_feedback_live_run_prints_mutation_banner(
@@ -275,7 +275,7 @@ def test_submissions_feedback_live_run_prints_mutation_banner(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"x")
+    (feedback_dir / "202-feedback.pdf").write_bytes(b"x")
 
     assignment = FakeFeedbackAssignment()
     monkeypatch.setattr(
@@ -289,7 +289,7 @@ def test_submissions_feedback_live_run_prints_mutation_banner(
     assert "== Canvas write: upload feedback comments ==" in out
     assert "files: 1" in out
     assert "Lawson" not in out
-    assert "4024825" not in out
+    assert "202" not in out
     evidence = json.loads(
         (feedback_dir / "feedback-results.json").read_text(encoding="utf-8")
     )
@@ -307,7 +307,7 @@ def test_submissions_feedback_default_dry_run_then_live_uses_distinct_artifacts(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"x")
+    (feedback_dir / "202-feedback.pdf").write_bytes(b"x")
 
     assignment = FakeFeedbackAssignment()
     monkeypatch.setattr(
@@ -333,7 +333,7 @@ def test_submissions_feedback_uploads_matched_files(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"x")
+    (feedback_dir / "202-feedback.pdf").write_bytes(b"x")
 
     assignment = FakeFeedbackAssignment()
     monkeypatch.setattr(
@@ -343,13 +343,13 @@ def test_submissions_feedback_uploads_matched_files(
 
     command_submissions_feedback(feedback_args(roster, feedback_dir, comment="Graded."))
 
-    assert assignment.uploads == [(4024825, "4024825-feedback.pdf")]
+    assert assignment.uploads == [(202, "202-feedback.pdf")]
     assert assignment.edits == [
         (
-            4024825,
+            202,
             {
                 "text_comment": "Graded.",
-                "file_ids": [4025725],
+                "file_ids": [404],
             },
         )
     ]
@@ -362,9 +362,9 @@ def test_submissions_feedback_sanitizes_upload_failure(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"x")
+    (feedback_dir / "202-feedback.pdf").write_bytes(b"x")
 
-    assignment = FakeFeedbackAssignment(behaviors={4024825: "exception"})
+    assignment = FakeFeedbackAssignment(behaviors={202: "exception"})
     monkeypatch.setattr(
         "danvas.submissions.canvas_from_args",
         lambda args: FakeFeedbackCanvas(assignment),
@@ -392,9 +392,9 @@ def test_submissions_feedback_rejection_stops_and_checkpoints_remaining_rows(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"first")
-    (feedback_dir / "5113936-feedback.pdf").write_bytes(b"second")
-    assignment = FakeFeedbackAssignment(behaviors={4024825: "rejected"})
+    (feedback_dir / "202-feedback.pdf").write_bytes(b"first")
+    (feedback_dir / "303-feedback.pdf").write_bytes(b"second")
+    assignment = FakeFeedbackAssignment(behaviors={202: "rejected"})
     monkeypatch.setattr(
         "danvas.submissions.canvas_from_args",
         lambda args: FakeFeedbackCanvas(assignment),
@@ -413,7 +413,7 @@ def test_submissions_feedback_rejection_stops_and_checkpoints_remaining_rows(
     with pytest.raises(SystemExit):
         command_submissions_feedback(feedback_args(roster, feedback_dir))
 
-    assert assignment.uploads == [(4024825, "4024825-feedback.pdf")]
+    assert assignment.uploads == [(202, "202-feedback.pdf")]
     evidence = json.loads(
         (feedback_dir / "feedback-results.json").read_text(encoding="utf-8")
     )
@@ -457,8 +457,8 @@ def test_submissions_feedback_classifies_unsafe_outcomes(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"feedback")
-    assignment = FakeFeedbackAssignment(behaviors={4024825: behavior})
+    (feedback_dir / "202-feedback.pdf").write_bytes(b"feedback")
+    assignment = FakeFeedbackAssignment(behaviors={202: behavior})
     monkeypatch.setattr(
         "danvas.submissions.canvas_from_args",
         lambda args: FakeFeedbackCanvas(assignment),
@@ -478,7 +478,7 @@ def test_submissions_feedback_classifies_unsafe_outcomes(
     assert result["response_status"] == response_status
     assert result["readback_status"] == readback_status
     if behavior.startswith("edit_exception"):
-        assert result["attachment_id"] == 4025725
+        assert result["attachment_id"] == 404
     assert (
         "do not retry" in result["safe_next_action"].lower()
         or expected_status in {"failed_before_acceptance", "applied_verified"}
@@ -494,11 +494,11 @@ def test_submissions_feedback_exact_existing_comment_is_already_applied(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    feedback = feedback_dir / "4024825-feedback.pdf"
+    feedback = feedback_dir / "202-feedback.pdf"
     feedback.write_bytes(b"feedback")
     assignment = FakeFeedbackAssignment(
         comments={
-            4024825: [
+            202: [
                 {
                     "id": 12,
                     "comment": "Here is your graded feedback.",
@@ -533,10 +533,10 @@ def test_submissions_feedback_ambiguous_remote_state_blocks_before_banner(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"feedback")
+    (feedback_dir / "202-feedback.pdf").write_bytes(b"feedback")
     assignment = FakeFeedbackAssignment(
         comments={
-            4024825: [
+            202: [
                 {
                     "id": 12,
                     "comment": "Here is your graded feedback.",
@@ -569,7 +569,7 @@ def test_submissions_feedback_second_submission_fetch_failure_is_pre_acceptance(
     write_roster(roster)
     feedback_dir = tmp_path / "feedback"
     feedback_dir.mkdir()
-    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"feedback")
+    (feedback_dir / "202-feedback.pdf").write_bytes(b"feedback")
 
     class FetchFailureAssignment(FakeFeedbackAssignment):
         def __init__(self) -> None:
@@ -614,7 +614,7 @@ class FakeAttachment:
 class FakeSubmission:
     def __init__(self, *, grade: str | None = "90") -> None:
         self.id = 800
-        self.user_id = 4024825
+        self.user_id = 202
         self.user = {"sortable_name": "Lawson, Jack"}
         self.attempt = 1
         self.workflow_state = "graded"
@@ -689,7 +689,7 @@ def test_submissions_export_writes_sanitized_metadata(
 
     payload = json.loads((tmp_path / "submissions.json").read_text(encoding="utf-8"))
     row = payload["submissions"][0]
-    assert row["canvas_user_id"] == 4024825
+    assert row["canvas_user_id"] == 202
     assert row["attachment_ids"] == [700]
     assert row["attachment_content_types"] == [FakeAttachment.content_type]
     assert row["attachment_sizes"] == [42]

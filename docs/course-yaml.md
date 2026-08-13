@@ -54,11 +54,11 @@ weights:
   Project: 20
   Final Exam: 25
 final_score_reconstruction:
-  base_assignment: Raw Average (14875304)
+  base_assignment: Raw Average (201)
   adjustment_assignments:
-    - Final Exam Adjust (14875406)
-    - Attendance Deductions (14702073)
-    - Bonus Assignment (14702074)
+    - Final Exam Adjust (202)
+    - Attendance Deductions (203)
+    - Bonus Assignment (204)
 ```
 
 When `base_assignment` is present, `danvas gradebook audit` compares:
