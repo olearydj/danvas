@@ -11,24 +11,13 @@ from danvas.assignment_sources import expand_date_only_metadata
 from danvas.authored_content import DATE_OR_DATETIME, DATETIME, require_valid_datetimes
 from danvas.frontmatter import normalize_canvas_value, parse_frontmatter
 from danvas.page_sources import canonicalize_page_html, load_page_source
-
-SOURCE_KINDS = ("announcement", "discussion", "quiz", "assignment", "page")
-SOURCE_CONFIG_KEYS = {
-    "announcement": "announcements",
-    "discussion": "discussions",
-    "quiz": "quizzes",
-    "assignment": "assignments",
-    "page": "pages",
-}
-DEFAULT_SOURCE_PATTERNS = {
-    "announcement": ["content/announcements/*.md"],
-    "discussion": ["content/discussions/*.md"],
-    "quiz": ["content/quizzes/chap*.md"],
-    "assignment": ["content/cases/*-assignment.md"],
-    "page": ["content/pages/*.md", "content/pages/*.html"],
-}
-
-DEFAULT_SOURCE_EXCLUDES = {"page": ["content/pages/*-preview.html"]}
+from danvas.source_layouts import (
+    LEGACY_SOURCE_EXCLUDES as DEFAULT_SOURCE_EXCLUDES,  # noqa: F401 - compatibility re-export
+)
+from danvas.source_layouts import (
+    LEGACY_SOURCE_PATTERNS as DEFAULT_SOURCE_PATTERNS,  # noqa: F401 - compatibility re-export
+)
+from danvas.source_layouts import SOURCE_KINDS, source_options
 
 COMPARABLE_FIELDS = {
     "assignment": ["points_possible", "due_at", "unlock_at", "lock_at", "published"],
@@ -68,9 +57,6 @@ def scan_sources(
     course_id: int | None = None,
     canvas_origin: str | None = None,
 ) -> list[dict[str, Any]]:
-    source_config = source_config or {}
-    if not isinstance(source_config, dict):
-        raise SystemExit("[sources] must be a TOML table.")
     records = []
     for kind in SOURCE_KINDS:
         options = source_options(kind, source_config)
@@ -86,62 +72,6 @@ def scan_sources(
             if record is not None:
                 records.append(record)
     return records
-
-
-def source_options(kind: str, source_config: dict[str, Any]) -> dict[str, Any]:
-    config_key = SOURCE_CONFIG_KEYS[kind]
-    raw_options = source_config.get(config_key) or source_config.get(kind) or {}
-    if not isinstance(raw_options, dict):
-        raise SystemExit(f"[sources.{config_key}] must be a TOML table.")
-
-    custom_include = "include" in raw_options or "includes" in raw_options
-    include = patterns_from_config(
-        raw_options.get("include", raw_options.get("includes")),
-        default=DEFAULT_SOURCE_PATTERNS[kind],
-        label=f"sources.{config_key}.include",
-    )
-    exclude = patterns_from_config(
-        raw_options.get("exclude", raw_options.get("excludes")),
-        default=DEFAULT_SOURCE_EXCLUDES.get(kind, []),
-        label=f"sources.{config_key}.exclude",
-    )
-    require_assignment_metadata = False
-    if kind == "assignment":
-        require_assignment_metadata = bool_from_config(
-            raw_options.get("require_assignment_metadata"),
-            default=custom_include,
-            label=f"sources.{config_key}.require_assignment_metadata",
-        )
-    return {
-        "include": include,
-        "exclude": exclude,
-        "require_assignment_metadata": require_assignment_metadata,
-    }
-
-
-def patterns_from_config(value: Any, *, default: list[str], label: str) -> list[str]:
-    patterns: list[str]
-    if value is None:
-        return list(default)
-    if isinstance(value, str):
-        patterns = [value]
-    elif isinstance(value, list) and all(isinstance(item, str) for item in value):
-        patterns = [str(item) for item in value]
-    else:
-        raise SystemExit(f"{label} must be a string or list of strings.")
-    for pattern in patterns:
-        pattern_path = Path(pattern)
-        if pattern_path.is_absolute() or ".." in pattern_path.parts:
-            raise SystemExit(f"{label} patterns must be relative paths inside the course root.")
-    return patterns
-
-
-def bool_from_config(value: Any, *, default: bool, label: str) -> bool:
-    if value is None:
-        return default
-    if not isinstance(value, bool):
-        raise SystemExit(f"{label} must be true or false.")
-    return value
 
 
 def source_paths(root: Path, include: list[str], exclude: list[str]) -> list[Path]:

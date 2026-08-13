@@ -80,6 +80,7 @@ from danvas.reports import (
     latest_report_run,
     should_write_report_run,
 )
+from danvas.source_layouts import resolve_source_output_dir
 from danvas.source_lint import command_sources_lint
 from danvas.status import command_status
 from danvas.submissions import (
@@ -106,6 +107,7 @@ LintFailOn = Literal["error", "warning"]
 PageExportFormat = Literal["json", "html", "markdown"]
 PageSyncFormat = Literal["html", "markdown"]
 RosterSchema = Literal["v2", "legacy-v1"]
+SourceLayout = Literal["standard-v1", "legacy-v1"]
 
 
 app = typer.Typer(
@@ -539,6 +541,16 @@ def init_project(
             ),
         ),
     ] = None,
+    source_layout: Annotated[
+        SourceLayout | None,
+        typer.Option(
+            "--source-layout",
+            help=(
+                "Authored-source layout to materialize. New projects default to standard-v1; "
+                "--force preserves an existing effective layout when omitted."
+            ),
+        ),
+    ] = None,
     force: Annotated[
         bool, typer.Option("--force", help="Replace an existing .danvas/config.toml.")
     ] = False,
@@ -562,6 +574,7 @@ def init_project(
             course_id=course_id,
             project_root=str(project_root),
             timezone=timezone,
+            source_layout=source_layout,
             force=force,
             require_complete=require_complete,
             profile=profile,
@@ -2556,12 +2569,12 @@ def discussions_sync_prompts(
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
     output_dir: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--output-dir",
             help="Directory for created discussion prompt Markdown sources.",
         ),
-    ] = Path("content/discussions"),
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Plan source creation without writing content files."),
@@ -2586,12 +2599,15 @@ def discussions_sync_prompts(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    resolved_output_dir = resolve_source_output_dir(
+        "discussion", project_root=project_root, explicit=output_dir
+    )
     run_command(
         command_discussions_sync_prompts,
         args_for(
             course_id=course_id,
             project_root=str(project_root),
-            output_dir=str(output_dir),
+            output_dir=str(resolved_output_dir),
             dry_run=dry_run,
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
@@ -2715,8 +2731,8 @@ def pages_export(
 )
 def pages_sync(
     output_dir: Annotated[
-        Path, typer.Option("--output-dir", help="Directory for new Page sources.")
-    ],
+        Path | None, typer.Option("--output-dir", help="Directory for new Page sources.")
+    ] = None,
     course_id: CourseId = None,
     output_format: Annotated[
         PageSyncFormat,
@@ -2753,11 +2769,14 @@ def pages_sync(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    resolved_output_dir = resolve_source_output_dir(
+        "page", project_root=project_root, explicit=output_dir
+    )
     run_command(
         command_pages_sync,
         args_for(
             course_id=course_id,
-            output_dir=str(output_dir),
+            output_dir=str(resolved_output_dir),
             format=output_format,
             page_id=page_id,
             url=url,
@@ -3116,12 +3135,12 @@ def announcements_sync(
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
     output_dir: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--output-dir",
             help="Directory for created announcement Markdown sources.",
         ),
-    ] = Path("content/announcements"),
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option("--dry-run", help="Plan source creation without writing content files."),
@@ -3146,12 +3165,15 @@ def announcements_sync(
     op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
 ) -> None:
+    resolved_output_dir = resolve_source_output_dir(
+        "announcement", project_root=project_root, explicit=output_dir
+    )
     run_command(
         command_announcements_sync,
         args_for(
             course_id=course_id,
             project_root=str(project_root),
-            output_dir=str(output_dir),
+            output_dir=str(resolved_output_dir),
             dry_run=dry_run,
             no_report=no_report,
             report_root=str(report_root) if report_root else None,

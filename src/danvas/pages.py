@@ -520,7 +520,12 @@ def page_public_record(record: dict[str, Any], *, include_body: bool = False) ->
 
 
 def command_pages_sync(args: Any) -> None:
+    from danvas.source_layouts import resolve_source_output_dir
+
     root = Path(args.project_root).resolve()
+    output_dir = resolve_source_output_dir(
+        "page", project_root=root, explicit=getattr(args, "output_dir", None)
+    )
     course = canvas_from_args(args).get_course(args.course_id)
     inventory = canvas_page_inventory(
         course, canvas_origin=getattr(args, "api_url", None)
@@ -531,7 +536,7 @@ def command_pages_sync(args: Any) -> None:
     plan = build_pages_sync_plan(
         inventory=inventory,
         selected=selected,
-        output_dir=Path(args.output_dir).resolve(),
+        output_dir=output_dir,
         fmt=args.format,
         project_root=root,
         dry_run=bool(args.dry_run),

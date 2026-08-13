@@ -28,6 +28,7 @@ from danvas.snapshot_collections import (
     COLLECTION_NAMES,
     snapshot_collection_metadata,
 )
+from danvas.source_layouts import SOURCE_CONFIG_KEYS, source_output_dir_value
 from danvas.source_map import find_source_entry, load_source_map
 from danvas.sources import scan_sources
 from danvas.utils import write_json
@@ -198,7 +199,7 @@ def build_status(
             else []
         ),
     }
-    add_next_actions(sections)
+    add_next_actions(sections, source_config=source_config)
     summary: Counter[str] = Counter()
     for items in sections.values():
         summary.update(item["classification"] for item in items)
@@ -656,25 +657,38 @@ def local_match_detail(match: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def add_next_actions(sections: dict[str, list[dict[str, Any]]]) -> None:
+def add_next_actions(
+    sections: dict[str, list[dict[str, Any]]],
+    *,
+    source_config: dict[str, Any] | None = None,
+) -> None:
     for section, items in sections.items():
         for item in items:
-            action = next_action_for(section, item)
+            action = next_action_for(section, item, source_config=source_config)
             if action:
                 item["next_action"] = action
 
 
-def next_action_for(section: str, item: dict[str, Any]) -> str:
+def next_action_for(
+    section: str,
+    item: dict[str, Any],
+    *,
+    source_config: dict[str, Any] | None = None,
+) -> str:
     classification = item.get("classification")
     if section == "announcements" and classification == "Canvas-only":
-        return (
-            "Run `danvas announcements sync --output-dir content/announcements --dry-run` "
-            "to plan a local source file."
+        return sync_next_action(
+            "announcement",
+            "danvas announcements sync",
+            "to plan a local source file.",
+            source_config,
         )
     if section == "discussions" and classification == "Canvas-only":
-        return (
-            "Run `danvas discussions sync-prompts --output-dir content/discussions --dry-run` "
-            "to plan a local prompt source file."
+        return sync_next_action(
+            "discussion",
+            "danvas discussions sync-prompts",
+            "to plan a local prompt source file.",
+            source_config,
         )
     if section == "assignments" and classification == "local-only":
         return "Run `danvas assignments create SOURCE --dry-run` before posting this local assignment."
@@ -687,7 +701,12 @@ def next_action_for(section: str, item: dict[str, Any]) -> str:
     if section == "files" and classification == "filename-only match":
         return "Inspect Canvas/local size and timestamps before deciding whether Canvas or local content is stale."
     if section == "pages" and classification == "Canvas-only":
-        return "Run `danvas pages sync --output-dir content/pages --dry-run` to plan a local source."
+        return sync_next_action(
+            "page",
+            "danvas pages sync",
+            "to plan a local source.",
+            source_config,
+        )
     if section == "pages" and classification == "local-only":
         return "Run `danvas pages create SOURCE --dry-run` before creating this Page."
     if section == "pages" and classification == "probable match, unbound":
@@ -705,6 +724,22 @@ def next_action_for(section: str, item: dict[str, Any]) -> str:
     if classification == "metadata mismatch":
         return "Review metadata differences before deciding whether local source or Canvas should change."
     return ""
+
+
+def sync_next_action(
+    kind: str,
+    command: str,
+    purpose: str,
+    source_config: dict[str, Any] | None,
+) -> str:
+    output_dir = source_output_dir_value(kind, source_config)
+    if output_dir is None:
+        key = SOURCE_CONFIG_KEYS[kind]
+        return (
+            f"Set `sources.{key}.output_dir` in `.danvas/config.toml`; the include "
+            "patterns do not have one unambiguous static parent."
+        )
+    return f"Run `{command} --output-dir {output_dir} --dry-run` {purpose}"
 
 
 def render_status_lines(payload: dict[str, Any]) -> list[str]:

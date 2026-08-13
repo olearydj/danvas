@@ -90,9 +90,15 @@ def command_discussions_export(args: Any) -> None:
 
 
 def command_discussions_sync_prompts(args: Any) -> None:
+    from danvas.source_layouts import resolve_source_output_dir
+
+    output_dir = resolve_source_output_dir(
+        "discussion",
+        project_root=Path(args.project_root) if args.project_root else Path.cwd(),
+        explicit=getattr(args, "output_dir", None),
+    )
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
-    output_dir = Path(args.output_dir)
     records = discussion_prompt_records(course)
     plan = build_discussions_sync_prompts_plan(
         course=course,

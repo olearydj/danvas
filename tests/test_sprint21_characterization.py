@@ -77,7 +77,7 @@ def test_legacy_source_defaults_and_compatibility_spellings_are_frozen() -> None
     }
 
 
-def test_project_config_writer_does_not_materialize_a_source_layout(tmp_path: Path) -> None:
+def test_project_config_writer_materializes_selected_source_layout(tmp_path: Path) -> None:
     path = tmp_path / ".danvas/config.toml"
 
     config_module.write_project_config(
@@ -88,24 +88,42 @@ def test_project_config_writer_does_not_materialize_a_source_layout(tmp_path: Pa
         },
         api_url="https://canvas.example.edu/",
         timezone="America/Chicago",
+        source_config=config_module.source_config_for_init(
+            existing_config={}, requested_layout=None, config_exists=False
+        ),
     )
 
-    text = path.read_text(encoding="utf-8")
-    assert "[sources]" not in text
-    assert "source_layout" not in text
+    project = tomllib.loads(path.read_text(encoding="utf-8"))
+    assert project["sources"]["layout"] == "standard-v1"
+    assert project["sources"]["assignments"] == {
+        "include": ["content/assignments/*.md"],
+        "require_assignment_metadata": True,
+    }
 
 
-def test_status_next_actions_use_fixed_legacy_content_paths() -> None:
-    assert next_action_for("announcements", {"classification": "Canvas-only"}) == (
-        "Run `danvas announcements sync --output-dir content/announcements --dry-run` "
+def test_status_next_actions_use_effective_source_output_paths() -> None:
+    source_config = {
+        "announcements": {"output_dir": "authored/news"},
+        "discussions": {"include": ["authored/prompts/*.md"]},
+        "pages": {"include": ["pages/*.md", "site/*.html"]},
+    }
+    assert next_action_for(
+        "announcements", {"classification": "Canvas-only"}, source_config=source_config
+    ) == (
+        "Run `danvas announcements sync --output-dir authored/news --dry-run` "
         "to plan a local source file."
     )
-    assert next_action_for("discussions", {"classification": "Canvas-only"}) == (
-        "Run `danvas discussions sync-prompts --output-dir content/discussions --dry-run` "
+    assert next_action_for(
+        "discussions", {"classification": "Canvas-only"}, source_config=source_config
+    ) == (
+        "Run `danvas discussions sync-prompts --output-dir authored/prompts --dry-run` "
         "to plan a local prompt source file."
     )
-    assert next_action_for("pages", {"classification": "Canvas-only"}) == (
-        "Run `danvas pages sync --output-dir content/pages --dry-run` to plan a local source."
+    assert next_action_for(
+        "pages", {"classification": "Canvas-only"}, source_config=source_config
+    ) == (
+        "Set `sources.pages.output_dir` in `.danvas/config.toml`; the include patterns "
+        "do not have one unambiguous static parent."
     )
 
 
