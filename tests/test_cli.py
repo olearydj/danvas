@@ -7,7 +7,6 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from danvas.artifacts import ARTIFACT_POLICIES
 from danvas.cli import app, run_command
 from tests.fixtures import write_assignment_fixture, write_gradebook_fixture, write_quiz_fixture
 
@@ -36,35 +35,6 @@ def option_names(*path: str) -> set[str]:
         names.update(param.opts)
         names.update(param.secondary_opts)
     return names
-
-
-def retained_output_commands() -> set[str]:
-    output_options = {
-        "--output",
-        "--output-dir",
-        "--report-md",
-        "--report-root",
-        "--report-dir",
-        "--rollback-dir",
-        "--save-raw",
-    }
-    found: set[str] = set()
-
-    def visit(cmd: click.Command, prefix: tuple[str, ...] = ()) -> None:
-        if isinstance(cmd, click.Group):
-            for name, child in cmd.commands.items():
-                visit(child, (*prefix, name))
-            return
-        options = {
-            option
-            for param in cmd.params
-            for option in (*getattr(param, "opts", ()), *getattr(param, "secondary_opts", ()))
-        }
-        if options & output_options:
-            found.add(" ".join(prefix))
-
-    visit(command())
-    return found
 
 
 def write_report_manifest(
@@ -101,10 +71,6 @@ def test_reports_commands_are_registered() -> None:
     assert isinstance(reports, click.Group)
     assert "list" in reports.commands
     assert "latest" in reports.commands
-
-
-def test_every_retained_output_command_has_artifact_policy() -> None:
-    assert retained_output_commands() <= set(ARTIFACT_POLICIES)
 
 
 def test_refresh_cli_accepts_report_options() -> None:

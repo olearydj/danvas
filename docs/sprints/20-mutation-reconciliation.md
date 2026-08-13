@@ -139,7 +139,7 @@ The remaining 16 commands are the complete mutation surface:
 
 | Command | Current live authorization | New `0.17.0` contract | Special risk/guard |
 | --- | --- | --- | --- |
-| `assignments overrides-sync` | `--live --confirm apply`; bare plans | bare/`--dry-run` plan; `--apply --confirm apply` writes | creates, updates, and deletes membership overrides |
+| `assignments overrides-sync` | `--live --confirm apply`; bare plans | bare/`--dry-run` plan; `--apply --confirm apply` writes | creates or updates membership and availability windows |
 | `assignments create` | bare writes | bare/`--dry-run` plan; `--apply` writes | may upload assets and publish student-visible content |
 | `assignments update` | bare writes | bare/`--dry-run` plan; `--apply` writes | may change visibility, schedule, and notification fields |
 | `assignments upsert` | action-specific `--confirm` writes; bare fails | bare/`--dry-run` plan; `--apply` plus matching `--confirm` writes | confirmation must be `create` or `update` |
