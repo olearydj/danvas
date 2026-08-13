@@ -263,6 +263,19 @@ They remain named refactor debt. The architecture test fails if another
 suppression is added or one of these exceptions moves without updating the
 durable decision.
 
+## 0.15.0 Instance Independence Release
+
+Sprint 18 is released as `v0.15.0`. It removes the Auburn host and Central Time
+runtime fallbacks, adds platform-native non-secret Canvas profiles, separates
+profile/instance/credential precedence, preserves initialized-project and
+environment compatibility, maps a bounded set of Rails timezone labels, and
+keeps offline `auth doctor` useful without an instance.
+
+Python 3.12 and 3.14 CI passed Ruff, ty, the dependency audit, branch coverage,
+all tests, and isolated editable/wheel smoke. The independent implementation
+review was explicitly deferred because the reviewer service was unavailable;
+it remains an open batched-review obligation rather than a completed gate.
+
 Independent review found that the initial self-derived transition tests could
 not detect a missing `would_reuse -> failed` edge. The candidate now carries an
 independently declared state contract plus real execution cases for upload
@@ -1582,13 +1595,17 @@ initiating its native instructor gradebook CSV export.
 
 ### Current Priority Order
 
-Sprint 16 shipped in 0.13.0, dependency maintenance shipped in 0.13.1, and
-Sprint 17 shipped in 0.14.0. The current order is:
+Sprint 16 shipped in 0.13.0, dependency maintenance shipped in 0.13.1, Sprint 17
+shipped in 0.14.0, and Sprint 18 shipped in 0.15.0. The accepted public-readiness
+program temporarily supersedes the prior feature order:
 
-1. Implement the Page asset adapter on the stabilized transaction. The adapter
-   also owns the explicitly recorded Page parser/suffix migration contract;
-   announcement/discussion adapters remain demand-driven follow-ons.
-2. Reconsider grouped case setup only when a concrete course workflow needs it.
+1. Specify, review, and implement Sprint 19's private-artifact boundary for
+   0.16.0.
+2. Complete Sprint 20 mutation/evidence reconciliation for 0.17.0.
+3. Complete Sprint 21 generalization and packaging before considering the
+   public-beta label for 0.18.0.
+4. Revisit the Page asset adapter and grouped-case setup after the readiness
+   program, based on concrete workflow demand.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas

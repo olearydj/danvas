@@ -1,9 +1,10 @@
 # Public Readiness Program: Sprints 18-21
 
-Status: accepted after factual and design review. The Sprint 18 implementation
-candidate is complete and pending independent review/release; Sprints 19-21
-remain design-only until separately reviewed. No live Canvas mutation,
-publication, release, or history rewrite is authorized by this design note.
+Status: Sprint 18 released as `v0.15.0`; Sprints 19-21 remain design-only until
+separately reviewed. The independent Sprint 18 implementation review was
+explicitly deferred because the reviewer service was unavailable and must be
+batched into the later program review. No live Canvas mutation, publication, or
+history rewrite is authorized by this design note.
 
 ## Outcome
 
@@ -644,6 +645,14 @@ complete command-by-command mutation table.
    API URL.
 6. Update current durable context and the 0.15.0 migration guide, then complete
    independent review and release gates.
+
+Sprint 18 shipped the runtime and migration boundary described above. Local and
+GitHub release gates passed on Python 3.12 and 3.14, including Ruff, ty,
+dependency audit, branch coverage, all tests, lock validation, and isolated
+editable/wheel smoke. The implementation review could not run because the
+reviewer service was unavailable; the maintainer explicitly deferred it for a
+batched later-program review rather than recording an unperformed review as
+complete.
 
 ### Sprint 19 / 0.16.0: private artifacts
 
