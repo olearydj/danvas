@@ -62,6 +62,26 @@ def test_assignment_datetime_comparison_matches_equivalent_offsets() -> None:
     assert check["matches"] is True
 
 
+def test_assignment_create_rejects_external_source_before_canvas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "project"
+    (project / ".danvas").mkdir(parents=True)
+    (project / ".danvas/config.toml").write_text(
+        '[canvas]\ncourse_id = 101\napi_url = "https://canvas.example.edu/"\n',
+        encoding="utf-8",
+    )
+    source = tmp_path / "external.md"
+    source.write_text("---\ntitle: External\n---\n\nBody\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda _args: pytest.fail("Canvas must not be resolved"),
+    )
+
+    with pytest.raises(SystemExit, match="Source is outside the danvas project root"):
+        command_assignments_create(SimpleNamespace(source=str(source), project_root=str(project)))
+
+
 def test_assignment_file_verify_ignores_current_course_page_links() -> None:
     links = extract_canvas_file_references(
         '<a href="/courses/101/pages/syllabus">Syllabus</a>',

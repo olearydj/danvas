@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from danvas.source_map import (
+    SOURCE_OUTSIDE_PROJECT_ERROR,
     load_source_map,
     resolve_source_canvas_id,
     source_map_path,
@@ -29,6 +30,19 @@ def test_source_map_path_and_source_key_use_project_config(tmp_path: Path) -> No
 
     assert source_map_path(source) == tmp_path / ".danvas" / "source-map.json"
     assert source_path_key(source, source) == "content/case.md"
+
+
+def test_source_path_key_rejects_source_outside_project(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    write_config(project)
+    source = tmp_path / "external.md"
+    source.write_text("external", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="Source is outside the danvas project root") as exc:
+        source_path_key(source, project)
+
+    assert str(exc.value) == SOURCE_OUTSIDE_PROJECT_ERROR
 
 
 def test_resolve_source_canvas_id_prefers_explicit_id(tmp_path: Path) -> None:
@@ -125,4 +139,21 @@ def test_load_source_map_rejects_bad_schema(tmp_path: Path) -> None:
     path.write_text('{"schema_version": 2, "sources": []}', encoding="utf-8")
 
     with pytest.raises(SystemExit, match="Unsupported source map schema_version"):
+        load_source_map(tmp_path)
+
+
+def test_load_source_map_rejects_legacy_absolute_path(tmp_path: Path) -> None:
+    write_config(tmp_path)
+    path = tmp_path / ".danvas" / "source-map.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "sources": [{"kind": "assignment", "path": "/Users/example/course.md"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="absolute source path"):
         load_source_map(tmp_path)

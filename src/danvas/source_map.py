@@ -11,6 +11,10 @@ from danvas.utils import normalize_json, write_json_atomic
 
 SOURCE_MAP_SCHEMA_VERSION = 1
 SOURCE_MAP_FILENAME = "source-map.json"
+SOURCE_OUTSIDE_PROJECT_ERROR = (
+    "Source is outside the danvas project root; move it into the project or pass the correct "
+    "--project-root."
+)
 
 
 def source_map_path(project_root: Path | None = None) -> Path:
@@ -36,8 +40,8 @@ def source_path_key(source: Path, project_root: Path | None = None) -> str:
     resolved = source.resolve()
     try:
         return resolved.relative_to(root.resolve()).as_posix()
-    except ValueError:
-        return str(resolved)
+    except ValueError as exc:
+        raise SystemExit(SOURCE_OUTSIDE_PROJECT_ERROR) from exc
 
 
 def load_source_map(project_root: Path | None = None) -> dict[str, Any]:
@@ -55,6 +59,16 @@ def load_source_map(project_root: Path | None = None) -> dict[str, Any]:
     sources = payload.get("sources")
     if not isinstance(sources, list):
         raise SystemExit(f"Invalid source map {path}: sources must be a list.")
+    if any(
+        isinstance(item, dict)
+        and isinstance(item.get("path"), str)
+        and Path(item["path"]).is_absolute()
+        for item in sources
+    ):
+        raise SystemExit(
+            "Source map contains an absolute source path. "
+            f"{SOURCE_OUTSIDE_PROJECT_ERROR}"
+        )
     return payload
 
 

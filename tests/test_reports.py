@@ -58,10 +58,15 @@ def test_create_report_run_writes_manifest(tmp_path: Path) -> None:
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["command"] == "assignments audit"
+    assert manifest["manifest_schema_version"] == 2
+    assert manifest["artifact_class"] == "course_internal"
     assert manifest["course_id"] == 101
     assert manifest["report_slug"] == "assignment-audit"
     assert manifest["status"] == "success"
     assert manifest["files"] == ["assignment-audit.md"]
+    assert manifest["inputs"] == [{"scope": "project", "path": "assignments.json"}]
+    for removed in ("argv", "run_directory", "project_root", "input_paths"):
+        assert removed not in manifest
 
 
 def test_private_report_run_hardens_directory_and_files_immediately(tmp_path: Path) -> None:
@@ -81,6 +86,31 @@ def test_private_report_run_hardens_directory_and_files_immediately(tmp_path: Pa
 
     manifest_path = run.finish()
     assert manifest_path.stat().st_mode & 0o077 == 0
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["artifact_class"] == "private"
+
+
+def test_private_report_defaults_beneath_project_private_root(tmp_path: Path) -> None:
+    write_config(tmp_path)
+
+    run = create_report_run(
+        command="gradebook audit",
+        slug="gradebook-audit",
+        project_root=tmp_path,
+        private_data=True,
+    )
+
+    assert run.path.parent == tmp_path / ".danvas/private/reports"
+    assert run.path.parent.stat().st_mode & 0o077 == 0
+
+
+def test_report_run_rejects_recording_file_outside_bundle(tmp_path: Path) -> None:
+    run = create_report_run(command="status", slug="status", report_dir=tmp_path / "run")
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="outside its run directory"):
+        run.record_file(outside)
 
 
 def test_mark_private_removes_only_group_and_other_permissions(tmp_path: Path) -> None:
@@ -223,3 +253,41 @@ def test_latest_report_run_returns_newest_valid_matching_slug(tmp_path: Path) ->
     assert latest_files is not None
     assert latest_files["name"] == "2026-06-23-002-files-inventory"
     assert latest_report_run(slug="missing", report_root=reports_root) is None
+
+
+def test_project_discovery_keeps_equal_names_from_public_and_private_roots(
+    tmp_path: Path,
+) -> None:
+    write_config(tmp_path)
+    name = "2026-06-23-001-status"
+    for scope, root, generated_at in (
+        ("reports", tmp_path / ".danvas/reports", "2026-06-23T11:00:00-05:00"),
+        ("private", tmp_path / ".danvas/private/reports", "2026-06-23T12:00:00-05:00"),
+    ):
+        run = root / name
+        run.mkdir(parents=True)
+        (run / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "manifest_schema_version": 2,
+                    "artifact_class": "private" if scope == "private" else "course_internal",
+                    "command": "status",
+                    "generated_at": generated_at,
+                    "report_slug": "status",
+                    "status": "success",
+                    "files": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    rows = discover_report_runs(project_root=tmp_path)
+
+    assert [(row["storage_scope"], row["name"]) for row in rows] == [
+        ("reports", name),
+        ("private", name),
+    ]
+    latest = latest_report_run(project_root=tmp_path)
+    assert latest is not None
+    assert latest["storage_scope"] == "private"
+    assert latest["path"] == name

@@ -561,7 +561,8 @@ def test_command_files_compare_writes_report_dir_by_file_id(
     assert manifest["command"] == "files compare"
     assert manifest["report_slug"] == "files-compare"
     assert manifest["files"] == ["files-compare.json", "files-compare.md"]
-    assert manifest["input_paths"] == [str(source), str(downloaded)]
+    assert manifest["inputs"] == [{"scope": "external"}, {"scope": "external"}]
+    assert "input_paths" not in manifest
     assert "Checksum comparison uses the supplied downloaded Canvas file" in md
     assert "File compare: matches" in capsys.readouterr().out
 

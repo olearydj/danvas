@@ -424,7 +424,8 @@ def echo_report_rows(rows: list[dict[str, Any]], *, root: Path | None = None) ->
         command = row["command"] or "(unknown command)"
         slug = row["report_slug"] or "(unknown slug)"
         generated = row["generated_at"] or "(unknown time)"
-        typer.echo(f"{row['name']}  {status}  {slug}  {command}  {generated}")
+        scope = row.get("storage_scope") or "reports"
+        typer.echo(f"{scope}:{row['name']}  {status}  {slug}  {command}  {generated}")
         if row["manifest_status"] != "valid":
             typer.echo(f"  manifest: {row['manifest_status']}")
             if row.get("error"):
@@ -433,6 +434,7 @@ def echo_report_rows(rows: list[dict[str, Any]], *, root: Path | None = None) ->
 
 def echo_report_detail(row: dict[str, Any]) -> None:
     typer.echo(f"Report: {row['name']}")
+    typer.echo(f"  Storage: {row.get('storage_scope') or 'reports'}")
     typer.echo(f"  Path: {row['path']}")
     typer.echo(f"  Command: {row['command']}")
     typer.echo(f"  Slug: {row['report_slug']}")

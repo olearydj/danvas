@@ -45,6 +45,31 @@ def test_every_supported_page_metadata_field_has_explicit_comparison_policy() ->
     assert set(PAGE_METADATA_FIELD_POLICIES) == PAGE_METADATA_COMPARE_FIELDS
 
 
+def test_page_create_rejects_external_source_before_canvas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "project"
+    (project / ".danvas").mkdir(parents=True)
+    (project / ".danvas/config.toml").write_text(
+        '[canvas]\ncourse_id = 101\napi_url = "https://canvas.example.edu/"\n',
+        encoding="utf-8",
+    )
+    source = write_source(tmp_path / "external.md", "Body")
+    monkeypatch.setattr(
+        "danvas.pages.canvas_from_args", lambda _args: pytest.fail("Canvas must not be resolved")
+    )
+
+    with pytest.raises(SystemExit, match="Source is outside the danvas project root"):
+        command_pages_create(
+            SimpleNamespace(
+                source=str(source),
+                project_root=str(project),
+                course_id=101,
+                api_url="https://canvas.example.edu/",
+            )
+        )
+
+
 def test_page_title_comparison_preserves_exact_text_semantics() -> None:
     assert page_metadata_values_match("title", "3.1", "3.10") is False
 

@@ -1022,6 +1022,7 @@ def command_pages_create(args: Any) -> None:
         course_id=args.course_id,
         canvas_origin=getattr(args, "api_url", None),
     )
+    source_path_key(local.source, Path(args.project_root))
     plan = page_plan(local, action="create")
     if args.dry_run or plan["status"] == "blocked":
         print(json.dumps(plan, indent=2, ensure_ascii=False))

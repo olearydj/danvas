@@ -47,7 +47,7 @@ from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_f
 from danvas.overrides import private_assignment_overrides
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.sanitize import sanitize_error, sanitize_public
-from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
+from danvas.source_map import resolve_source_canvas_id, source_path_key, write_source_map_entry
 from danvas.utils import (
     canvas_object_to_dict,
     html_to_text,
@@ -343,6 +343,7 @@ def command_assignments_create(args: Any) -> None:
     source = Path(args.source)
     if not source.is_file():
         raise SystemExit(f"Assignment Markdown source not found: {source}")
+    source_path_key(source, Path(getattr(args, "project_root", source.parent)))
     assignment = load_assignment_markdown(source)
     if "assignment_group" in assignment:
         if "assignment_group_name" in assignment:
