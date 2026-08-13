@@ -1962,7 +1962,9 @@ def submissions_media(
 
 @submissions_app.command(
     "feedback",
-    help="Upload feedback files as submission comments, matching Canvas IDs embedded in filenames.",
+    help=(
+        "Plan feedback comments from Canvas IDs in filenames, or upload and verify with --apply."
+    ),
 )
 def submissions_feedback(
     assignment_id: AssignmentId,
@@ -1984,12 +1986,8 @@ def submissions_feedback(
     comment: Annotated[
         str, typer.Option("--comment", "-c", help="Submission comment text.")
     ] = "Here is your graded feedback.",
-    dry_run: Annotated[
-        bool,
-        typer.Option(
-            "--dry-run", help="Show matched/unmatched files without uploading. Recommended first."
-        ),
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     output: Annotated[
         Path | None,
         typer.Option(
@@ -1997,7 +1995,7 @@ def submissions_feedback(
             "-o",
             help=(
                 "Private feedback JSON. Defaults to feedback-plan.json for --dry-run and "
-                "feedback-results.json for live use beneath .danvas/private/submissions; "
+                "feedback-results.json for --apply beneath .danvas/private/submissions; "
                 "required outside a project."
             ),
         ),
@@ -2024,7 +2022,7 @@ def submissions_feedback(
             feedback_dir=str(feedback_dir),
             pattern=pattern,
             comment=comment,
-            dry_run=dry_run,
+            **mutation_args_from_cli(dry_run=dry_run, apply=apply),
             output=str(output) if output else None,
             project_root=str(project_root),
             sleep_seconds=sleep_seconds,

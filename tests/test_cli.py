@@ -1038,6 +1038,84 @@ def test_group_3_mutation_flag_conflicts_fail_before_context_resolution(
     assert "context resolved" not in output
 
 
+def feedback_cli_args(tmp_path: Path) -> list[str]:
+    roster = tmp_path / "roster.csv"
+    roster.write_text("CanvasID,Name\n1,Example\n", encoding="utf-8")
+    feedback_dir = tmp_path / "feedback"
+    feedback_dir.mkdir(exist_ok=True)
+    return [
+        "--course-id",
+        "101",
+        "--assignment-id",
+        "5",
+        "--roster",
+        str(roster),
+        "--feedback-dir",
+        str(feedback_dir),
+    ]
+
+
+def test_submissions_feedback_plans_when_invoked_bare(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "danvas.cli.command_submissions_feedback",
+        lambda args: captured.update(vars(args)),
+    )
+
+    result = runner.invoke(app, ["submissions", "feedback", *feedback_cli_args(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert captured["dry_run"] is True
+    assert captured["mutation_mode"] == "plan"
+    assert {"--dry-run", "--apply"} <= option_names("submissions", "feedback")
+
+
+def test_submissions_feedback_requires_apply_for_authorization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "danvas.cli.command_submissions_feedback",
+        lambda args: captured.update(vars(args)),
+    )
+
+    result = runner.invoke(
+        app,
+        ["submissions", "feedback", *feedback_cli_args(tmp_path), "--apply"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["dry_run"] is False
+    assert captured["mutation_mode"] == "apply"
+
+
+def test_submissions_feedback_flag_conflict_fails_before_context_resolution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "danvas.cli.args_for",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "submissions",
+            "feedback",
+            *feedback_cli_args(tmp_path),
+            "--dry-run",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code != 0
+    output = normalized_cli_output(result)
+    assert "--dry-run and --apply cannot be combined" in output
+    assert "context resolved" not in output
+
+
 @pytest.mark.parametrize(
     ("path", "confirmation"),
     [

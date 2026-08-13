@@ -74,7 +74,7 @@ CURRENT_MUTATION_CALLS = Counter(
         ("quiz_import.py", "command_quiz_import_qti", "edit"): 1,
         ("quiz_import.py", "start_qti_migration", "create_content_migration"): 1,
         ("quiz_import.py", "start_qti_migration", "requests.post"): 1,
-        ("submissions.py", "command_submissions_feedback", "upload_comment"): 1,
+        ("submissions.py", "upload_feedback_comment", "upload_comment"): 1,
     }
 )
 
@@ -92,6 +92,7 @@ CURRENT_APPLY_COMMANDS = {
     "quiz import-qti",
     "grades post",
     "grades clear",
+    "submissions feedback",
 }
 
 CURRENT_MUTATION_ASSERTIONS = Counter(
@@ -120,6 +121,8 @@ CURRENT_MUTATION_ASSERTIONS = Counter(
         ("grades.py", "delete_submission_comment"): 1,
         ("quiz_import.py", "command_quiz_import_qti"): 2,
         ("quiz_import.py", "start_qti_migration"): 2,
+        ("submissions.py", "command_submissions_feedback"): 1,
+        ("submissions.py", "upload_feedback_comment"): 1,
     }
 )
 
@@ -240,7 +243,7 @@ def test_access_policy_category_counts_match_reviewed_inventory() -> None:
     ) == 26
     assert sum(policy.dry_run_kind is DryRunKind.LOCAL_WRITE for policy in policies) == 4
     assert sum(policy.canvas_mutation for policy in policies) == 15
-    assert sum(policy.bare_canvas_mutation for policy in policies) == 2
+    assert sum(policy.bare_canvas_mutation for policy in policies) == 1
 
 
 def test_current_dry_run_surface_and_defaults_are_characterized() -> None:
@@ -320,5 +323,6 @@ def test_access_policy_rejects_incoherent_declarations() -> None:
 
 def test_access_policy_lookup_rejects_unknown_command() -> None:
     assert access_policy("grades post").grade_affecting is True
+    assert access_policy("submissions feedback").authoritative_verification is True
     with pytest.raises(ValueError, match="No access policy"):
         access_policy("unknown command")

@@ -8,6 +8,7 @@ import json
 import re
 import time
 import zipfile
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,11 @@ from danvas.artifacts import (
     write_private_rows,
 )
 from danvas.auth import canvas_from_args
+from danvas.mutation import (
+    MutationMode,
+    assert_canvas_mutation_allowed,
+    mutation_mode_from_args,
+)
 from danvas.reports import safe_error
 from danvas.utils import (
     canvas_object_to_dict,
@@ -250,64 +256,430 @@ def command_submissions_feedback(args: Any) -> None:
     canvas_ids = load_roster_ids(roster_path)
     files = sorted(feedback_dir.glob(args.pattern))
     matched, unmatched = match_files_to_students(files, canvas_ids)
+    actions, local_blockers = build_feedback_actions(
+        matched,
+        canvas_ids=canvas_ids,
+        comment=args.comment,
+    )
+    local_blockers.extend(f"Unmatched feedback file: {path.name}" for path in unmatched)
     print(f"Matched: {len(matched)}")
     print(f"Unmatched: {len(unmatched)}")
     evidence: dict[str, Any] = {
+        "evidence_schema": "feedback-transaction-v1",
         "private_student_data": True,
         "course_id": args.course_id,
         "assignment_id": args.assignment_id,
-        "status": "planned" if args.dry_run else "running",
-        "matched": [
-            {
-                "canvas_user_id": canvas_id,
-                "student": canvas_ids[canvas_id],
-                "feedback_file": path.name,
-            }
-            for canvas_id, path in matched
-        ],
+        "mode": "plan" if args.dry_run else "apply",
+        "status": feedback_plan_status(actions, local_blockers),
+        "matched": [feedback_public_action(action) for action in actions],
         "unmatched_files": [path.name for path in unmatched],
+        "blockers": local_blockers,
+        "next_steps": {
+            "apply": feedback_apply_argv(
+                args,
+                result_path=(
+                    resolved.path.with_name("feedback-results.json")
+                    if args.dry_run
+                    else resolved.path
+                ),
+            )
+        },
         "results": [],
     }
     if args.dry_run:
         write_private_json(resolved.path, evidence, command="submissions feedback")
         print(f"Private artifact: {resolved.path}")
+        if evidence["status"] == "blocked":
+            raise SystemExit(1)
         return
-    print_mutation_banner(
-        "upload feedback comments",
-        {
-            "course": args.course_id,
-            "assignment": args.assignment_id,
-            "files": len(matched),
-        },
-    )
+
+    if local_blockers:
+        write_private_json(resolved.path, evidence, command="submissions feedback")
+        print(f"Private artifact: {resolved.path}")
+        raise SystemExit(1)
+    if not actions:
+        write_private_json(resolved.path, evidence, command="submissions feedback")
+        print(f"Private artifact: {resolved.path}")
+        return
+
     canvas = canvas_from_args(args)
     assignment = canvas.get_course(args.course_id).get_assignment(args.assignment_id)
-    success = failed = 0
+    for action in actions:
+        submission = assignment.get_submission(
+            action["canvas_user_id"], include=["submission_comments"]
+        )
+        action.update(classify_existing_feedback(submission, action))
+    remote_blockers = [
+        blocker
+        for action in actions
+        for blocker in action.get("blockers", [])
+    ]
+    if remote_blockers:
+        evidence["status"] = "blocked"
+        evidence["blockers"] = remote_blockers
+        evidence["matched"] = [feedback_public_action(action) for action in actions]
+        write_private_json(resolved.path, evidence, command="submissions feedback")
+        print(f"Private artifact: {resolved.path}")
+        raise SystemExit(1)
+
+    evidence["status"] = "running"
+    evidence["matched"] = [feedback_public_action(action) for action in actions]
+    write_private_json(resolved.path, evidence, command="submissions feedback")
+    ready = sum(action["preflight_status"] == "ready" for action in actions)
+    if ready:
+        mutation_mode = mutation_mode_from_args(args)
+        assert_canvas_mutation_allowed(mutation_mode, "submissions feedback")
+        print_mutation_banner(
+            "upload feedback comments",
+            {
+                "course": args.course_id,
+                "assignment": args.assignment_id,
+                "files": ready,
+            },
+        )
+    else:
+        mutation_mode = mutation_mode_from_args(args)
+
+    stopped = False
+    for action in actions:
+        if stopped:
+            result = feedback_result(
+                action,
+                status="skipped_after_stop",
+                safe_next_action="Resolve the prior unsafe row before applying this row.",
+                response_status="not_attempted",
+                readback_status="not_attempted",
+            )
+        elif action["preflight_status"] == "already_applied":
+            result = feedback_result(
+                action,
+                status="already_applied",
+                safe_next_action="No action required; retain this evidence.",
+                response_status="not_attempted",
+                readback_status="preflight_exact_match",
+            )
+        else:
+            result = execute_feedback_action(
+                assignment,
+                action,
+                mutation_mode=mutation_mode,
+            )
+            stopped = result["status"] not in {"applied_verified", "already_applied"}
+            if result["status"] == "applied_verified":
+                time.sleep(args.sleep_seconds)
+        evidence["results"].append(result)
+        evidence["status"] = "stopped" if stopped else "running"
+        write_private_json(
+            resolved.path,
+            evidence,
+            command="submissions feedback",
+            overwrite=True,
+        )
+
+    evidence["status"] = (
+        "success"
+        if all(
+            result["status"] in {"applied_verified", "already_applied"}
+            for result in evidence["results"]
+        )
+        else "stopped"
+    )
+    write_private_json(
+        resolved.path,
+        evidence,
+        command="submissions feedback",
+        overwrite=True,
+    )
+    summary = {
+        status: sum(result["status"] == status for result in evidence["results"])
+        for status in {
+            "applied_verified",
+            "already_applied",
+            "rejected",
+            "failed_before_acceptance",
+            "accepted_unverified",
+            "skipped_after_stop",
+        }
+    }
+    completed = summary["applied_verified"] + summary["already_applied"]
+    unsafe = len(evidence["results"]) - completed
+    print(f"Done. Verified/already applied: {completed}; unsafe/skipped: {unsafe}")
+    print(f"Private artifact: {resolved.path}")
+    if evidence["status"] != "success":
+        raise SystemExit(1)
+
+
+def build_feedback_actions(
+    matched: list[tuple[int, Path]],
+    *,
+    canvas_ids: dict[int, str],
+    comment: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    actions: list[dict[str, Any]] = []
+    blockers: list[str] = []
+    counts = Counter(canvas_id for canvas_id, _path in matched)
     for canvas_id, path in matched:
         try:
-            assignment.get_submission(canvas_id).upload_comment(
-                file=str(path), comment=args.comment
+            if not path.is_file():
+                raise OSError("not a regular file")
+            with path.open("rb") as handle:
+                digest = hashlib.file_digest(handle, "sha256").hexdigest()
+            size = path.stat().st_size
+        except OSError as exc:
+            blockers.append(
+                f"Feedback file is not readable: {path.name}: {safe_error(str(exc))}"
             )
-            success += 1
-            evidence["results"].append(
-                {"canvas_user_id": canvas_id, "status": "uploaded", "error": ""}
+            continue
+        action = {
+            "action_key": f"{canvas_id}:{digest}",
+            "canvas_user_id": canvas_id,
+            "student": canvas_ids[canvas_id],
+            "feedback_file": path.name,
+            "feedback_path": str(path),
+            "feedback_sha256": digest,
+            "feedback_size": size,
+            "comment": comment,
+            "preflight_status": "ready",
+            "blockers": [],
+            "before": {"related_comment_ids": []},
+        }
+        if counts[canvas_id] > 1:
+            action["preflight_status"] = "blocked"
+            action["blockers"].append(
+                "Multiple feedback files match the same Canvas user; narrow --pattern."
             )
-            time.sleep(args.sleep_seconds)
-        except Exception as exc:  # noqa: BLE001
-            failed += 1
-            evidence["results"].append(
-                {
-                    "canvas_user_id": canvas_id,
-                    "status": "failed",
-                    "error": safe_error(f"{type(exc).__name__}: {exc}"),
-                }
+            blockers.append(
+                f"Multiple feedback files match Canvas user {canvas_id}; narrow --pattern."
             )
-    evidence["status"] = "success" if not failed else "partial"
-    write_private_json(resolved.path, evidence, command="submissions feedback")
-    print(f"Done. Uploaded: {success}, Failed: {failed}")
-    print(f"Private artifact: {resolved.path}")
-    if failed:
-        raise SystemExit(1)
+        actions.append(action)
+    return actions, blockers
+
+
+def feedback_plan_status(actions: list[dict[str, Any]], blockers: list[str]) -> str:
+    if blockers:
+        return "blocked"
+    return "ready" if actions else "no_change"
+
+
+def feedback_apply_argv(args: Any, *, result_path: Path) -> list[str]:
+    return [
+        "danvas",
+        "submissions",
+        "feedback",
+        "--course-id",
+        str(args.course_id),
+        "--assignment-id",
+        str(args.assignment_id),
+        "--roster",
+        str(args.roster),
+        "--feedback-dir",
+        str(args.feedback_dir),
+        "--pattern",
+        str(args.pattern),
+        "--comment",
+        str(args.comment),
+        "--output",
+        str(result_path),
+        "--apply",
+    ]
+
+
+def feedback_public_action(action: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in action.items()
+        if key != "feedback_path"
+    }
+
+
+def classify_existing_feedback(submission: Any, action: dict[str, Any]) -> dict[str, Any]:
+    related = []
+    exact = []
+    for comment in list(getattr(submission, "submission_comments", []) or []):
+        record = feedback_comment_record(comment)
+        text_matches = record["comment"].strip() == action["comment"].strip()
+        attachment_matches = any(
+            feedback_attachment_matches(attachment, action)
+            for attachment in record["attachments"]
+        )
+        if text_matches or attachment_matches:
+            related.append(record)
+        if text_matches and attachment_matches:
+            exact.append(record)
+    before = {"related_comment_ids": [record["id"] for record in related]}
+    if len(exact) == 1 and len(related) == 1:
+        return {
+            "preflight_status": "already_applied",
+            "blockers": [],
+            "before": before,
+        }
+    if related:
+        return {
+            "preflight_status": "blocked",
+            "blockers": [
+                "Existing related feedback comment or attachment is ambiguous; review Canvas "
+                "manually before retrying."
+            ],
+            "before": before,
+        }
+    return {"preflight_status": "ready", "blockers": [], "before": before}
+
+
+def execute_feedback_action(
+    assignment: Any,
+    action: dict[str, Any],
+    *,
+    mutation_mode: MutationMode,
+) -> dict[str, Any]:
+    submission = assignment.get_submission(action["canvas_user_id"])
+    try:
+        response = upload_feedback_comment(
+            submission,
+            path=Path(action["feedback_path"]),
+            comment=action["comment"],
+            mutation_mode=mutation_mode,
+        )
+    except (FileNotFoundError, PermissionError, IsADirectoryError) as exc:
+        return feedback_result(
+            action,
+            status="failed_before_acceptance",
+            error=safe_error(f"{type(exc).__name__}: {exc}"),
+            safe_next_action="Correct the local file problem, regenerate the plan, and retry.",
+            response_status="not_sent",
+            readback_status="not_attempted",
+        )
+    except Exception as exc:  # noqa: BLE001 - acceptance is uncertain after transport starts.
+        return feedback_result(
+            action,
+            status="accepted_unverified",
+            error=safe_error(f"{type(exc).__name__}: {exc}"),
+            safe_next_action="Inspect Canvas manually; do not retry this row blindly.",
+            response_status="unknown_after_exception",
+            readback_status="not_available",
+        )
+
+    ok, payload = normalize_feedback_upload_response(response)
+    if not ok:
+        return feedback_result(
+            action,
+            status="rejected",
+            error=safe_error(str(payload.get("message") or "Canvas rejected the upload.")),
+            safe_next_action="Correct the rejected request, regenerate the plan, and retry.",
+            response_status="rejected",
+            readback_status="not_attempted",
+        )
+    attachment_id = payload.get("id")
+    try:
+        observed = assignment.get_submission(
+            action["canvas_user_id"], include=["submission_comments"]
+        )
+    except Exception as exc:  # noqa: BLE001 - write was accepted but readback failed.
+        return feedback_result(
+            action,
+            status="accepted_unverified",
+            attachment_id=attachment_id,
+            error=safe_error(f"{type(exc).__name__}: {exc}"),
+            safe_next_action="Inspect Canvas manually; do not retry this row blindly.",
+            response_status="accepted",
+            readback_status="failed",
+        )
+    verified = feedback_readback_matches(observed, action, attachment_id=attachment_id)
+    return feedback_result(
+        action,
+        status="applied_verified" if verified else "accepted_unverified",
+        attachment_id=attachment_id,
+        safe_next_action=(
+            "No action required; retain this evidence."
+            if verified
+            else "Inspect Canvas manually; do not retry this row blindly."
+        ),
+        response_status="accepted",
+        readback_status="verified" if verified else "mismatch",
+    )
+
+
+def upload_feedback_comment(
+    submission: Any,
+    *,
+    path: Path,
+    comment: str,
+    mutation_mode: MutationMode,
+) -> Any:
+    assert_canvas_mutation_allowed(mutation_mode, "submissions feedback upload")
+    return submission.upload_comment(file=str(path), comment=comment)
+
+
+def normalize_feedback_upload_response(response: Any) -> tuple[bool, dict[str, Any]]:
+    if isinstance(response, tuple) and len(response) == 2:
+        ok, payload = response
+        return bool(ok), canvas_object_to_dict(payload)
+    return bool(response), canvas_object_to_dict(response)
+
+
+def feedback_readback_matches(
+    submission: Any,
+    action: dict[str, Any],
+    *,
+    attachment_id: Any,
+) -> bool:
+    for comment in list(getattr(submission, "submission_comments", []) or []):
+        record = feedback_comment_record(comment)
+        if record["comment"].strip() != action["comment"].strip():
+            continue
+        for attachment in record["attachments"]:
+            if attachment_id is not None and str(attachment.get("id")) == str(attachment_id):
+                return True
+            if attachment_id is None and feedback_attachment_matches(attachment, action):
+                return True
+    return False
+
+
+def feedback_comment_record(comment: Any) -> dict[str, Any]:
+    payload = canvas_object_to_dict(comment)
+    return {
+        "id": payload.get("id"),
+        "comment": str(payload.get("comment") or ""),
+        "attachments": [
+            canvas_object_to_dict(attachment)
+            for attachment in (payload.get("attachments") or [])
+        ],
+    }
+
+
+def feedback_attachment_matches(attachment: dict[str, Any], action: dict[str, Any]) -> bool:
+    name = str(attachment.get("display_name") or attachment.get("filename") or "")
+    if name != action["feedback_file"]:
+        return False
+    size = attachment.get("size")
+    try:
+        return size is not None and int(size) == int(action["feedback_size"])
+    except (TypeError, ValueError):
+        return False
+
+
+def feedback_result(
+    action: dict[str, Any],
+    *,
+    status: str,
+    safe_next_action: str,
+    attachment_id: Any = None,
+    error: str = "",
+    response_status: str,
+    readback_status: str,
+) -> dict[str, Any]:
+    return {
+        "action_key": action["action_key"],
+        "canvas_user_id": action["canvas_user_id"],
+        "feedback_file": action["feedback_file"],
+        "feedback_sha256": action["feedback_sha256"],
+        "status": status,
+        "attempted": response_status not in {"not_attempted", "not_sent"},
+        "response_status": response_status,
+        "readback_status": readback_status,
+        "attachment_id": attachment_id,
+        "error": error,
+        "safe_next_action": safe_next_action,
+    }
 
 
 def load_roster_ids(path: Path) -> dict[int, str]:
@@ -328,11 +700,30 @@ def load_roster_ids(path: Path) -> dict[int, str]:
                 raise SystemExit(
                     "Roster CSV contains both LoginID and Email with different values."
                 )
-        return {
-            int(row["CanvasID"]): row.get("Name", row["CanvasID"])
-            for row in rows
-            if row.get("CanvasID")
-        }
+        canvas_ids: dict[int, str] = {}
+        first_rows: dict[int, int] = {}
+        for row_number, row in enumerate(rows, start=2):
+            raw_id = str(row.get("CanvasID") or "").strip()
+            if not raw_id:
+                continue
+            try:
+                canvas_id = int(raw_id)
+            except ValueError as exc:
+                raise SystemExit(
+                    f"Roster CSV row {row_number} has invalid CanvasID: {raw_id!r}."
+                ) from exc
+            if canvas_id <= 0:
+                raise SystemExit(
+                    f"Roster CSV row {row_number} has invalid CanvasID: {raw_id!r}."
+                )
+            if canvas_id in canvas_ids:
+                raise SystemExit(
+                    f"Roster CSV has duplicate CanvasID {canvas_id} on rows "
+                    f"{first_rows[canvas_id]} and {row_number}."
+                )
+            canvas_ids[canvas_id] = str(row.get("Name") or raw_id)
+            first_rows[canvas_id] = row_number
+        return canvas_ids
 
 
 def match_files_to_students(
