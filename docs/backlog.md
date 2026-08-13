@@ -298,9 +298,9 @@ success, rejection and uncertainty, destination drift, provenance failure,
 partial stable evidence, successful reuse, and stale reuse. Stale all-reuse
 execution again returns bounded failure evidence without mutation.
 
-## 0.17.0 Mutation And Evidence Release Candidate
+## 0.17.0 Mutation And Evidence Release
 
-Sprint 20 is implemented through Group 5 as the `0.17.0` candidate. Its exact
+Sprint 20 is released as `v0.17.0`. Its exact
 55-command access inventory and pre-write architecture gate make all remaining
 Canvas-writing commands plan on omission and require `--apply`. Direct
 discussion-grade upload is replaced with a private `grades post` CSV; feedback
@@ -312,8 +312,11 @@ Independent design and implementation review accepted the candidate through
 2026-08-13 with exact cleanup. The first feedback probe exposed CanvasAPI's
 attachment-only `upload_comment()` behavior; `b3893aa` now uses the documented
 file-upload plus comment-edit sequence, and the corrected probe verified exact
-comment/attachment readback. Supplemental review of that correction and exact
-branch/tag CI remain open. No `v0.17.0` tag or global installation exists yet.
+comment/attachment readback. Supplemental review accepted the corrected exact
+commit without findings. Branch and signed-tag CI passed on
+`f34d32fe6da3a92255f614e68ab3f73ee5aae8cd`, including Python 3.12, Python
+3.14, dependency audit, coverage, and isolated installation smoke. The global
+CLI is installed from the verified tag and reports `danvas 0.17.0`.
 
 ## Delivered Baseline
 
@@ -1628,16 +1631,13 @@ initiating its native instructor gradebook CSV export.
 ### Current Priority Order
 
 Sprint 16 shipped in 0.13.0, dependency maintenance shipped in 0.13.1, Sprint 17
-shipped in 0.14.0, and Sprint 18 shipped in 0.15.0. The accepted public-readiness
-program temporarily supersedes the prior feature order:
+shipped in 0.14.0, Sprint 18 in 0.15.0, Sprint 19 in 0.16.0, and Sprint 20 in
+0.17.0. The accepted public-readiness program temporarily supersedes the prior
+feature order:
 
-1. Finish Group 5 review, separately authorized bounded live acceptance, and
-   exact release gates for the implemented Sprint 20
-   [mutation/evidence reconciliation candidate](sprints/20-mutation-reconciliation.md)
-   for 0.17.0.
-2. Complete Sprint 21 generalization and packaging before considering the
+1. Complete Sprint 21 generalization and packaging before considering the
    public-beta label for 0.18.0.
-3. Revisit the Page asset adapter and grouped-case setup after the readiness
+2. Revisit the Page asset adapter and grouped-case setup after the readiness
    program, based on concrete workflow demand.
 
 Named post-Sprint 20 maintenance: resolve interrupted Panopto caption-bundle

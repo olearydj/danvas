@@ -1,11 +1,11 @@
 # Mutation And Evidence Reconciliation
 
-Status: implemented `0.17.0` release candidate through Group 5. Independent
-design and implementation review accepted the candidate through `ed68108` on
-2026-08-13. The two separately authorized disposable-course probes passed; the
-feedback probe exposed and drove the focused `b3893aa` API correction described
-below. Supplemental review of that correction and exact branch/tag release
-gates remain open.
+Status: released as `v0.17.0` on 2026-08-13. Independent design and
+implementation review accepted the candidate through `ed68108`; the two
+separately authorized disposable-course probes passed and drove the focused
+`b3893aa` feedback API correction described below. Supplemental review accepted
+exact commit `f34d32f`, branch and signed-tag CI passed on that commit, and the
+verified tag is installed globally.
 
 ## Outcome
 
@@ -660,7 +660,7 @@ Sprint 20 is complete only when all of the following are true:
 - [x] The `0.17.0` migration guide enumerates all mutation and local-write mode
   changes command by command.
 - [x] The authorized bounded live probes pass without production data.
-- [ ] Independent review accepts the implementation and exact-commit local,
+- [x] Independent review accepts the implementation and exact-commit local,
   branch, and tag gates pass before release.
 
 ## Non-Goals

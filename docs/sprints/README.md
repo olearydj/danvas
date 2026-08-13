@@ -283,17 +283,17 @@ corrected, and accepted on the same date. The implementation review returned
 accept-with-fixes; both required corrections landed in `aa66f57`. Branch and
 signed-tag CI passed on that exact commit, and `v0.16.0` is released and
 installed globally. Later implementations still require independent review.
-No history rewrite or live Canvas mutation was used for the release.
+No history rewrite or live Canvas mutation was used for the 0.16.0 release.
 
-The Sprint 20 / `0.17.0` release candidate implements the complete mutation
+Sprint 20 is released as `v0.17.0` with the complete mutation
 inventory, plan-by-default `--apply` contract, conflict-safe file uploads,
 discussion grade plans, and transactional feedback evidence. Independent
 design and implementation review accepted the candidate through `ed68108`.
 Both separately authorized disposable-course probes passed on 2026-08-13; the
 feedback field case drove a focused correction to Canvas's documented
 file-upload plus comment-edit sequence, followed by exact readback and cleanup.
-Supplemental review of that correction and exact branch/tag gates remain open;
-`v0.17.0` has not been tagged or installed globally.
+Supplemental review accepted exact commit `f34d32f`; branch and signed-tag CI
+passed on that commit, and the verified tag is installed globally.
 
 ## Proposed 0.19.0 Agent Interface Follow-On
 

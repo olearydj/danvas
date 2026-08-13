@@ -76,31 +76,29 @@ their full text.
 `danvas.__version__` read installed package metadata. Bump the minor version for
 feature sprints or new commands, and the patch version for fixes.
 
-Current tagged release: 0.16.0. Sprint 16 delivered verified Markdown assignment
+Current tagged release: 0.17.0. Sprint 16 delivered verified Markdown assignment
 asset deployment in 0.13.0; 0.13.1 refreshed vulnerable dependencies. Sprint 17
 delivered typed transaction state, architecture checks, supported-Python CI,
 coverage/complexity ratchets, and dependency auditing in 0.14.0. Sprint 18
 removed Auburn and Central Time runtime defaults, added instance profiles and
 explicit precedence, and shipped in 0.15.0. The 0.15.1 patch makes Panopto
 caption authentication honor profile-specific secret names. Sprint 19 shipped
-the private-artifact boundary in 0.16.0.
-
-The 0.17.0 Sprint 20 release candidate is implemented through Group 5. It makes
-all Canvas-writing commands plan on omission and require `--apply`, removes
-direct discussion-grade upload in favor of a `grades post` plan, makes file
-upload conflicts non-destructive by default, and adds checkpointed feedback
-readback plus the adjacent auth/call-site hardening. Groups 1 through 4 have
-passed independent implementation review. Final Group 5 review, the two
-separately authorized disposable-course probes, and exact branch/tag release
-gates remain required; `v0.17.0` is not yet released or installed globally.
+the private-artifact boundary in 0.16.0. Sprint 20 shipped in 0.17.0: all
+Canvas-writing commands plan on omission and require `--apply`, direct
+discussion-grade upload is replaced by a `grades post` plan, file-upload
+conflicts are non-destructive by default, and submission feedback checkpoints
+and reads back each attempted row.
 
 The deferred independent Sprint 18 implementation review accepted the 0.15.1
 release line on 2026-08-13. Sprint 19 implementation review returned
 accept-with-fixes; the corrected exact commit passed local, branch, and tag
 gates on Python 3.12 and 3.14, including lint, typecheck, dependency audit,
-tests, coverage, and isolated install smoke. Signed tag `v0.16.0` resolves to
-`aa66f57520ecd68e689776fcd84ea04fa1e75793`. The user-level CLI is installed
-from that verified tag and reports `danvas 0.16.0`.
+tests, coverage, and isolated install smoke. Sprint 20 passed independent
+design, implementation, and supplemental review, plus bounded disposable-course
+probes with exact cleanup. Signed tag `v0.17.0` resolves to
+`f34d32fe6da3a92255f614e68ab3f73ee5aae8cd`; branch and tag CI passed on that
+exact commit, and the user-level CLI is installed from the verified tag and
+reports `danvas 0.17.0`.
 
 Recommended local checks:
 
