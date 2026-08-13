@@ -1,9 +1,9 @@
 # Public Readiness Program: Sprints 18-21
 
-Status: accepted after factual and design review. Sprint 18 implementation is
-authorized and in progress; Sprints 19-21 remain design-only until separately
-reviewed. No live Canvas mutation, publication, release, or history rewrite is
-authorized by this design note.
+Status: accepted after factual and design review. The Sprint 18 implementation
+candidate is complete and pending independent review/release; Sprints 19-21
+remain design-only until separately reviewed. No live Canvas mutation,
+publication, release, or history rewrite is authorized by this design note.
 
 ## Outcome
 

@@ -231,7 +231,7 @@ temporary uv tool directories:
 
 ```bash
 scripts/release-smoke.sh
-scripts/release-smoke.sh --expected-version 0.14.0
+scripts/release-smoke.sh --expected-version 0.15.0
 ```
 
 The smoke script honors normal uv configuration and freshness rules, never
@@ -273,19 +273,42 @@ dependencies.
 
 ## Authentication
 
-`danvas` uses the shared `secretpath` name `canvas`. On this machine the normal
-path is declared in `~/.config/secretpath/config.toml`; `.env` and command-line
-overrides are still supported.
+Canvas-backed commands require an explicit Canvas instance. Configure one with
+a course project, a user-level profile, `--api-url`, or the compatibility
+`CANVAS_API_URL` environment variable. Danvas has no built-in institutional
+host.
+
+The user configuration is `danvas/config.toml` beneath the platform-standard
+configuration directory (for example, `~/Library/Application Support/danvas/`
+on macOS or `${XDG_CONFIG_HOME:-~/.config}/danvas/` on Linux). Profiles contain
+stable defaults and secret references, never tokens:
+
+```toml
+default_profile = "example-university"
+
+[profiles.example-university]
+api_url = "https://canvas.example.edu/"
+timezone = "America/New_York"
+secret_name = "canvas-example-university"
+secret_provider = "auto"
+api_key_env = "CANVAS_EXAMPLE_UNIVERSITY_API_KEY"
+```
+
+Without a selected profile, the compatibility `secretpath` name remains
+`canvas`. Existing `.env`, environment-variable, 1Password-reference, and
+command-line workflows remain supported:
 
 ```bash
 export CANVAS_API_KEY="fallback-token"
-export CANVAS_API_URL="https://auburn.instructure.com/"
+export CANVAS_API_URL="https://canvas.example.edu/"
 ```
 
 Common options are available on Canvas-backed commands:
 
 ```bash
+--profile
 --api-url
+--secret-name
 --secret-provider auto|1password|env
 --op-reference
 --api-key-env
@@ -298,6 +321,13 @@ danvas auth doctor
 danvas auth doctor --check-canvas
 ```
 
+The offline doctor remains useful without an instance: it reports the API URL
+as `unconfigured` and continues secret-provider diagnostics. Only
+`--check-canvas` requires a resolved API URL.
+
+See the [0.15.0 migration guide](docs/migrations/0.15.0.md) for exact
+before/after behavior and precedence.
+
 `recordings panopto-captions` uses the Canvas token to launch the course Panopto
 LTI tool; it does not require separate Panopto API client credentials.
 
@@ -307,7 +337,7 @@ Initialize a teaching project once to avoid repeating the Canvas course ID and
 assignment group IDs:
 
 ```bash
-danvas init 1742717
+danvas init 101 --profile example-university
 ```
 
 This writes:
@@ -316,6 +346,18 @@ This writes:
 .danvas/config.toml
 .danvas/course.json
 ```
+
+`init` resolves the Canvas host from `--api-url`, an existing project setting,
+the selected profile, then `CANVAS_API_URL`. Profile selection resolves from
+`--profile`, project configuration, `DANVAS_PROFILE`, then `default_profile`.
+An initialized project's API URL always outranks the generic environment
+fallback.
+
+Pass `--timezone` to pin an IANA timezone. Otherwise init uses recognized Canvas
+course metadata (including an explicit bounded mapping for Rails-style names),
+then the selected profile timezone. Unknown metadata is never guessed. If no
+timezone resolves, init omits the setting and date-only authored fields remain
+unavailable until `[canvas].timezone` is configured.
 
 `config.toml` is the human-readable project configuration. It stores stable,
 non-secret defaults such as the Canvas base URL, course ID, course timezone, and
@@ -541,43 +583,43 @@ danvas status --output status.json --report-md status.md
 
 # Courses and rosters
 danvas courses --output courses.csv
-danvas roster --course-id 1706414 --output roster.csv
+danvas roster --course-id 101 --output roster.csv
 
 # Assignments
-danvas assignments export --course-id 1706414 --output assignments.json
-danvas assignments export --course-id 1706414 --output assignments-full.json --full
-danvas assignments export --course-id 1706414 --output assignments.csv
-danvas assignments export --course-id 1706414 --output assignments-md --format markdown
-danvas assignments create --course-id 1706414 assignments/hw1.md --dry-run
-danvas assignments verify --course-id 1706414 assignments/hw1.md
-danvas assignments update --course-id 1706414 assignments/hw1.md --dry-run
-danvas assignments upsert --course-id 1706414 assignments/hw1.md --dry-run
-danvas assignments upsert --course-id 1706414 assignments/hw1.md --confirm update
-danvas assignments update --course-id 1706414 content/assignments/case.md \
+danvas assignments export --course-id 101 --output assignments.json
+danvas assignments export --course-id 101 --output assignments-full.json --full
+danvas assignments export --course-id 101 --output assignments.csv
+danvas assignments export --course-id 101 --output assignments-md --format markdown
+danvas assignments create --course-id 101 assignments/hw1.md --dry-run
+danvas assignments verify --course-id 101 assignments/hw1.md
+danvas assignments update --course-id 101 assignments/hw1.md --dry-run
+danvas assignments upsert --course-id 101 assignments/hw1.md --dry-run
+danvas assignments upsert --course-id 101 assignments/hw1.md --confirm update
+danvas assignments update --course-id 101 content/assignments/case.md \
   --project-root . --asset-folder "course files/case-resources" --dry-run
-danvas assignments update --course-id 1706414 content/assignments/case.md \
+danvas assignments update --course-id 101 content/assignments/case.md \
   --project-root . --asset-folder "course files/case-resources"
 danvas assignments audit assignments-full.json --course-yaml course.yaml
-danvas assignments overrides --course-id 1706414 --assignment-id 19413569 \
+danvas assignments overrides --course-id 101 --assignment-id 202 \
   --output .danvas/private/assignment-overrides.yaml
-danvas assignments overrides-sync --course-id 1706414 assignments/hw1.md
-danvas assignments overrides-sync --course-id 1706414 assignments/hw1.md \
+danvas assignments overrides-sync --course-id 101 assignments/hw1.md
+danvas assignments overrides-sync --course-id 101 assignments/hw1.md \
   --live --confirm apply
 
 # Submissions and feedback
-danvas submissions export --course-id 1706414 --assignment-id 19413569 \
+danvas submissions export --course-id 101 --assignment-id 202 \
   --output .danvas/private/submissions.json
-danvas submissions grades --course-id 1706414 --assignment-id 19413569 \
+danvas submissions grades --course-id 101 --assignment-id 202 \
   --output .danvas/private/grades.csv
-danvas submissions media --course-id 1706414 --assignment-id 19413569 --output-dir downloads
-danvas submissions feedback --course-id 1706414 --assignment-id 19413569 \
+danvas submissions media --course-id 101 --assignment-id 202 --output-dir downloads
+danvas submissions feedback --course-id 101 --assignment-id 202 \
   --roster roster.csv --feedback-dir feedback --pattern "*-feedback.pdf" --dry-run
 
 # Grades
-danvas grades post --course-id 1706414 --assignment-id 19413569 --grades-csv grades.csv --dry-run
-danvas grades comments --course-id 1706414 --assignment-id 19413569 --canvas-id 4024825
-danvas grades clear --course-id 1706414 --assignment-id 19413569 --grades-csv rollback.csv --dry-run
-danvas grades verify --course-id 1706414 --assignment-id 19413569 --grades-csv grades.csv
+danvas grades post --course-id 101 --assignment-id 202 --grades-csv grades.csv --dry-run
+danvas grades comments --course-id 101 --assignment-id 202 --canvas-id 303
+danvas grades clear --course-id 101 --assignment-id 202 --grades-csv rollback.csv --dry-run
+danvas grades verify --course-id 101 --assignment-id 202 --grades-csv grades.csv
 danvas gradebook check final-canvas-gradebook.csv --course-yaml course.yaml
 danvas gradebook audit final-canvas-gradebook.csv --course-yaml course.yaml \
   --assignments assignments-full.json --output gradebook-audit.json
@@ -587,63 +629,63 @@ danvas quiz analysis student-analysis.csv --answer-term "which version" --answer
   --output quiz-analysis.json
 
 # Quiz import (Classic Quizzes via QTI)
-danvas quiz import-qti chap07.zip --course-id 1742717 \
+danvas quiz import-qti chap07.zip --course-id 101 \
   --due-at 2026-06-20T04:59:00Z --publish --dry-run
-danvas quiz import-qti chap07.zip --course-id 1742717 \
+danvas quiz import-qti chap07.zip --course-id 101 \
   --due-at 2026-06-20T04:59:00Z --publish --output quiz-import-report.json
 
 # Discussions
-danvas discussions export https://auburn.instructure.com/courses/1655780/discussion_topics/9772349 \
+danvas discussions export https://canvas.example.edu/courses/101/discussion_topics/404 \
   --output discussion.json
-danvas discussions sync-prompts --course-id 1655780 --output-dir content/discussions --dry-run
-danvas discussions create --course-id 1655780 content/discussions/unit-4.md \
+danvas discussions sync-prompts --course-id 101 --output-dir content/discussions --dry-run
+danvas discussions create --course-id 101 content/discussions/unit-4.md \
   --seed-replies --dry-run
-danvas discussions verify --course-id 1655780 content/discussions/unit-4.md
-danvas discussions update --course-id 1655780 content/discussions/unit-4.md \
+danvas discussions verify --course-id 101 content/discussions/unit-4.md
+danvas discussions update --course-id 101 content/discussions/unit-4.md \
   --body-only --dry-run
-danvas discussions score https://auburn.instructure.com/courses/1655780/discussion_topics/9772349 \
+danvas discussions score https://canvas.example.edu/courses/101/discussion_topics/404 \
   2 2 3 2 --output discussion-scores.csv
 
 # Announcements
-danvas announcements create --course-id 1706414 announcements/welcome.md --dry-run
-danvas announcements export --course-id 1655780 --output announcements.md
-danvas announcements latest --course-id 1655780 --format markdown
-danvas announcements sync --course-id 1655780 --output-dir content/announcements --dry-run
-danvas announcements verify --course-id 1655780 content/announcements/001-update.md
-danvas announcements update --course-id 1655780 content/announcements/001-update.md --dry-run
+danvas announcements create --course-id 101 announcements/welcome.md --dry-run
+danvas announcements export --course-id 101 --output announcements.md
+danvas announcements latest --course-id 101 --format markdown
+danvas announcements sync --course-id 101 --output-dir content/announcements --dry-run
+danvas announcements verify --course-id 101 content/announcements/001-update.md
+danvas announcements update --course-id 101 content/announcements/001-update.md --dry-run
 
 # Pages
-danvas pages sync --course-id 1706414 --output-dir content/pages --dry-run
-danvas pages sync --course-id 1706414 --output-dir content/pages --page-id 123 --dry-run
-danvas pages export --course-id 1706414 --page-id 123 --format markdown --output /tmp/page.md
+danvas pages sync --course-id 101 --output-dir content/pages --dry-run
+danvas pages sync --course-id 101 --output-dir content/pages --page-id 123 --dry-run
+danvas pages export --course-id 101 --page-id 123 --format markdown --output /tmp/page.md
 danvas pages render content/pages/resources.md --output -
 danvas pages css-check content/pages/resources.canvas.css --source content/pages/resources.md
-danvas pages create --course-id 1706414 content/pages/resources.md --dry-run
-danvas pages update --course-id 1706414 content/pages/resources.md --page-id resources --dry-run
-danvas pages verify --course-id 1706414 content/pages/resources.md --page-id resources
+danvas pages create --course-id 101 content/pages/resources.md --dry-run
+danvas pages update --course-id 101 content/pages/resources.md --page-id resources --dry-run
+danvas pages verify --course-id 101 content/pages/resources.md --page-id resources
 
 # Local source lint (no Canvas authentication)
 danvas sources lint --project-root .
 danvas sources lint content/pages/*.md --format json --output .danvas/source-lint.json
 
 # Files
-danvas files inventory --course-id 1742717 --local-root .
-danvas files inventory --course-id 1742717 --output-dir .danvas/files-inventory --local-root .
-danvas files upload --course-id 1742717 --folder "course files/slides" \
+danvas files inventory --course-id 101 --local-root .
+danvas files inventory --course-id 101 --output-dir .danvas/files-inventory --local-root .
+danvas files upload --course-id 101 --folder "course files/slides" \
   --dry-run content/slides/example.pptx
-danvas files upload --course-id 1742717 --folder-id 15968602 \
+danvas files upload --course-id 101 --folder-id 505 \
   --on-duplicate overwrite --output .danvas/uploaded-files.json content/slides/example.pptx
-danvas files compare --course-id 1742717 --file-id 284879389 \
+danvas files compare --course-id 101 --file-id 606 \
   --local content/slides/example.pptx
-danvas files compare --course-id 1742717 \
+danvas files compare --course-id 101 \
   --canvas-path "course files/slides/example.pptx" \
   --local content/slides/example.pptx
-danvas files compare --course-id 1742717 --file-id 284879389 \
+danvas files compare --course-id 101 --file-id 606 \
   --local content/slides/example.pptx \
   --downloaded-canvas .danvas/canvas-files/slides/example.pptx
-danvas files download-one --course-id 1742717 --file-id 284879389 \
+danvas files download-one --course-id 101 --file-id 606 \
   --output .danvas/canvas-files/slides/example.pptx
-danvas files download --course-id 1742717 --output-dir .danvas/canvas-files
+danvas files download --course-id 101 --output-dir .danvas/canvas-files
 
 # Reports
 danvas reports list
@@ -651,9 +693,9 @@ danvas reports latest status
 danvas reports latest files-inventory --output .danvas/latest-files-report.json
 
 # Recordings
-danvas recordings panopto-captions --course-id 1742717 \
+danvas recordings panopto-captions --course-id 101 \
   --folder-id b4e2a2bc-0b9f-439e-9095-b44e00f269c4 --dry-run
-danvas recordings panopto-captions --course-id 1742717 \
+danvas recordings panopto-captions --course-id 101 \
   --folder-id b4e2a2bc-0b9f-439e-9095-b44e00f269c4 --output-dir panopto-captions
 ```
 
@@ -700,7 +742,7 @@ Grade uploads require `CanvasID` and `Grade`; `Name` and `Comment` are optional:
 
 ```text
 CanvasID,Name,Grade,Comment
-4024825,"Lawson, Jack",90,"Good work."
+303,"Example, Student",90,"Good work."
 ```
 
 Fully blank CSV rows are ignored. Any nonblank row missing `CanvasID` or
@@ -740,7 +782,7 @@ fresh readback. Grade release conclusions are `verified_visible`,
 `verified_hidden`, `mixed`, or `not_determined`; publication and manual-posting
 policy are context rather than proof that students can see a grade.
 
-Auburn Canvas may reject grade/comment updates on an unpublished assignment as
+Canvas may reject grade/comment updates on an unpublished assignment as
 unauthorized even when the enrollment is gradeable and the caller has
 `manage_grades`; confirm publication state before diagnosing a token failure,
 but do not publish without explicit authorization. `ExpectedCurrentGrade` and

@@ -273,9 +273,10 @@ The four releases evaluate the boundary between the mature internal
 implementation and a defensible public beta. They separate instance profiles,
 private artifacts, mutation reconciliation, and final generalization/packaging
 into bounded 0.15.0 through 0.18.0 slices. Only 0.18.0 may claim public beta
-after the cross-release threshold passes. Sprint 18 implementation is in
-progress; later slices still require their independent reviews. No publication,
-history rewrite, or live Canvas mutation is authorized.
+after the cross-release threshold passes. The Sprint 18 implementation candidate
+is complete and pending independent review/release; later slices still require
+their independent reviews. No publication, history rewrite, or live Canvas
+mutation is authorized.
 
 ## Proposed 0.19.0 Agent Interface Follow-On
 
