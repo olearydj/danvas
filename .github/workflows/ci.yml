@@ -9,11 +9,16 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v9.0.0
         with:
           version: "0.12.3"
+          python-version: ${{ matrix.python-version }}
       - name: Sync dependencies
         run: uv sync --frozen
       - name: Lint
@@ -23,7 +28,11 @@ jobs:
       - name: Audit dependencies
         run: uv run pip-audit --skip-editable
       - name: Test
-        run: uv run pytest
+        run: |
+          uv run pytest --cov=danvas --cov-branch --cov-report=term-missing \
+            --cov-report=json:/tmp/danvas-coverage.json --cov-fail-under=82
+          uv run python scripts/check-module-coverage.py \
+            /tmp/danvas-coverage.json src/danvas/authored_assets.py 82
 
   install-smoke:
     needs: checks
@@ -33,6 +42,7 @@ jobs:
       - uses: astral-sh/setup-uv@v9.0.0
         with:
           version: "0.12.3"
+          python-version: "3.14"
       - name: Build and verify isolated CLI installs
         shell: sh
         run: |

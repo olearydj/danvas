@@ -1,6 +1,6 @@
 [project]
 name = "danvas"
-version = "0.13.1"
+version = "0.14.0"
 description = "Unified operational Canvas CLI"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -20,6 +20,7 @@ dependencies = [
 dev = [
     "pip-audit>=2.9",
     "pytest>=8.0",
+    "pytest-cov>=6.0",
     "ruff>=0.8",
     "ty>=0.0.1a22",
 ]
@@ -29,8 +30,19 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "SIM"]
+select = ["E", "F", "I", "B", "UP", "SIM", "C90"]
 ignore = ["E501"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.coverage.run]
+branch = true
+source = ["danvas"]
+
+[tool.coverage.report]
+fail_under = 82
+show_missing = true
 
 [tool.uv.exclude-newer-package]
 secretpath = "2026-06-25T00:00:00Z"
