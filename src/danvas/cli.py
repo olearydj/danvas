@@ -1947,8 +1947,9 @@ def submissions_feedback(
             "--output",
             "-o",
             help=(
-                "Private feedback plan/result JSON. Defaults beneath .danvas/private/submissions "
-                "in a project; required otherwise."
+                "Private feedback JSON. Defaults to feedback-plan.json for --dry-run and "
+                "feedback-results.json for live use beneath .danvas/private/submissions; "
+                "required outside a project."
             ),
         ),
     ] = None,

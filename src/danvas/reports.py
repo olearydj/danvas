@@ -101,6 +101,7 @@ class ReportRun:
                 path,
                 self.manifest,
                 command=str(self.manifest["command"]),
+                overwrite=True,
                 classify=False,
             )
         else:

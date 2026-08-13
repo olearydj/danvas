@@ -279,10 +279,11 @@ Panopto profile-secret correction shipped in `v0.15.1`, and the deferred
 independent implementation review accepted that release line on 2026-08-13.
 The bounded Sprint 19 implementation specification was independently reviewed,
 corrected, and accepted on the same date. Its 0.16.0 implementation candidate
-is complete locally and awaits independent implementation review and release
-CI before tagging. Later implementations still require their independent
-reviews. No publication, history rewrite, or live Canvas mutation is
-authorized.
+is complete locally. Independent implementation review returned
+accept-with-fixes; both required corrections are implemented and locally
+verified. Release CI remains required before tagging. Later implementations
+still require their independent reviews. No publication, history rewrite, or
+live Canvas mutation is authorized.
 
 ## Proposed 0.19.0 Agent Interface Follow-On
 

@@ -273,8 +273,9 @@ keeps offline `auth doctor` useful without an instance.
 
 Python 3.12 and 3.14 CI passed Ruff, ty, the dependency audit, branch coverage,
 all tests, and isolated editable/wheel smoke. The independent implementation
-review was explicitly deferred because the reviewer service was unavailable;
-it remains an open batched-review obligation rather than a completed gate.
+review was initially deferred because the reviewer service was unavailable.
+The later batched review accepted the `v0.15.1` release line as released on
+2026-08-13, closing that obligation.
 
 Patch release `v0.15.1` forwards the selected profile's `secret_name` through
 the Panopto caption command's direct authentication path. No other command or
@@ -1603,8 +1604,8 @@ Sprint 16 shipped in 0.13.0, dependency maintenance shipped in 0.13.1, Sprint 17
 shipped in 0.14.0, and Sprint 18 shipped in 0.15.0. The accepted public-readiness
 program temporarily supersedes the prior feature order:
 
-1. Review the completed Sprint 19 private-artifact implementation candidate,
-   then run release CI and tag 0.16.0 only after acceptance.
+1. Run release CI on the reviewed and locally corrected Sprint 19 candidate,
+   then tag 0.16.0 only after the exact commit passes.
 2. Complete Sprint 20 mutation/evidence reconciliation for 0.17.0.
 3. Complete Sprint 21 generalization and packaging before considering the
    public-beta label for 0.18.0.

@@ -1,10 +1,11 @@
 # Private Artifact Boundary
 
 Status: accepted specification with the Sprint 19 / `0.16.0` implementation
-candidate complete locally on 2026-08-13. Independent implementation review,
-CI, and release tagging remain pending. The design review also retrospectively
-accepted the Sprint 18 implementation and `v0.15.1` correction as released.
-No live Canvas mutation was used for Sprint 19 acceptance.
+candidate complete locally on 2026-08-13. Independent implementation review
+returned accept-with-fixes; both required pre-tag corrections are implemented
+and locally verified. Release CI and tagging remain pending. The review also
+retrospectively accepted the Sprint 18 implementation and `v0.15.1` correction
+as released. No live Canvas mutation was used for Sprint 19 acceptance.
 
 ## Outcome
 
@@ -197,6 +198,8 @@ explicit output option may select another location.
 Default paths are deterministic and intentionally refuse to overwrite an
 existing artifact:
 
+<!-- markdownlint-disable MD013 -->
+
 | Command | Default relative to `.danvas/private/` |
 | --- | --- |
 | `roster` | `roster.csv` |
@@ -204,13 +207,16 @@ existing artifact:
 | `submissions export` | `submissions/assignment-<id>/submissions.json` |
 | `submissions grades` | `submissions/assignment-<id>/grades.csv` |
 | `submissions media` | `submissions/assignment-<id>/media/` |
-| `submissions feedback` | `submissions/assignment-<id>/feedback-plan.json` |
+| `submissions feedback --dry-run` | `submissions/assignment-<id>/feedback-plan.json` |
+| `submissions feedback` (live) | `submissions/assignment-<id>/feedback-results.json` |
 | `grades comments` | `grades/assignment-<id>/user-<id>/comments.json` |
 | `discussions export` | `discussions/topic-<id>/posts.json` |
 | `discussions score` | `discussions/topic-<id>/grade-plan.csv` |
 | `announcements export` | `announcements/announcements.json` |
 | `recordings panopto-captions` | `recordings/panopto-captions/` |
 | private report runs | `reports/YYYY-MM-DD-NNN-<slug>/` |
+
+<!-- markdownlint-enable MD013 -->
 
 The command may preserve an explicitly requested format by changing the suffix
 of its safe default. Danvas-chosen default bundle roots and top-level artifact
@@ -644,33 +650,38 @@ repairs, but must not pull Sprint 20 mutation-mode work into this release.
 
 Sprint 19 is complete only when all of the following are true:
 
-- [ ] Every file-producing command has a reviewed artifact-class declaration.
-- [ ] Every private output named in the inventory routes through the central
+- [x] Every file-producing command has a reviewed artifact-class declaration.
+- [x] Every private output named in the inventory routes through the central
   artifact boundary, including raw, explicit, report, rollback, sidecar,
   download, partial, and error paths.
-- [ ] With umask `000`, private directories/files exist as `0700`/`0600` from
+- [x] With umask `000`, private directories/files exist as `0700`/`0600` from
   creation and remain protected during injected failures.
-- [ ] Private defaults resolve beneath `.danvas/private/` in a project and fail
+- [x] Private defaults resolve beneath `.danvas/private/` in a project and fail
   before Canvas access without a project or explicit destination.
-- [ ] Private artifacts no-clobber by default and explicit overwrite is atomic.
-- [ ] Routine terminal output contains no private row-level fixture data.
-- [ ] Roster uses `LoginID` by default and offers the documented legacy schema.
-- [ ] Panopto artifacts contain no reusable viewer or signed access URL.
-- [ ] Report manifest v2 contains only bounded provenance and dual-root
+- [x] Private artifacts no-clobber by default and explicit overwrite is atomic.
+- [x] Routine terminal output contains no private row-level fixture data.
+- [x] Roster uses `LoginID` by default and offers the documented legacy schema.
+- [x] Panopto artifacts contain no reusable viewer or signed access URL.
+- [x] Report manifest v2 contains only bounded provenance and dual-root
   discovery preserves existing evidence.
-- [ ] Source maps cannot persist an absolute source path, and live commands
+- [x] Source maps cannot persist an absolute source path, and live commands
   validate containment before mutation.
-- [ ] Init ignores `.danvas/private/` idempotently and migration docs explain
+- [x] Init ignores `.danvas/private/` idempotently and migration docs explain
   already-tracked/history limitations.
-- [ ] `.danvas/config.toml` and `.danvas/source-map.json` tracking guidance is
+- [x] `.danvas/config.toml` and `.danvas/source-map.json` tracking guidance is
   explicit and consistent.
-- [ ] The durable Report Output Contract is amended through the approved
+- [x] The durable Report Output Contract is amended through the approved
   project-context workflow.
-- [ ] No Sprint 20 mutation-mode behavior or direct discussion-grade upload
+- [x] No Sprint 20 mutation-mode behavior or direct discussion-grade upload
   rewrite is included.
 - [ ] The complete local and CI release gates pass on one exact commit.
-- [ ] Deferred independent review covers Sprint 18 implementation, the 0.15.1
+- [x] Deferred independent review covers Sprint 18 implementation, the 0.15.1
   correction, and this Sprint 19 design/implementation before the 0.16.0 tag.
+
+Post-review follow-ups are deliberately outside the pre-tag correction: define
+restart behavior for an interrupted Panopto bundle before changing its current
+unique-name recovery, and strengthen the retained-output registry test with
+reverse-direction and positional-output checks during Sprint 20 inventory.
 
 ## Non-Goals
 

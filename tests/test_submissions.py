@@ -144,6 +144,46 @@ def test_submissions_feedback_live_run_prints_mutation_banner(
     assert "4024825" not in out
 
 
+def test_submissions_feedback_default_dry_run_then_live_uses_distinct_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_dir = tmp_path / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text("[canvas]\ncourse_id = 101\n", encoding="utf-8")
+    roster = tmp_path / "roster.csv"
+    write_roster(roster)
+    feedback_dir = tmp_path / "feedback"
+    feedback_dir.mkdir()
+    (feedback_dir / "4024825-feedback.pdf").write_bytes(b"x")
+
+    class FakeCanvas:
+        def get_course(self, course_id: int) -> FakeCanvas:
+            return self
+
+        def get_assignment(self, assignment_id: int) -> Any:
+            class FakeAssignment:
+                def get_submission(self, canvas_id: int) -> Any:
+                    class FakeSubmission:
+                        def upload_comment(self, file: str, comment: str) -> None:
+                            pass
+
+                    return FakeSubmission()
+
+            return FakeAssignment()
+
+    monkeypatch.setattr("danvas.submissions.canvas_from_args", lambda args: FakeCanvas())
+    common = {"output": None, "project_root": str(tmp_path)}
+
+    command_submissions_feedback(feedback_args(roster, feedback_dir, dry_run=True, **common))
+    command_submissions_feedback(feedback_args(roster, feedback_dir, dry_run=False, **common))
+
+    private_dir = tmp_path / ".danvas/private/submissions/assignment-5"
+    plan = json.loads((private_dir / "feedback-plan.json").read_text(encoding="utf-8"))
+    results = json.loads((private_dir / "feedback-results.json").read_text(encoding="utf-8"))
+    assert plan["status"] == "planned"
+    assert results["status"] == "success"
+
+
 def test_submissions_feedback_uploads_matched_files(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

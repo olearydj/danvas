@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -268,6 +269,7 @@ def test_write_caption_outputs_dry_run_writes_manifests_without_downloading(
 
     manifest_path = tmp_path / "artifact-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert datetime.fromisoformat(manifest["generated_at"]).tzinfo is not None
     assert manifest["dry_run"] is True
     assert manifest["artifact_class"] == "private"
     assert manifest["sessions"][0]["status"] == "caption_available"

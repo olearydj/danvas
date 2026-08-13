@@ -90,6 +90,24 @@ def test_private_report_run_hardens_directory_and_files_immediately(tmp_path: Pa
     assert manifest["artifact_class"] == "private"
 
 
+def test_private_report_finish_can_replace_its_manifest_after_success(tmp_path: Path) -> None:
+    run = create_report_run(
+        command="gradebook audit",
+        slug="gradebook-audit",
+        report_dir=tmp_path / "private-run",
+        private_data=True,
+    )
+
+    first_path = run.finish()
+    second_path = run.finish("failed", error="BrokenPipeError: output closed")
+
+    assert second_path == first_path
+    manifest = json.loads(second_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "failed"
+    assert manifest["error"] == "BrokenPipeError: output closed"
+    assert second_path.stat().st_mode & 0o077 == 0
+
+
 def test_private_report_defaults_beneath_project_private_root(tmp_path: Path) -> None:
     write_config(tmp_path)
 

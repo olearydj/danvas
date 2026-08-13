@@ -232,10 +232,11 @@ def refuse_overwrite(path: Path, overwrite: bool) -> None:
 
 
 def command_submissions_feedback(args: Any) -> None:
+    default_filename = "feedback-plan.json" if args.dry_run else "feedback-results.json"
     resolved = resolve_private_path(
         explicit=getattr(args, "output", None),
         project_root=Path(args.project_root) if getattr(args, "project_root", None) else None,
-        default_relative=f"submissions/assignment-{args.assignment_id}/feedback-plan.json",
+        default_relative=f"submissions/assignment-{args.assignment_id}/{default_filename}",
         option_name="--output",
     )
     warn_if_external_private_path(resolved)

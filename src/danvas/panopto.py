@@ -6,7 +6,7 @@ import csv
 import io
 import re
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import unquote, urljoin, urlparse
@@ -451,7 +451,7 @@ def write_manifest(
         if caption_path:
             files.extend([caption_path, f"{caption_path}.artifact.json"])
     manifest = {
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "course_id": course_id,
         "panopto_base_url": panopto_base_url,
         "panopto_tool": {
