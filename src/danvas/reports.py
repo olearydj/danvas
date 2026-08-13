@@ -6,18 +6,20 @@ import datetime as dt
 import json
 import re
 import sys
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from danvas import __version__
+from danvas.project_config import (
+    configured_course_id,
+    configured_timezone,
+    find_config_dir,
+)
 from danvas.sanitize import sanitize_error
 from danvas.utils import mark_private, slugify, write_json, write_rows
 
-CONFIG_DIR_NAME = ".danvas"
-CONFIG_FILE_NAME = "config.toml"
 REPORTS_DIR_NAME = "reports"
 REPORT_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-(\d{3})-(.+)$")
 
@@ -295,22 +297,8 @@ def next_sequence(root: Path, report_date: str) -> int:
     return highest + 1
 
 
-def find_config_dir(start: Path | None = None) -> Path | None:
-    current = (start or Path.cwd()).resolve()
-    if current.is_file():
-        current = current.parent
-    for candidate in [current, *current.parents]:
-        path = candidate / CONFIG_DIR_NAME / CONFIG_FILE_NAME
-        if path.is_file():
-            return path.parent
-    return None
-
-
 def now_for_config(config_dir: Path | None) -> dt.datetime:
-    timezone = None
-    if config_dir:
-        data = tomllib.loads((config_dir / CONFIG_FILE_NAME).read_text(encoding="utf-8"))
-        timezone = (data.get("canvas") or {}).get("timezone")
+    timezone = configured_timezone(config_dir)
     if timezone:
         try:
             return dt.datetime.now(ZoneInfo(str(timezone)))
@@ -320,16 +308,7 @@ def now_for_config(config_dir: Path | None) -> dt.datetime:
 
 
 def course_id_for_config(config_dir: Path | None) -> int | None:
-    if not config_dir:
-        return None
-    data = tomllib.loads((config_dir / CONFIG_FILE_NAME).read_text(encoding="utf-8"))
-    course_id = (data.get("canvas") or {}).get("course_id")
-    if course_id is None:
-        return None
-    try:
-        return int(course_id)
-    except (TypeError, ValueError):
-        return None
+    return configured_course_id(config_dir)
 
 
 def safe_error(error: str) -> str:

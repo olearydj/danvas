@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 
 from danvas.authored_content import datetime_validation_issue
 from danvas.frontmatter import parse_frontmatter
-from danvas.pages import load_page_source
+from danvas.page_sources import load_page_source
 from danvas.source_map import find_source_entry, load_source_map, source_path_key
 from danvas.sources import DEFAULT_SOURCE_PATTERNS, source_paths
 from danvas.utils import write_json

@@ -22,7 +22,7 @@ from danvas.overrides import (
     compare_local_overrides,
     load_local_override_file,
 )
-from danvas.pages import BODY_NORMALIZER_VERSION
+from danvas.page_sources import BODY_NORMALIZER_VERSION
 from danvas.reports import create_report_run
 from danvas.snapshot_collections import (
     COLLECTION_NAMES,
@@ -256,7 +256,7 @@ def build_status(
     }
 
 
-def compare_pages(
+def compare_pages(  # noqa: C901 - docs/backlog.md: Sprint 17 legacy hotspot.
     local_records: list[dict[str, Any]], canvas_rows: list[dict[str, Any]], root: Path
 ) -> list[dict[str, Any]]:
     by_identity: dict[str, dict[str, Any]] = {}

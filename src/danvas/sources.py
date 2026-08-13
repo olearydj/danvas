@@ -7,8 +7,10 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
+from danvas.assignment_sources import expand_date_only_metadata
 from danvas.authored_content import DATE_OR_DATETIME, DATETIME, require_valid_datetimes
 from danvas.frontmatter import normalize_canvas_value, parse_frontmatter
+from danvas.page_sources import canonicalize_page_html, load_page_source
 
 SOURCE_KINDS = ("announcement", "discussion", "quiz", "assignment", "page")
 SOURCE_CONFIG_KEYS = {
@@ -186,8 +188,6 @@ def source_record(
             record["title"] = quiz_source_title(text)
             record["artifacts"]["qti_zip"] = find_qti_zip(path, root)
         elif kind == "page":
-            from danvas.pages import canonicalize_page_html, load_page_source
-
             local = load_page_source(
                 path,
                 course_id=course_id,
@@ -220,8 +220,6 @@ def source_record(
                 text, path, kind.capitalize()
             )
             if kind == "assignment":
-                from danvas.assignments import expand_date_only_metadata
-
                 expand_date_only_metadata(metadata, path)
             validate_source_datetimes(kind, metadata)
             if (

@@ -58,7 +58,9 @@ def normalized_text(value: str) -> str:
     return " ".join(value.split())
 
 
-def comparable_value(value: Any, policy: ComparisonPolicy = SCALAR) -> Any:
+def comparable_value(  # noqa: C901 - docs/backlog.md: Sprint 17 legacy hotspot.
+    value: Any, policy: ComparisonPolicy = SCALAR
+) -> Any:
     """Return a stable evidence value under an explicit field policy."""
     if policy == BOOLEAN:
         if value is None:

@@ -18,7 +18,7 @@ from requests.exceptions import RequestException
 
 from danvas.files import canvas_file_record
 from danvas.overrides import redacted_assignment_overrides
-from danvas.pages import (
+from danvas.page_sources import (
     BODY_NORMALIZER_VERSION,
     canonicalize_page_html,
     canonicalize_page_url,

@@ -5,13 +5,24 @@ from __future__ import annotations
 import datetime as dt
 import json
 import sys
-import tomllib
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from danvas.auth import canvas_from_args
-from danvas.pages import BODY_NORMALIZER_VERSION
+from danvas.page_sources import BODY_NORMALIZER_VERSION
+from danvas.project_config import (
+    CONFIG_DIR_NAME,
+    CONFIG_FILE_NAME,  # noqa: F401 - compatibility re-export
+    COURSE_SNAPSHOT_NAME,
+    config_path,
+    course_snapshot_path,
+    find_config_dir,
+    load_project_config,
+    project_dir,  # noqa: F401 - compatibility re-export
+    resolve_api_url,  # noqa: F401 - compatibility re-export
+    resolve_course_id,
+    resolve_course_timezone,  # noqa: F401 - compatibility re-export
+)
 from danvas.reports import create_report_run
 from danvas.snapshot_collections import (
     collect_snapshot_collections,
@@ -21,66 +32,8 @@ from danvas.snapshot_collections import (
 )
 from danvas.utils import canvas_object_to_dict, write_json_atomic
 
-CONFIG_DIR_NAME = ".danvas"
-CONFIG_FILE_NAME = "config.toml"
-COURSE_SNAPSHOT_NAME = "course.json"
 SNAPSHOT_SCHEMA_VERSION = 5
 PARTIAL_SNAPSHOT_EXIT_CODE = 3
-
-
-def project_dir(root: Path | None = None) -> Path:
-    return (root or Path.cwd()) / CONFIG_DIR_NAME
-
-
-def config_path(root: Path | None = None) -> Path:
-    return project_dir(root) / CONFIG_FILE_NAME
-
-
-def course_snapshot_path(root: Path | None = None) -> Path:
-    return project_dir(root) / COURSE_SNAPSHOT_NAME
-
-
-def find_config_dir(start: Path | None = None) -> Path | None:
-    current = (start or Path.cwd()).resolve()
-    if current.is_file():
-        current = current.parent
-    for candidate in [current, *current.parents]:
-        path = candidate / CONFIG_DIR_NAME / CONFIG_FILE_NAME
-        if path.is_file():
-            return path.parent
-    return None
-
-
-def load_project_config(start: Path | None = None) -> dict[str, Any]:
-    config_dir = find_config_dir(start)
-    if not config_dir:
-        return {}
-    data = tomllib.loads((config_dir / CONFIG_FILE_NAME).read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise SystemExit(f"danvas config must be a TOML table: {config_dir / CONFIG_FILE_NAME}")
-    return data
-
-
-def resolve_course_id(explicit: int | None, *, start: Path | None = None) -> int:
-    if explicit is not None:
-        return explicit
-    config = load_project_config(start)
-    course_id = (config.get("canvas") or {}).get("course_id")
-    if course_id is None:
-        raise SystemExit(
-            "Canvas course ID required. Pass --course-id or run `danvas init COURSE_ID` "
-            "from the course project."
-        )
-    return int(course_id)
-
-
-def resolve_api_url(explicit: str | None, *, start: Path | None = None) -> str | None:
-    if explicit:
-        return explicit
-    config = load_project_config(start)
-    value = (config.get("canvas") or {}).get("api_url")
-    return str(value) if value else None
-
 
 def resolve_assignment_group_id(
     name: str, *, explicit_id: int | None = None, start: Path | None = None
@@ -115,20 +68,6 @@ def resolve_assignment_group_id(
     raise SystemExit(
         f"Unknown assignment group name: {name}. Run `danvas refresh` or use assignment_group_id."
     )
-
-
-def resolve_course_timezone(start: Path | None = None) -> ZoneInfo:
-    config = load_project_config(start)
-    timezone = (config.get("canvas") or {}).get("timezone")
-    if not timezone:
-        raise SystemExit(
-            "Date-only assignment metadata requires [canvas].timezone in .danvas/config.toml. "
-            "Run `danvas init` or use explicit *_at datetime fields."
-        )
-    try:
-        return ZoneInfo(str(timezone))
-    except ZoneInfoNotFoundError as exc:
-        raise SystemExit(f"Unknown course timezone in .danvas/config.toml: {timezone}") from exc
 
 
 def command_init(args: Any) -> None:
