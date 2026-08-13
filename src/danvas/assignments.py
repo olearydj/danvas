@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from collections import Counter
-from datetime import date, datetime, time
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from canvasapi.exceptions import ResourceDoesNotExist
 
+from danvas.asset_state import AssetPlan, AssetVerification
+from danvas.assignment_sources import expand_date_only_metadata
 from danvas.auth import canvas_from_args
 from danvas.authored_assets import (
     asset_associations,
@@ -41,7 +42,7 @@ from danvas.canvas_links import (
     extract_canvas_file_references,
     stable_course_file_url,
 )
-from danvas.config import resolve_assignment_group_id, resolve_course_timezone
+from danvas.config import resolve_assignment_group_id
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
 from danvas.overrides import private_assignment_overrides
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
@@ -400,7 +401,7 @@ def command_assignments_create(args: Any) -> None:
         source,
         local,
         assignment,
-        course=asset_plan.get("_course") if asset_plan else None,
+        course=asset_plan.runtime.course if asset_plan else None,
         asset_plan=asset_plan,
         banner_printed=banner_printed,
     )
@@ -412,7 +413,7 @@ def create_assignment_from_loaded_source(
     local: dict[str, Any],
     assignment: dict[str, Any] | None = None,
     course: Any | None = None,
-    asset_plan: dict[str, Any] | None = None,
+    asset_plan: AssetPlan | None = None,
     banner_printed: bool = False,
 ) -> None:
     assignment = assignment or local["assignment"]
@@ -642,7 +643,7 @@ def update_assignment_from_loaded_source(
     lookup: dict[str, Any],
     assignment: Any,
     canvas_before: dict[str, Any],
-    asset_plan: dict[str, Any] | None = None,
+    asset_plan: AssetPlan | None = None,
     banner_printed: bool = False,
     report_run: ReportRun | None = None,
 ) -> None:
@@ -877,7 +878,7 @@ def command_assignments_upsert(args: Any) -> None:
             report["status"] = "asset_failed"
             report["assets"] = public_asset_evidence(asset_plan)
             write_assignment_upsert_report_run(
-                asset_plan.get("_report_run")
+                asset_plan.runtime.report_run
                 or make_assignment_upsert_report_run(args, report),
                 report,
             )
@@ -906,7 +907,7 @@ def command_assignments_upsert(args: Any) -> None:
             canvas_before=canvas_before,
             asset_plan=asset_plan,
             banner_printed=banner_printed,
-            report_run=(asset_plan or {}).get("_report_run"),
+            report_run=asset_plan.runtime.report_run if asset_plan else None,
         )
 
 
@@ -918,7 +919,7 @@ def prepare_assignment_asset_plan(
     canvas: Any | None = None,
     course: Any | None = None,
     verify_only: bool = False,
-) -> dict[str, Any] | None:
+) -> AssetPlan | None:
     canvas_origin = str(getattr(args, "api_url", "") or "")
     course_id = int(args.course_id)
     html = str(local.get("rendered_html") or local["assignment"].get("description") or "")
@@ -955,9 +956,9 @@ def prepare_assignment_asset_plan(
         canvas_loader=load_canvas_course if candidates and course is None else None,
     )
     if plan:
-        plan["_canvas"] = plan.pop("_resolved_canvas", canvas)
-        plan["_course"] = plan.pop("_resolved_course", course)
-        plan["_canvas_origin"] = canvas_origin
+        plan.runtime.canvas = plan.runtime.canvas or canvas
+        plan.runtime.course = plan.runtime.course or course
+        plan.runtime.canvas_origin = canvas_origin
     return plan
 
 
@@ -965,11 +966,11 @@ def execute_assignment_asset_plan(
     args: Any,
     source: Path,
     local: dict[str, Any],
-    plan: dict[str, Any],
+    plan: AssetPlan,
     *,
     command: str,
-) -> dict[str, Any]:
-    folder = plan.get("_folder")
+) -> AssetPlan:
+    folder = plan.runtime.folder
     if folder is None and any(
         asset.get("status") in {"would_upload", "would_rename"}
         for asset in plan.get("assets") or []
@@ -986,7 +987,7 @@ def execute_assignment_asset_plan(
     )
 
 
-def apply_asset_plan_to_local(local: dict[str, Any], plan: dict[str, Any]) -> None:
+def apply_asset_plan_to_local(local: dict[str, Any], plan: AssetPlan) -> None:
     rewritten = str(plan.get("rewritten_html") or "")
     if not rewritten:
         return
@@ -1002,16 +1003,16 @@ def apply_asset_plan_to_local(local: dict[str, Any], plan: dict[str, Any]) -> No
     local["file_links"] = extract_canvas_file_references(
         rewritten,
         current_course_id=int(plan["course_id"]),
-        canvas_origin=str(plan.get("_canvas_origin") or ""),
+        canvas_origin=plan.runtime.canvas_origin,
     )
 
 
 def verify_assignment_asset_plan(
-    plan: dict[str, Any],
+    plan: AssetPlan,
     canvas_record: dict[str, Any],
     course: Any,
     args: Any,
-) -> dict[str, Any]:
+) -> AssetVerification:
     verification = verify_asset_readback(
         plan.get("assets") or [],
         str(canvas_record.get("description_html") or ""),
@@ -1030,7 +1031,7 @@ def print_assignment_asset_banner(
     operation: str,
     source: Path,
     local: dict[str, Any],
-    plan: dict[str, Any],
+    plan: AssetPlan,
 ) -> None:
     destination = plan.get("destination") or {}
     print_mutation_banner(
@@ -1045,7 +1046,7 @@ def print_assignment_asset_banner(
     )
 
 
-def require_live_asset_report(args: Any, plan: dict[str, Any]) -> None:
+def require_live_asset_report(args: Any, plan: AssetPlan) -> None:
     upload_planned = any(
         asset.get("status") in {"would_upload", "would_rename"}
         for asset in plan.get("assets") or []
@@ -1058,7 +1059,7 @@ def prepare_assignment_asset_report_run(
     args: Any,
     command: str,
     source: Path,
-    plan: dict[str, Any],
+    plan: AssetPlan,
 ) -> None:
     if not any(
         asset.get("status") in {"would_upload", "would_rename"}
@@ -1069,7 +1070,7 @@ def prepare_assignment_asset_report_run(
     report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
     report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
     report_slug = getattr(args, "report_slug", None)
-    plan["_report_run"] = create_report_run(
+    plan.runtime.report_run = create_report_run(
         command=command,
         slug=report_slug or command.replace(" ", "-"),
         project_root=project_root,
@@ -1085,7 +1086,7 @@ def write_assignment_asset_report(
     args: Any,
     command: str,
     source: Path,
-    plan: dict[str, Any],
+    plan: AssetPlan,
 ) -> None:
     project_root = Path(getattr(args, "project_root", "."))
     report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
@@ -1100,7 +1101,7 @@ def write_assignment_asset_report(
         project_root=project_root,
     ):
         return
-    run = plan.get("_report_run") or create_report_run(
+    run = plan.runtime.report_run or create_report_run(
         command=command,
         slug=report_slug or command.replace(" ", "-"),
         project_root=project_root,
@@ -1110,7 +1111,7 @@ def write_assignment_asset_report(
         input_paths=[source],
         private_data=False,
     )
-    evidence = public_asset_evidence(plan) or {}
+    evidence = cast(dict[str, Any], public_asset_evidence(plan) or {})
     try:
         json_path = run.write_json("assignment-assets.json", evidence)
         markdown_path = run.write_text(
@@ -1636,54 +1637,12 @@ def metadata_text(value: Any) -> str:
     return str(value)
 
 
-DATE_ONLY_ALIASES = {
-    "due_date": ("due_at", time(23, 59)),
-    "unlock_date": ("unlock_at", time(0, 0)),
-    "lock_date": ("lock_at", time(23, 59)),
-}
-DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-
-
-def expand_date_only_metadata(metadata: dict[str, Any], source: Path) -> None:
-    for alias, (target, default_time) in DATE_ONLY_ALIASES.items():
-        if alias not in metadata:
-            continue
-        if target in metadata and not is_blank_metadata_value(metadata.get(target)):
-            raise SystemExit(f"Use either {alias} or {target}, not both.")
-        value = metadata.pop(alias)
-        if is_blank_metadata_value(value):
-            continue
-        timezone = resolve_course_timezone(source)
-        day = parse_date_only_value(alias, value)
-        metadata[target] = datetime.combine(day, default_time, tzinfo=timezone).isoformat(
-            timespec="seconds"
-        )
-
-
-def parse_date_only_value(field: str, value: Any) -> date:
-    if isinstance(value, datetime):
-        raise SystemExit(f"{field} must be a date-only value in YYYY-MM-DD format.")
-    if isinstance(value, date):
-        return value
-    text = str(value).strip()
-    if not DATE_ONLY_RE.match(text):
-        raise SystemExit(f"{field} must be a date-only value in YYYY-MM-DD format.")
-    try:
-        return date.fromisoformat(text)
-    except ValueError as exc:
-        raise SystemExit(f"{field} must be a valid date in YYYY-MM-DD format.") from exc
-
-
 def validate_assignment_datetimes(metadata: dict[str, Any]) -> None:
     require_valid_datetimes(
         metadata,
         {field: DATETIME for field in ASSIGNMENT_DATETIME_FIELDS},
         source_type="Assignment",
     )
-
-
-def is_blank_metadata_value(value: Any) -> bool:
-    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def build_assignment_verify_report(

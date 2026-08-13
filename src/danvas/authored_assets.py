@@ -12,6 +12,15 @@ from urllib.parse import unquote, urlsplit, urlunsplit
 from bs4 import BeautifulSoup, Tag
 from canvasapi.exceptions import ResourceDoesNotExist
 
+from danvas.asset_state import (
+    AssetDestination,
+    AssetItem,
+    AssetPlan,
+    AssetPublicEvidence,
+    AssetRuntime,
+    AssetTransitionResult,
+    AssetVerification,
+)
 from danvas.canvas_links import (
     canvas_file_reference,
     current_course_root_relative_url,
@@ -19,7 +28,6 @@ from danvas.canvas_links import (
     sensitive_query_names,
     stable_course_file_url,
 )
-from danvas.config import find_config_dir, load_project_config
 from danvas.files import (
     content_type_for,
     files_inventory_ignore_patterns,
@@ -29,6 +37,7 @@ from danvas.files import (
     upload_result_row,
     validate_upload_destination,
 )
+from danvas.project_config import find_config_dir, load_project_config
 from danvas.sanitize import sanitize_error
 from danvas.source_map import (
     load_source_map,
@@ -78,7 +87,7 @@ def prepare_asset_plan(
     on_duplicate: str,
     verify_only: bool = False,
     canvas_loader: Callable[[], tuple[Any, Any]] | None = None,
-) -> dict[str, Any] | None:
+) -> AssetPlan | None:
     """Build a complete local-asset plan, or return None when no local intent exists."""
     candidates = local_intent_candidates(
         html,
@@ -92,10 +101,7 @@ def prepare_asset_plan(
         return None
 
     root = project_root.resolve()
-    try:
-        source.resolve().relative_to(root)
-    except ValueError as exc:
-        raise SystemExit("Asset-enabled assignment source must be inside the course project.") from exc
+    require_source_in_project(source, root)
     scan = scan_authored_assets(
         html,
         source=source,
@@ -103,133 +109,236 @@ def prepare_asset_plan(
         current_course_id=course_id,
         canvas_origin=canvas_origin,
     )
-    plan: dict[str, Any] = {
-        "evidence_schema": ASSET_EVIDENCE_SCHEMA,
-        "status": "blocked" if scan["blocked"] else "planned",
-        "course_id": course_id,
-        "source": source_path_key(source, root),
-        "source_body_sha256": sha256_text(html),
-        "deployed_body_sha256": None,
-        "destination": None,
-        "assets": scan["assets"],
-        "blocked": scan["blocked"],
-        "rewritten_html": None,
-        "mutation_status": "not_started",
-        "content_mutation_status": "not_started",
-        "evidence_status": "not_started",
-        "verification_status": "not_checked",
-        "_source_html": html,
-        "_source_path": source.resolve(),
-        "_project_root": root,
-        "_source_file_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-    }
-    if scan["blocked"]:
+    plan = initial_asset_plan(
+        html,
+        source=source,
+        project_root=root,
+        course_id=course_id,
+        canvas_origin=canvas_origin,
+        scan=scan,
+        canvas=canvas,
+        course=course,
+    )
+    if plan.status == "blocked":
         return plan
-    require_asset_project(root, course_id)
+
+    source_map = validated_plan_source_map(root, course_id)
+    canvas, course = resolve_plan_course(plan, canvas_loader)
+    resolved_folder = resolve_plan_destination(
+        plan,
+        canvas=canvas,
+        course=course,
+        folder=folder,
+        folder_id=folder_id,
+    )
+    upload_candidates = [
+        row
+        for asset in plan.assets
+        if (
+            row := plan_asset_item(
+                asset,
+                source_map=source_map,
+                course=course,
+                course_id=course_id,
+                resolved_folder=resolved_folder,
+                verify_only=verify_only,
+                on_duplicate=on_duplicate,
+            )
+        )
+        is not None
+    ]
+    apply_upload_plan(plan, upload_candidates, resolved_folder, on_duplicate=on_duplicate)
+    finalize_asset_plan(plan, html, course_id=course_id, canvas_origin=canvas_origin)
+    return plan
+
+
+def require_source_in_project(source: Path, project_root: Path) -> None:
+    try:
+        source.resolve().relative_to(project_root)
+    except ValueError as exc:
+        raise SystemExit("Asset-enabled assignment source must be inside the course project.") from exc
+
+
+def initial_asset_plan(
+    html: str,
+    *,
+    source: Path,
+    project_root: Path,
+    course_id: int,
+    canvas_origin: str,
+    scan: dict[str, Any],
+    canvas: Any | None,
+    course: Any | None,
+) -> AssetPlan:
+    return AssetPlan(
+        evidence_schema=ASSET_EVIDENCE_SCHEMA,
+        status="blocked" if scan["blocked"] else "planned",
+        course_id=course_id,
+        source=source_path_key(source, project_root),
+        source_body_sha256=sha256_text(html),
+        assets=[AssetItem.from_scan_record(row) for row in scan["assets"]],
+        blocked=scan["blocked"],
+        runtime=AssetRuntime(
+            source_html=html,
+            source_path=source.resolve(),
+            project_root=project_root,
+            source_file_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+            canvas_origin=canvas_origin,
+            canvas=canvas,
+            course=course,
+        ),
+    )
+
+
+def resolve_plan_course(
+    plan: AssetPlan,
+    canvas_loader: Callable[[], tuple[Any, Any]] | None,
+) -> tuple[Any | None, Any]:
+    canvas = plan.runtime.canvas
+    course = plan.runtime.course
     if course is None:
         if canvas_loader is None:
             raise SystemExit("Canvas course access is required to plan local assignment assets.")
         canvas, course = canvas_loader()
-        plan["_resolved_canvas"] = canvas
-        plan["_resolved_course"] = course
+        plan.runtime.canvas = canvas
+        plan.runtime.course = course
+    return canvas, course
 
-    source_map = load_source_map(root)
+
+def validated_plan_source_map(project_root: Path, course_id: int) -> dict[str, Any]:
+    require_asset_project(project_root, course_id)
+    source_map = load_source_map(project_root)
     mapped_course_id = source_map.get("course_id")
     if mapped_course_id is not None and int(mapped_course_id) != int(course_id):
         raise SystemExit(
             f"Source-map course {mapped_course_id} does not match target course {course_id}."
         )
-    resolved_folder = None
-    if folder or folder_id is not None:
-        validate_upload_destination(folder, folder_id)
-        if canvas is None:
-            raise SystemExit("Canvas access is required to resolve the asset folder.")
-        resolved_folder = resolve_upload_folder(
-            canvas,
+    return source_map
+
+
+def resolve_plan_destination(
+    plan: AssetPlan,
+    *,
+    canvas: Any | None,
+    course: Any,
+    folder: str | None,
+    folder_id: int | None,
+) -> Any | None:
+    if not folder and folder_id is None:
+        return None
+    validate_upload_destination(folder, folder_id)
+    if canvas is None:
+        raise SystemExit("Canvas access is required to resolve the asset folder.")
+    resolved = resolve_upload_folder(
+        canvas,
+        course,
+        folder=folder,
+        folder_id=folder_id,
+    )
+    plan.destination = safe_folder_record(resolved)
+    plan.runtime.folder = resolved
+    return resolved
+
+
+def plan_asset_item(
+    asset: AssetItem,
+    *,
+    source_map: dict[str, Any],
+    course: Any,
+    course_id: int,
+    resolved_folder: Any | None,
+    verify_only: bool,
+    on_duplicate: str,
+) -> dict[str, Any] | None:
+    mapped = mapped_file_record(source_map, asset, course_id=course_id)
+    asset["mapping"] = mapped
+    if mapped["status"] == "valid":
+        checked = validate_mapped_file(
             course,
-            folder=folder,
-            folder_id=folder_id,
+            mapped,
+            expected_folder_id=(
+                int(resolved_folder.id) if resolved_folder is not None else None
+            ),
         )
-        plan["destination"] = safe_folder_record(resolved_folder)
-        plan["_folder"] = resolved_folder
-
-    upload_candidates: list[dict[str, Any]] = []
-    for asset in plan["assets"]:
-        mapped = mapped_file_record(source_map, asset, course_id=course_id)
-        asset["mapping"] = mapped
-        if mapped["status"] == "valid":
-            checked = validate_mapped_file(
-                course,
-                mapped,
-                expected_folder_id=(
-                    int(resolved_folder.id) if resolved_folder is not None else None
-                ),
-            )
-            if checked["status"] == "valid":
-                asset.update(
-                    {
-                        "status": "would_reuse",
-                        "reason": "mapped_identity_and_local_hash_match",
-                        "canvas": checked["canvas"],
-                    }
-                )
-                continue
-            if checked["status"] != "not_found":
-                asset.update({"status": "conflict", "reason": checked["reason"]})
-                continue
-        elif mapped["status"] not in {"missing", "hash_changed"}:
-            asset.update({"status": "conflict", "reason": mapped["reason"]})
-            continue
-
-        if verify_only:
+        if checked["status"] == "valid":
             asset.update(
                 {
-                    "status": "conflict",
-                    "reason": (
-                        "local_hash_changed"
-                        if mapped["status"] == "hash_changed"
-                        else "asset_identity_not_available"
-                    ),
+                    "status": "would_reuse",
+                    "reason": "mapped_identity_and_local_hash_match",
+                    "canvas": checked["canvas"],
                 }
             )
-            continue
-        if resolved_folder is None:
-            asset.update({"status": "blocked", "reason": "asset_destination_required"})
-            continue
-        if mapped["status"] == "hash_changed" and on_duplicate != "rename":
-            asset.update({"status": "conflict", "reason": "local_hash_changed"})
-            continue
-        upload_candidates.append(asset_upload_row(asset))
+            return None
+        if checked["status"] != "not_found":
+            asset.update({"status": "conflict", "reason": checked["reason"]})
+            return None
+    elif mapped["status"] not in {"missing", "hash_changed"}:
+        asset.update({"status": "conflict", "reason": mapped["reason"]})
+        return None
 
-    if upload_candidates and resolved_folder is not None:
-        rows = plan_upload_rows(
-            upload_candidates,
-            resolved_folder,
-            on_duplicate=on_duplicate,
+    if verify_only:
+        asset.update(
+            {
+                "status": "conflict",
+                "reason": (
+                    "local_hash_changed"
+                    if mapped["status"] == "hash_changed"
+                    else "asset_identity_not_available"
+                ),
+            }
         )
-        by_path = {str(row["relative_path"]): row for row in rows}
-        for asset in plan["assets"]:
-            row = by_path.get(str(asset["path"]))
-            if row is None:
-                continue
-            status = row["status"]
-            asset["status"] = {
-                "would_create": "would_upload",
-                "would_rename": "would_rename",
-            }.get(status, "conflict")
-            asset["reason"] = str(row.get("reason") or "")
-            asset["existing_canvas_ids"] = list(row.get("existing_canvas_ids") or [])
+        return None
+    if resolved_folder is None:
+        asset.update({"status": "blocked", "reason": "asset_destination_required"})
+        return None
+    if mapped["status"] == "hash_changed" and on_duplicate != "rename":
+        asset.update({"status": "conflict", "reason": "local_hash_changed"})
+        return None
+    return asset_upload_row(asset)
 
-    failing = [asset for asset in plan["assets"] if asset.get("status") in {"blocked", "conflict"}]
-    if failing:
+
+def apply_upload_plan(
+    plan: AssetPlan,
+    upload_candidates: list[dict[str, Any]],
+    resolved_folder: Any | None,
+    *,
+    on_duplicate: str,
+) -> None:
+    if not upload_candidates or resolved_folder is None:
+        return
+    rows = plan_upload_rows(
+        upload_candidates,
+        resolved_folder,
+        on_duplicate=on_duplicate,
+    )
+    by_path = {str(row["relative_path"]): row for row in rows}
+    for asset in plan.assets:
+        row = by_path.get(asset.local.path)
+        if row is None:
+            continue
+        asset["status"] = {
+            "would_create": "would_upload",
+            "would_rename": "would_rename",
+        }.get(row["status"], "conflict")
+        asset["reason"] = str(row.get("reason") or "")
+        asset["existing_canvas_ids"] = list(row.get("existing_canvas_ids") or [])
+
+
+def finalize_asset_plan(
+    plan: AssetPlan,
+    html: str,
+    *,
+    course_id: int,
+    canvas_origin: str,
+) -> None:
+    if any(asset.status in {"blocked", "conflict"} for asset in plan.assets):
         plan["status"] = "blocked"
-        return plan
-    if all(asset.get("status") == "would_reuse" for asset in plan["assets"]):
+        return
+    if all(asset.status == "would_reuse" for asset in plan.assets):
         plan["status"] = "would_reuse"
-        rewritten = rewrite_authored_html(html, plan["assets"], course_id, canvas_origin)
-        plan["rewritten_html"] = rewritten
-        plan["deployed_body_sha256"] = sha256_text(rewritten)
-    return plan
+        rewritten = rewrite_authored_html(html, plan.assets, course_id, canvas_origin)
+        plan.rewritten_html = rewritten
+        plan.deployed_body_sha256 = sha256_text(rewritten)
 
 
 def local_intent_candidates(
@@ -474,7 +583,7 @@ def classify_local_reference(
 
 
 def execute_asset_plan(
-    plan: dict[str, Any],
+    plan: AssetPlan,
     *,
     folder: Any,
     course_id: int,
@@ -482,181 +591,316 @@ def execute_asset_plan(
     command: str,
     project_root: Path,
     on_duplicate: str,
-) -> dict[str, Any]:
+) -> AssetPlan:
     """Upload planned assets, recording each identity before the next mutation."""
-    source_path = Path(str(plan["_source_path"]))
-    try:
-        current_source_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
-    except OSError:
-        current_source_sha256 = ""
-    rescanned = scan_authored_assets(
-        str(plan["_source_html"]),
-        source=source_path,
-        project_root=Path(str(plan["_project_root"])),
-        current_course_id=course_id,
+    if not planned_source_is_current(
+        plan,
+        course_id=course_id,
         canvas_origin=canvas_origin,
-    )
-    if (
-        current_source_sha256 != plan["_source_file_sha256"]
-        or rescanned["blocked"]
-        or asset_plan_signature(rescanned["assets"])
-        != asset_plan_signature(plan["assets"])
     ):
-        plan["status"] = "failed"
-        plan["mutation_status"] = "not_started"
-        plan["evidence_status"] = "complete"
-        plan["recovery_guidance"] = (
-            "Local source or asset bytes changed after planning. Re-run the command to build "
-            "a fresh plan."
-        )
+        mark_stale_plan(plan)
         return plan
-    plan["mutation_status"] = "in_progress"
-    plan["evidence_status"] = "in_progress"
-    for asset in plan["assets"]:
-        if asset["status"] == "would_reuse":
-            asset["status"] = "reused"
-            continue
-        if not current_asset_matches(asset):
-            asset.update(
-                {
-                    "status": "failed",
-                    "mutation_status": "not_started",
-                    "evidence_status": "complete",
-                    "reason": "local_asset_changed_after_plan",
-                }
-            )
-            plan["status"] = "failed"
-            plan["mutation_status"] = "partial" if any_mutated(plan) else "not_started"
-            plan["evidence_status"] = "complete"
-            plan["recovery_guidance"] = "Re-run the command to build a fresh asset plan."
-            return plan
-        latest = plan_upload_rows(
-            [asset_upload_row(asset)],
-            folder,
-            on_duplicate=on_duplicate,
-        )[0]
-        expected = "would_rename" if asset["status"] == "would_rename" else "would_create"
-        if latest["status"] != expected:
-            asset.update(
-                {
-                    "status": "failed",
-                    "mutation_status": "not_started",
-                    "evidence_status": "complete",
-                    "reason": "destination_changed_after_plan",
-                    "existing_canvas_ids": latest.get("existing_canvas_ids") or [],
-                }
-            )
-            plan["status"] = "failed"
-            plan["mutation_status"] = "partial" if any_mutated(plan) else "not_started"
-            plan["evidence_status"] = "complete"
-            return plan
-        upload_mode = "rename"
-        try:
-            ok, response = folder.upload(
-                str(asset["source_path"]),
-                on_duplicate=upload_mode,
-                content_type=str(asset["content_type"]),
-            )
-        except Exception as exc:  # noqa: BLE001 - retained evidence is sanitized.
-            ok = False
-            response = {"error": sanitize_error(f"{type(exc).__name__}: {exc}")}
-        result = upload_result_row(
-            asset_upload_row(asset),
-            ok=bool(ok),
-            response=response,
+
+    plan.mutation_status = "in_progress"
+    plan.evidence_status = "in_progress"
+    for asset in plan.assets:
+        transition = execute_asset_item(
+            plan,
+            asset,
             folder=folder,
             course_id=course_id,
             canvas_origin=canvas_origin,
+            command=command,
+            project_root=project_root,
+            on_duplicate=on_duplicate,
         )
-        asset["mutation_status"] = result["mutation_status"]
-        asset["evidence_status"] = result["evidence_status"]
-        if result["mutation_status"] != "succeeded":
-            asset["status"] = str(result["status"])
-            asset["reason"] = str(result.get("error") or "upload_failed")
-            plan["status"] = str(result["status"])
-            plan["mutation_status"] = "partial" if any_mutated(plan) else str(result["status"])
-            plan["evidence_status"] = str(result["evidence_status"])
-            if result["mutation_status"] == "indeterminate":
-                plan["recovery_guidance"] = (
-                    "Verify Canvas Files before retrying; the upload outcome is indeterminate."
-                )
+        if transition.stop:
             return plan
-        returned_name = str(result.get("display_name") or result.get("filename") or "")
-        unexpected_rename = on_duplicate == "error" and returned_name != str(asset["name"])
-        asset["status"] = (
-            "renamed"
-            if result["status"] == "uploaded" and returned_name != str(asset["name"])
-            else "uploaded"
-        )
-        asset["canvas"] = {
-            "course_id": course_id,
-            "id": int(result["canvas_id"]),
-            "folder_id": result.get("folder_id"),
-            "path": result.get("canvas_path") or "",
-            "url": result.get("canvas_url") or "",
-            "display_name": returned_name,
-        }
-        try:
-            write_source_map_entry(
-                kind="file",
-                source=Path(str(asset["source_path"])),
-                course_id=course_id,
-                canvas=asset["canvas"],
-                command=command,
-                fields={
-                    "sha256": asset["sha256"],
-                    "size": asset["size"],
-                    "content_type": asset["content_type"],
-                    "upload_name": returned_name,
-                },
-                project_root=project_root,
-            )
-        except Exception as exc:  # noqa: BLE001 - identity is still retained in memory.
-            asset["evidence_status"] = "failed"
-            asset["reason"] = f"source_map_write_{type(exc).__name__}"
-            plan["status"] = "failed"
-            plan["mutation_status"] = "partial"
-            plan["evidence_status"] = "failed"
-            plan["recovery_guidance"] = (
-                "Do not retry the upload. Preserve the reported Canvas file identity and "
-                "repair source-map evidence first."
-            )
-            return plan
-        if result["evidence_status"] != "complete":
-            asset["reason"] = "stable_file_evidence_incomplete"
-            plan["status"] = "indeterminate"
-            plan["mutation_status"] = "partial"
-            plan["evidence_status"] = str(result["evidence_status"])
-            plan["recovery_guidance"] = (
-                "Do not retry the upload. Reconstruct stable evidence from the recorded file ID."
-            )
-            return plan
-        if unexpected_rename:
-            asset["reason"] = "unexpected_rename_after_race"
-            plan["status"] = "failed"
-            plan["mutation_status"] = "partial"
-            plan["evidence_status"] = "complete"
-            return plan
-
-    rewritten = rewrite_authored_html(
-        str(plan["_source_html"]), plan["assets"], course_id, canvas_origin
-    )
-    plan["rewritten_html"] = rewritten
-    plan["deployed_body_sha256"] = sha256_text(rewritten)
-    plan["status"] = "deployed"
-    plan["mutation_status"] = "succeeded" if any_mutated(plan) else "not_needed"
-    plan["evidence_status"] = "complete"
+    finalize_deployed_plan(plan, course_id=course_id, canvas_origin=canvas_origin)
     return plan
+
+
+def planned_source_is_current(
+    plan: AssetPlan,
+    *,
+    course_id: int,
+    canvas_origin: str,
+) -> bool:
+    try:
+        current_source_sha256 = hashlib.sha256(plan.runtime.source_path.read_bytes()).hexdigest()
+    except OSError:
+        current_source_sha256 = ""
+    rescanned = scan_authored_assets(
+        plan.runtime.source_html,
+        source=plan.runtime.source_path,
+        project_root=plan.runtime.project_root,
+        current_course_id=course_id,
+        canvas_origin=canvas_origin,
+    )
+    return (
+        current_source_sha256 == plan.runtime.source_file_sha256
+        and not rescanned["blocked"]
+        and asset_plan_signature(rescanned["assets"]) == asset_plan_signature(plan.assets)
+    )
+
+
+def mark_stale_plan(plan: AssetPlan) -> None:
+    plan["status"] = "failed"
+    plan.mutation_status = "not_started"
+    plan.evidence_status = "complete"
+    plan.recovery_guidance = (
+        "Local source or asset bytes changed after planning. Re-run the command to build "
+        "a fresh plan."
+    )
+
+
+def execute_asset_item(
+    plan: AssetPlan,
+    asset: AssetItem,
+    *,
+    folder: Any,
+    course_id: int,
+    canvas_origin: str,
+    command: str,
+    project_root: Path,
+    on_duplicate: str,
+) -> AssetTransitionResult:
+    if asset.status == "would_reuse":
+        asset["status"] = "reused"
+        return AssetTransitionResult(stop=False)
+    if not current_asset_matches(asset):
+        mark_changed_asset(plan, asset)
+        return AssetTransitionResult(stop=True, reason=asset.reason)
+
+    latest = plan_upload_rows(
+        [asset_upload_row(asset)],
+        folder,
+        on_duplicate=on_duplicate,
+    )[0]
+    expected = "would_rename" if asset.status == "would_rename" else "would_create"
+    if latest["status"] != expected:
+        mark_changed_destination(plan, asset, latest)
+        return AssetTransitionResult(stop=True, reason=asset.reason)
+
+    result = upload_one_asset(
+        asset,
+        folder=folder,
+        course_id=course_id,
+        canvas_origin=canvas_origin,
+    )
+    asset["mutation_status"] = result["mutation_status"]
+    asset["evidence_status"] = result["evidence_status"]
+    if result["mutation_status"] != "succeeded":
+        mark_upload_failure(plan, asset, result)
+        return AssetTransitionResult(stop=True, reason=asset.reason)
+
+    returned_name = str(result.get("display_name") or result.get("filename") or "")
+    unexpected_rename = on_duplicate == "error" and returned_name != asset.local.name
+    record_uploaded_identity(asset, result, course_id=course_id, returned_name=returned_name)
+    provenance_error = record_asset_provenance(
+        asset,
+        course_id=course_id,
+        command=command,
+        project_root=project_root,
+    )
+    if provenance_error:
+        mark_provenance_failure(plan, asset, provenance_error)
+        return AssetTransitionResult(stop=True, reason=asset.reason)
+    if result["evidence_status"] != "complete":
+        mark_incomplete_upload_evidence(plan, asset, result)
+        return AssetTransitionResult(stop=True, reason=asset.reason)
+    if unexpected_rename:
+        asset["reason"] = "unexpected_rename_after_race"
+        plan["status"] = "failed"
+        plan.mutation_status = "partial"
+        plan.evidence_status = "complete"
+        return AssetTransitionResult(stop=True, reason=asset.reason)
+    return AssetTransitionResult(stop=False)
+
+
+def mark_changed_asset(plan: AssetPlan, asset: AssetItem) -> None:
+    asset.update(
+        {
+            "status": "failed",
+            "mutation_status": "not_started",
+            "evidence_status": "complete",
+            "reason": "local_asset_changed_after_plan",
+        }
+    )
+    plan["status"] = "failed"
+    plan.mutation_status = "partial" if any_mutated(plan) else "not_started"
+    plan.evidence_status = "complete"
+    plan.recovery_guidance = "Re-run the command to build a fresh asset plan."
+
+
+def mark_changed_destination(
+    plan: AssetPlan,
+    asset: AssetItem,
+    latest: dict[str, Any],
+) -> None:
+    asset.update(
+        {
+            "status": "failed",
+            "mutation_status": "not_started",
+            "evidence_status": "complete",
+            "reason": "destination_changed_after_plan",
+            "existing_canvas_ids": latest.get("existing_canvas_ids") or [],
+        }
+    )
+    plan["status"] = "failed"
+    plan.mutation_status = "partial" if any_mutated(plan) else "not_started"
+    plan.evidence_status = "complete"
+
+
+def upload_one_asset(
+    asset: AssetItem,
+    *,
+    folder: Any,
+    course_id: int,
+    canvas_origin: str,
+) -> dict[str, Any]:
+    try:
+        ok, response = folder.upload(
+            str(asset.local.source_path),
+            on_duplicate="rename",
+            content_type=asset.local.content_type,
+        )
+    except Exception as exc:  # noqa: BLE001 - retained evidence is sanitized.
+        ok = False
+        response = {"error": sanitize_error(f"{type(exc).__name__}: {exc}")}
+    return upload_result_row(
+        asset_upload_row(asset),
+        ok=bool(ok),
+        response=response,
+        folder=folder,
+        course_id=course_id,
+        canvas_origin=canvas_origin,
+    )
+
+
+def mark_upload_failure(
+    plan: AssetPlan,
+    asset: AssetItem,
+    result: dict[str, Any],
+) -> None:
+    asset["status"] = str(result["status"])
+    asset["reason"] = str(result.get("error") or "upload_failed")
+    plan["status"] = str(result["status"])
+    plan["mutation_status"] = "partial" if any_mutated(plan) else str(result["status"])
+    plan["evidence_status"] = str(result["evidence_status"])
+    if result["mutation_status"] == "indeterminate":
+        plan.recovery_guidance = (
+            "Verify Canvas Files before retrying; the upload outcome is indeterminate."
+        )
+
+
+def record_uploaded_identity(
+    asset: AssetItem,
+    result: dict[str, Any],
+    *,
+    course_id: int,
+    returned_name: str,
+) -> None:
+    asset["status"] = (
+        "renamed"
+        if result["status"] == "uploaded" and returned_name != asset.local.name
+        else "uploaded"
+    )
+    asset["canvas"] = {
+        "course_id": course_id,
+        "id": int(result["canvas_id"]),
+        "folder_id": result.get("folder_id"),
+        "path": result.get("canvas_path") or "",
+        "url": result.get("canvas_url") or "",
+        "display_name": returned_name,
+    }
+
+
+def record_asset_provenance(
+    asset: AssetItem,
+    *,
+    course_id: int,
+    command: str,
+    project_root: Path,
+) -> str | None:
+    assert asset.canvas is not None
+    try:
+        write_source_map_entry(
+            kind="file",
+            source=asset.local.source_path,
+            course_id=course_id,
+            canvas=asset.canvas.to_dict(),
+            command=command,
+            fields={
+                "sha256": asset.local.sha256,
+                "size": asset.local.size,
+                "content_type": asset.local.content_type,
+                "upload_name": asset.canvas.display_name,
+            },
+            project_root=project_root,
+        )
+    except Exception as exc:  # noqa: BLE001 - identity is still retained in memory.
+        return type(exc).__name__
+    return None
+
+
+def mark_provenance_failure(
+    plan: AssetPlan,
+    asset: AssetItem,
+    error_type: str,
+) -> None:
+    asset["evidence_status"] = "failed"
+    asset["reason"] = f"source_map_write_{error_type}"
+    plan["status"] = "failed"
+    plan.mutation_status = "partial"
+    plan.evidence_status = "failed"
+    plan.recovery_guidance = (
+        "Do not retry the upload. Preserve the reported Canvas file identity and "
+        "repair source-map evidence first."
+    )
+
+
+def mark_incomplete_upload_evidence(
+    plan: AssetPlan,
+    asset: AssetItem,
+    result: dict[str, Any],
+) -> None:
+    asset["reason"] = "stable_file_evidence_incomplete"
+    plan["status"] = "indeterminate"
+    plan.mutation_status = "partial"
+    plan["evidence_status"] = str(result["evidence_status"])
+    plan.recovery_guidance = (
+        "Do not retry the upload. Reconstruct stable evidence from the recorded file ID."
+    )
+
+
+def finalize_deployed_plan(
+    plan: AssetPlan,
+    *,
+    course_id: int,
+    canvas_origin: str,
+) -> None:
+    rewritten = rewrite_authored_html(
+        plan.runtime.source_html,
+        plan.assets,
+        course_id,
+        canvas_origin,
+    )
+    plan.rewritten_html = rewritten
+    plan.deployed_body_sha256 = sha256_text(rewritten)
+    plan["status"] = "deployed"
+    plan.mutation_status = "succeeded" if any_mutated(plan) else "not_needed"
+    plan.evidence_status = "complete"
 
 
 def rewrite_authored_html(
     html: str,
-    assets: list[dict[str, Any]],
+    assets: list[AssetItem] | list[dict[str, Any]],
     course_id: int,
     canvas_origin: str,
 ) -> str:
     soup = BeautifulSoup(str(html or ""), "html.parser")
-    by_occurrence: dict[int, tuple[dict[str, Any], dict[str, Any]]] = {}
+    by_occurrence: dict[int, tuple[Any, Any]] = {}
     for asset in assets:
         for occurrence in asset.get("occurrences") or []:
             by_occurrence[int(occurrence["occurrence"])] = (asset, occurrence)
@@ -692,14 +936,14 @@ def rewrite_authored_html(
 
 
 def verify_asset_readback(
-    assets: list[dict[str, Any]],
+    assets: list[AssetItem] | list[dict[str, Any]],
     canvas_html: str,
     *,
     expected_html: str,
     course: Any,
     course_id: int,
     canvas_origin: str,
-) -> dict[str, Any]:
+) -> AssetVerification:
     expected_references = extract_canvas_file_references(
         expected_html,
         current_course_id=course_id,
@@ -735,7 +979,7 @@ def verify_asset_readback(
     expected_folders = {
         int(canvas["id"]): int(canvas["folder_id"])
         for asset in assets
-        if isinstance((canvas := asset.get("canvas")), dict)
+        if (canvas := asset.get("canvas")) is not None
         and canvas.get("id") is not None
         and canvas.get("folder_id") is not None
     }
@@ -770,15 +1014,14 @@ def verify_asset_readback(
                     "folder_id": folder_id,
                 }
             )
-    return {
-        "status": "mismatch" if mismatch else "matches",
-        "expected": counter_rows(expected),
-        "actual": counter_rows(actual),
-        "invalid": [safe_reference(row) for row in invalid],
-        "expected_invalid": [safe_reference(row) for row in expected_invalid],
-        "files": files,
-        "remote_bytes_match": "not_checked",
-    }
+    return AssetVerification(
+        status="mismatch" if mismatch else "matches",
+        expected=counter_rows(expected),
+        actual=counter_rows(actual),
+        invalid=[safe_reference(row) for row in invalid],
+        expected_invalid=[safe_reference(row) for row in expected_invalid],
+        files=files,
+    )
 
 
 def require_asset_project(project_root: Path, course_id: int) -> Path:
@@ -798,7 +1041,7 @@ def require_asset_project(project_root: Path, course_id: int) -> Path:
 
 
 def mapped_file_record(
-    source_map: dict[str, Any], asset: dict[str, Any], *, course_id: int
+    source_map: dict[str, Any], asset: AssetItem, *, course_id: int
 ) -> dict[str, Any]:
     entries = [
         entry
@@ -854,14 +1097,15 @@ def validate_mapped_file(
     return {"status": "valid", "reason": "", "canvas": canvas}
 
 
-def safe_folder_record(folder: Any) -> dict[str, Any]:
-    return {
-        "id": getattr(folder, "id", None),
-        "full_name": str(getattr(folder, "full_name", "") or ""),
-    }
+def safe_folder_record(folder: Any) -> AssetDestination:
+    folder_id = getattr(folder, "id", None)
+    return AssetDestination(
+        id=int(folder_id) if folder_id is not None else None,
+        full_name=str(getattr(folder, "full_name", "") or ""),
+    )
 
 
-def asset_upload_row(asset: dict[str, Any]) -> dict[str, Any]:
+def asset_upload_row(asset: AssetItem | dict[str, Any]) -> dict[str, Any]:
     return {
         "source": str(asset["source_path"]),
         "relative_path": str(asset["path"]),
@@ -871,7 +1115,7 @@ def asset_upload_row(asset: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def any_mutated(plan: dict[str, Any]) -> bool:
+def any_mutated(plan: AssetPlan) -> bool:
     return any(
         asset.get("mutation_status") == "succeeded"
         or asset.get("status") in {"uploaded", "renamed"}
@@ -879,10 +1123,14 @@ def any_mutated(plan: dict[str, Any]) -> bool:
     )
 
 
-def asset_plan_signature(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def asset_plan_signature(
+    assets: list[AssetItem] | list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Return local intent fields that must remain stable between plan and mutation."""
     return [
-        {
+        asset.signature_dict()
+        if isinstance(asset, AssetItem)
+        else {
             "path": asset.get("path"),
             "sha256": asset.get("sha256"),
             "size": asset.get("size"),
@@ -894,7 +1142,7 @@ def asset_plan_signature(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def current_asset_matches(asset: dict[str, Any]) -> bool:
+def current_asset_matches(asset: AssetItem | dict[str, Any]) -> bool:
     try:
         payload = Path(str(asset["source_path"])).read_bytes()
     except OSError:
@@ -904,7 +1152,7 @@ def current_asset_matches(asset: dict[str, Any]) -> bool:
     )
 
 
-def asset_associations(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
+def asset_associations(plan: AssetPlan | None) -> list[dict[str, Any]]:
     if not plan:
         return []
     rows = []
@@ -937,7 +1185,7 @@ def asset_associations(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
     return rows
 
 
-def public_asset_evidence(plan: dict[str, Any] | None) -> dict[str, Any] | None:
+def public_asset_evidence(plan: AssetPlan | None) -> AssetPublicEvidence | None:
     if not plan:
         return None
     deployed_body_status = (
@@ -951,7 +1199,7 @@ def public_asset_evidence(plan: dict[str, Any] | None) -> dict[str, Any] | None:
         if plan.get("rewritten_html") is not None
         else "not_available"
     )
-    return {
+    return AssetPublicEvidence({
         "evidence_schema": ASSET_EVIDENCE_SCHEMA,
         "status": plan["status"],
         "course_id": plan["course_id"],
@@ -959,7 +1207,7 @@ def public_asset_evidence(plan: dict[str, Any] | None) -> dict[str, Any] | None:
         "source_body_sha256": plan["source_body_sha256"],
         "deployed_body_sha256": plan.get("deployed_body_sha256"),
         "deployed_body_status": deployed_body_status,
-        "destination": plan.get("destination"),
+        "destination": plan.destination.to_dict() if plan.destination else None,
         "mutation_status": plan.get("mutation_status"),
         "content_mutation_status": plan.get("content_mutation_status"),
         "evidence_status": plan.get("evidence_status"),
@@ -970,10 +1218,10 @@ def public_asset_evidence(plan: dict[str, Any] | None) -> dict[str, Any] | None:
         "recovery_guidance": plan.get("recovery_guidance"),
         "assets": [safe_asset_row(asset) for asset in plan.get("assets") or []],
         "blocked": [safe_reference(row) for row in plan.get("blocked") or []],
-    }
+    })
 
 
-def safe_asset_row(asset: dict[str, Any]) -> dict[str, Any]:
+def safe_asset_row(asset: AssetItem) -> dict[str, Any]:
     allowed = {
         "path",
         "sha256",
@@ -989,6 +1237,8 @@ def safe_asset_row(asset: dict[str, Any]) -> dict[str, Any]:
         "canvas",
     }
     row = {key: asset[key] for key in allowed if key in asset}
+    if asset.canvas is not None:
+        row["canvas"] = asset.canvas.to_dict()
     row["occurrences"] = [
         {
             "tag": item["tag"],
@@ -1019,6 +1269,8 @@ def safe_reference(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def safe_verification(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, AssetVerification):
+        return value.to_dict()
     if not isinstance(value, dict):
         return None
     return {

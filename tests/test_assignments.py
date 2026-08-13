@@ -7,6 +7,7 @@ from typing import Any, cast
 import pytest
 from canvasapi.exceptions import ResourceDoesNotExist
 
+from danvas.asset_state import AssetPlan
 from danvas.assignments import (
     ASSIGNMENT_FIELD_POLICIES,
     ASSIGNMENT_VERIFY_SUPPORTED_FIELDS,
@@ -1159,7 +1160,7 @@ def test_asset_report_destination_is_reserved_before_upload(tmp_path: Path) -> N
             ),
             "assignments update",
             source,
-            plan,
+            cast(AssetPlan, plan),
         )
 
     assert "_report_run" not in plan

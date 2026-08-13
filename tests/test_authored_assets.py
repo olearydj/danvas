@@ -4,15 +4,23 @@ import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
+from canvasapi.exceptions import ResourceDoesNotExist
 
+from danvas.asset_state import AssetItem
 from danvas.authored_assets import (
+    asset_associations,
+    current_asset_matches,
     execute_asset_plan,
+    mapped_file_record,
     prepare_asset_plan,
     public_asset_evidence,
     rewrite_authored_html,
+    safe_verification,
     scan_authored_assets,
+    validate_mapped_file,
     verify_asset_readback,
 )
 from danvas.source_map import write_source_map_entry
@@ -86,6 +94,74 @@ def source_with_assets(root: Path) -> tuple[Path, Path, Path]:
     pdf.write_bytes(b"pdf-data")
     image.write_bytes(b"png-data")
     return source, pdf, image
+
+
+def prepare_one_asset(
+    root: Path,
+    *,
+    folder: FakeFolder | None = None,
+    verify_only: bool = False,
+    canvas_loader=None,
+):
+    write_config(root)
+    source, _pdf, _image = source_with_assets(root)
+    resolved_folder = folder or FakeFolder()
+    course: FakeCourse | None = None
+    canvas: FakeCanvas | None = None
+    if canvas_loader is None:
+        course = FakeCourse(resolved_folder)
+        canvas = FakeCanvas(course)
+    plan = prepare_asset_plan(
+        '<a href="../assets/case.pdf">Case</a>',
+        source=source,
+        project_root=root,
+        course_id=101,
+        canvas_origin=CANVAS_ORIGIN,
+        course=course,
+        canvas=canvas,
+        folder=None,
+        folder_id=20,
+        on_duplicate="error",
+        verify_only=verify_only,
+        canvas_loader=canvas_loader,
+    )
+    assert plan is not None
+    return plan, source, resolved_folder
+
+
+def prepare_reuse_plan(root: Path):
+    write_config(root)
+    source, pdf, _image = source_with_assets(root)
+    write_source_map_entry(
+        kind="file",
+        source=pdf,
+        course_id=101,
+        canvas={"course_id": 101, "id": 44, "folder_id": 20},
+        command="assignments create",
+        fields={
+            "sha256": hashlib.sha256(pdf.read_bytes()).hexdigest(),
+            "size": pdf.stat().st_size,
+            "content_type": "application/pdf",
+            "upload_name": "case.pdf",
+        },
+        project_root=root,
+    )
+    course = FakeCourse()
+    course.remote[44] = SimpleNamespace(id=44, folder_id=20)
+    plan = prepare_asset_plan(
+        '<a href="../assets/case.pdf">Case</a>',
+        source=source,
+        project_root=root,
+        course_id=101,
+        canvas_origin=CANVAS_ORIGIN,
+        course=course,
+        canvas=None,
+        folder=None,
+        folder_id=None,
+        on_duplicate="error",
+    )
+    assert plan is not None and plan.status == "would_reuse"
+    return plan, source, pdf
 
 
 def test_scan_is_structural_deduplicated_and_preserves_occurrences(tmp_path: Path) -> None:
@@ -200,6 +276,107 @@ def test_blocked_root_relative_link_is_reported_before_project_requirement(
     assert plan["blocked"][0]["reason"] == "blocked_root_relative"
 
 
+def test_no_local_intent_rejects_asset_options_without_project_or_canvas(tmp_path: Path) -> None:
+    source = tmp_path / "assignment.md"
+    source.write_text("source", encoding="utf-8")
+
+    assert (
+        prepare_asset_plan(
+            "<p>No assets</p>",
+            source=source,
+            project_root=tmp_path,
+            course_id=101,
+            canvas_origin=CANVAS_ORIGIN,
+            course=None,
+            canvas=None,
+            folder=None,
+            folder_id=None,
+            on_duplicate="error",
+        )
+        is None
+    )
+    with pytest.raises(SystemExit, match="no local assets"):
+        prepare_asset_plan(
+            "<p>No assets</p>",
+            source=source,
+            project_root=tmp_path,
+            course_id=101,
+            canvas_origin=CANVAS_ORIGIN,
+            course=None,
+            canvas=None,
+            folder=None,
+            folder_id=20,
+            on_duplicate="error",
+        )
+
+
+def test_asset_source_must_be_inside_project(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    source, _pdf, _image = source_with_assets(tmp_path)
+
+    with pytest.raises(SystemExit, match="inside the course project"):
+        prepare_asset_plan(
+            '<a href="../assets/case.pdf">Case</a>',
+            source=source,
+            project_root=project,
+            course_id=101,
+            canvas_origin=CANVAS_ORIGIN,
+            course=None,
+            canvas=None,
+            folder=None,
+            folder_id=None,
+            on_duplicate="error",
+        )
+
+
+def test_asset_plan_loads_course_only_after_local_and_project_validation(tmp_path: Path) -> None:
+    folder = FakeFolder()
+    course = FakeCourse(folder)
+    canvas = FakeCanvas(course)
+    calls = 0
+
+    def load_canvas() -> tuple[FakeCanvas, FakeCourse]:
+        nonlocal calls
+        calls += 1
+        return canvas, course
+
+    plan, _source, _folder = prepare_one_asset(tmp_path, folder=folder, canvas_loader=load_canvas)
+
+    assert calls == 1
+    assert plan.runtime.canvas is canvas
+    assert plan.runtime.course is course
+    assert plan.runtime.folder is folder
+
+
+def test_asset_plan_requires_canvas_loader_when_course_is_absent(tmp_path: Path) -> None:
+    write_config(tmp_path)
+    source, _pdf, _image = source_with_assets(tmp_path)
+
+    with pytest.raises(SystemExit, match="Canvas course access"):
+        prepare_asset_plan(
+            '<a href="../assets/case.pdf">Case</a>',
+            source=source,
+            project_root=tmp_path,
+            course_id=101,
+            canvas_origin=CANVAS_ORIGIN,
+            course=None,
+            canvas=None,
+            folder=None,
+            folder_id=None,
+            on_duplicate="error",
+        )
+
+
+def test_verify_only_requires_durable_file_identity(tmp_path: Path) -> None:
+    plan, _source, folder = prepare_one_asset(tmp_path, verify_only=True)
+
+    assert plan.status == "blocked"
+    assert plan.assets[0].status == "conflict"
+    assert plan.assets[0].reason == "asset_identity_not_available"
+    assert folder.uploads == []
+
+
 def test_new_asset_plan_uploads_rewrites_and_records_immediate_identity(tmp_path: Path) -> None:
     write_config(tmp_path)
     source, _pdf, _image = source_with_assets(tmp_path)
@@ -281,9 +458,7 @@ def test_same_basename_assets_block_before_upload_under_error_policy(tmp_path: P
 
     assert plan is not None and plan["status"] == "blocked"
     assert [asset["status"] for asset in plan["assets"]] == ["conflict", "conflict"]
-    assert {asset["reason"] for asset in plan["assets"]} == {
-        "duplicate_local_destination_name"
-    }
+    assert {asset["reason"] for asset in plan["assets"]} == {"duplicate_local_destination_name"}
     assert folder.uploads == []
 
 
@@ -298,6 +473,7 @@ def test_same_basename_assets_plan_deterministic_rename_sequence(tmp_path: Path)
     source.write_text("source stays unchanged", encoding="utf-8")
     first.write_bytes(b"first")
     second.write_bytes(b"second")
+
     class UpdatingFolder(FakeFolder):
         def upload(self, source: str, *, on_duplicate: str, content_type: str):
             self.uploads.append(
@@ -449,7 +625,7 @@ def test_source_map_failure_stops_plan_with_safe_known_identity(
     assert evidence is not None
     assert evidence["assets"][0]["canvas"]["id"] == 901
     assert "/private/secret/path" not in json.dumps(evidence)
-    assert "Do not retry" in evidence["recovery_guidance"]
+    assert "Do not retry" in str(evidence["recovery_guidance"])
 
 
 def test_local_change_after_plan_stops_before_upload(tmp_path: Path) -> None:
@@ -489,41 +665,141 @@ def test_local_change_after_plan_stops_before_upload(tmp_path: Path) -> None:
 
 
 def test_unchanged_mapped_asset_reuses_without_destination(tmp_path: Path) -> None:
-    write_config(tmp_path)
-    source, pdf, _image = source_with_assets(tmp_path)
-    write_source_map_entry(
-        kind="file",
-        source=pdf,
-        course_id=101,
-        canvas={"course_id": 101, "id": 44, "folder_id": 20},
-        command="assignments create",
-        fields={
-            "sha256": hashlib.sha256(pdf.read_bytes()).hexdigest(),
-            "size": pdf.stat().st_size,
-            "content_type": "application/pdf",
-            "upload_name": "case.pdf",
-        },
-        project_root=tmp_path,
-    )
-    course = FakeCourse()
-    course.remote[44] = SimpleNamespace(id=44, folder_id=20)
+    plan, _source, _pdf = prepare_reuse_plan(tmp_path)
 
-    plan = prepare_asset_plan(
-        '<a href="../assets/case.pdf">Case</a>',
-        source=source,
-        project_root=tmp_path,
+    assert plan["status"] == "would_reuse"
+    assert plan["assets"][0]["status"] == "would_reuse"
+    assert "/courses/101/files/44?wrap=1" in plan["rewritten_html"]
+    evidence = public_asset_evidence(plan)
+    assert evidence is not None
+    assert evidence["assets"][0]["canvas"] == {
+        "course_id": 101,
+        "id": 44,
+        "folder_id": 20,
+    }
+
+
+def test_unchanged_all_reuse_plan_executes_without_mutation(tmp_path: Path) -> None:
+    plan, _source, _pdf = prepare_reuse_plan(tmp_path)
+    folder = FakeFolder()
+
+    completed = execute_asset_plan(
+        plan,
+        folder=folder,
         course_id=101,
         canvas_origin=CANVAS_ORIGIN,
-        course=course,
-        canvas=None,
-        folder=None,
-        folder_id=None,
+        command="assignments update",
+        project_root=tmp_path,
         on_duplicate="error",
     )
 
-    assert plan is not None and plan["status"] == "would_reuse"
-    assert plan["assets"][0]["status"] == "would_reuse"
-    assert "/courses/101/files/44?wrap=1" in plan["rewritten_html"]
+    assert completed.status == "deployed"
+    assert completed.assets[0].status == "reused"
+    assert completed.mutation_status == "not_needed"
+    assert completed.evidence_status == "complete"
+    assert folder.uploads == []
+
+
+def test_stale_all_reuse_plan_returns_failed_evidence_without_mutation(tmp_path: Path) -> None:
+    plan, source, pdf = prepare_reuse_plan(tmp_path)
+    source_before = source.read_bytes()
+    pdf.write_bytes(b"changed-after-reuse-plan")
+    folder = FakeFolder()
+
+    completed = execute_asset_plan(
+        plan,
+        folder=folder,
+        course_id=101,
+        canvas_origin=CANVAS_ORIGIN,
+        command="assignments update",
+        project_root=tmp_path,
+        on_duplicate="error",
+    )
+
+    assert completed.status == "failed"
+    assert completed.mutation_status == "not_started"
+    assert completed.evidence_status == "complete"
+    assert "Local source or asset bytes changed" in str(completed.recovery_guidance)
+    evidence = public_asset_evidence(completed)
+    assert evidence is not None and evidence["status"] == "failed"
+    assert source.read_bytes() == source_before
+    assert folder.uploads == []
+
+
+# Explicit reachable execution conclusions. This is intentionally independent
+# of asset_state transition tables so a missing production edge cannot bless
+# itself by shrinking the test cases.
+EXECUTION_CONCLUSION_CASES = [
+    ("upload_success", "planned", "deployed", "succeeded", "complete"),
+    ("upload_rejected", "planned", "failed", "failed", "not_available"),
+    ("upload_indeterminate", "planned", "indeterminate", "indeterminate", "partial"),
+    ("destination_changed", "planned", "failed", "not_started", "complete"),
+    ("provenance_failed", "planned", "failed", "partial", "failed"),
+    ("stable_evidence_partial", "planned", "indeterminate", "partial", "partial"),
+    ("reuse_success", "would_reuse", "deployed", "not_needed", "complete"),
+    ("reuse_stale", "would_reuse", "failed", "not_started", "complete"),
+]
+
+
+@pytest.mark.parametrize(
+    ("case", "initial", "status", "mutation", "evidence"),
+    EXECUTION_CONCLUSION_CASES,
+)
+def test_reachable_asset_execution_conclusions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+    initial: str,
+    status: str,
+    mutation: str,
+    evidence: str,
+) -> None:
+    class RejectedFolder(FakeFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            return False, {"message": "rejected"}
+
+    class IndeterminateFolder(FakeFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            return True, {"display_name": Path(source).name, "folder_id": self.id}
+
+    if case.startswith("reuse_"):
+        plan, _source, pdf = prepare_reuse_plan(tmp_path)
+        folder: FakeFolder = FakeFolder()
+        if case == "reuse_stale":
+            pdf.write_bytes(b"changed-after-plan")
+    else:
+        folder = (
+            RejectedFolder()
+            if case == "upload_rejected"
+            else IndeterminateFolder()
+            if case == "upload_indeterminate"
+            else FakeFolder()
+        )
+        plan, _source, _folder = prepare_one_asset(tmp_path, folder=folder)
+        if case == "destination_changed":
+            folder.files.append(
+                SimpleNamespace(id=77, display_name="case.pdf", filename="case.pdf")
+            )
+        elif case == "provenance_failed":
+            monkeypatch.setattr(
+                "danvas.authored_assets.write_source_map_entry",
+                lambda **kwargs: (_ for _ in ()).throw(OSError("unavailable")),
+            )
+
+    assert plan.status == initial
+    completed = execute_asset_plan(
+        plan,
+        folder=folder,
+        course_id=101,
+        canvas_origin="not-an-origin" if case == "stable_evidence_partial" else CANVAS_ORIGIN,
+        command="assignments update",
+        project_root=tmp_path,
+        on_duplicate="error",
+    )
+
+    assert completed.status == status
+    assert completed.mutation_status == mutation
+    assert completed.evidence_status == evidence
 
 
 def test_rewrite_uses_image_preview_and_preserves_authored_attributes(tmp_path: Path) -> None:
@@ -554,8 +830,7 @@ def test_rewrite_positions_include_urls_that_do_not_need_asset_classification(
 ) -> None:
     source, _pdf, _image = source_with_assets(tmp_path)
     html = (
-        '<a href="https://example.com/reference">Reference</a>'
-        '<a href="../assets/case.pdf">Case</a>'
+        '<a href="https://example.com/reference">Reference</a><a href="../assets/case.pdf">Case</a>'
     )
     scan = scan_authored_assets(
         html,
@@ -621,3 +896,223 @@ def test_verify_readback_rejects_retained_volatile_query() -> None:
     assert result["invalid"][0]["volatile_query_present"] is True
     assert result["invalid"][0]["volatile_query_names"] == ["verifier"]
     assert "ephemeral" not in str(result)
+
+
+@pytest.mark.parametrize(
+    ("entry", "reason"),
+    [
+        ({"kind": "file", "path": "assets/case.pdf"}, "file_source_map_entry_malformed"),
+        (
+            {
+                "kind": "file",
+                "path": "assets/case.pdf",
+                "canvas": {"id": 44},
+                "last_posted": {"fields": {"sha256": "expected"}},
+            },
+            "file_entry_course_id_missing",
+        ),
+        (
+            {
+                "kind": "file",
+                "path": "assets/case.pdf",
+                "canvas": {"course_id": 202, "id": 44},
+                "last_posted": {"fields": {"sha256": "expected"}},
+            },
+            "file_entry_course_mismatch",
+        ),
+        (
+            {
+                "kind": "file",
+                "path": "assets/case.pdf",
+                "canvas": {"course_id": 101},
+                "last_posted": {"fields": {"sha256": "expected"}},
+            },
+            "local_hash_changed",
+        ),
+    ],
+)
+def test_mapped_file_record_rejects_incomplete_or_cross_course_identity(
+    tmp_path: Path, entry: dict[str, Any], reason: str
+) -> None:
+    source, _pdf, _image = source_with_assets(tmp_path)
+    record = scan_authored_assets(
+        '<a href="../assets/case.pdf">Case</a>',
+        source=source,
+        project_root=tmp_path,
+        current_course_id=101,
+        canvas_origin=CANVAS_ORIGIN,
+    )["assets"][0]
+    asset = AssetItem.from_scan_record(record)
+    if reason != "local_hash_changed":
+        fields = entry.get("last_posted")
+        if isinstance(fields, dict) and isinstance(fields.get("fields"), dict):
+            fields["fields"]["sha256"] = asset.local.sha256
+
+    result = mapped_file_record({"sources": [entry]}, asset, course_id=101)
+
+    assert result["reason"] == reason
+
+
+def test_mapped_file_record_rejects_duplicate_entries(tmp_path: Path) -> None:
+    source, _pdf, _image = source_with_assets(tmp_path)
+    asset = AssetItem.from_scan_record(
+        scan_authored_assets(
+            '<a href="../assets/case.pdf">Case</a>',
+            source=source,
+            project_root=tmp_path,
+            current_course_id=101,
+            canvas_origin=CANVAS_ORIGIN,
+        )["assets"][0]
+    )
+    entry = {"kind": "file", "path": "assets/case.pdf"}
+
+    result = mapped_file_record({"sources": [entry, dict(entry)]}, asset, course_id=101)
+
+    assert result == {"status": "invalid", "reason": "duplicate_file_source_map_entries"}
+
+
+def test_mapped_file_lookup_classifies_missing_indeterminate_and_wrong_folder() -> None:
+    mapped = {"canvas": {"course_id": 101, "id": 44, "folder_id": 20}}
+
+    class MissingCourse:
+        def get_file(self, _file_id: int) -> object:
+            raise ResourceDoesNotExist("missing")
+
+    class FailingCourse:
+        def get_file(self, _file_id: int) -> object:
+            raise RuntimeError("token=supersecret")
+
+    class MovedCourse:
+        def get_file(self, _file_id: int) -> object:
+            return SimpleNamespace(id=44, folder_id=21)
+
+    assert validate_mapped_file(MissingCourse(), mapped, expected_folder_id=20)["status"] == (
+        "not_found"
+    )
+    indeterminate = validate_mapped_file(FailingCourse(), mapped, expected_folder_id=20)
+    assert indeterminate["status"] == "indeterminate"
+    assert "supersecret" not in indeterminate["reason"]
+    assert validate_mapped_file(MovedCourse(), mapped, expected_folder_id=20) == {
+        "status": "conflict",
+        "reason": "mapped_file_folder_mismatch",
+    }
+
+
+def test_per_asset_byte_change_after_plan_stops_before_upload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan, _source, folder = prepare_one_asset(tmp_path)
+    Path(plan.assets[0].local.source_path).write_bytes(b"changed")
+    monkeypatch.setattr("danvas.authored_assets.planned_source_is_current", lambda *a, **k: True)
+
+    completed = execute_asset_plan(
+        plan,
+        folder=folder,
+        course_id=101,
+        canvas_origin=CANVAS_ORIGIN,
+        command="assignments update",
+        project_root=tmp_path,
+        on_duplicate="error",
+    )
+
+    assert completed.status == "failed"
+    assert completed.assets[0].reason == "local_asset_changed_after_plan"
+    assert completed.mutation_status == "not_started"
+    assert folder.uploads == []
+
+
+def test_destination_change_after_plan_stops_before_upload(tmp_path: Path) -> None:
+    plan, _source, folder = prepare_one_asset(tmp_path)
+    folder.files.append(SimpleNamespace(id=77, display_name="case.pdf", filename="case.pdf"))
+
+    completed = execute_asset_plan(
+        plan,
+        folder=folder,
+        course_id=101,
+        canvas_origin=CANVAS_ORIGIN,
+        command="assignments update",
+        project_root=tmp_path,
+        on_duplicate="error",
+    )
+
+    assert completed.status == "failed"
+    assert completed.assets[0].reason == "destination_changed_after_plan"
+    assert completed.assets[0].existing_canvas_ids == [77]
+    assert folder.uploads == []
+
+
+def test_upload_exception_is_sanitized_and_classified(tmp_path: Path) -> None:
+    class RaisingFolder(FakeFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            raise RuntimeError("token=supersecret")
+
+    folder = RaisingFolder()
+    plan, _source, _folder = prepare_one_asset(tmp_path, folder=folder)
+
+    completed = execute_asset_plan(
+        plan,
+        folder=folder,
+        course_id=101,
+        canvas_origin=CANVAS_ORIGIN,
+        command="assignments update",
+        project_root=tmp_path,
+        on_duplicate="error",
+    )
+
+    assert completed.status == "failed"
+    assert completed.assets[0].mutation_status == "failed"
+    assert "supersecret" not in completed.assets[0].reason
+
+
+def test_success_without_file_id_is_indeterminate_and_warns_before_retry(tmp_path: Path) -> None:
+    class NoIdentityFolder(FakeFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            return True, {"display_name": Path(source).name, "folder_id": self.id}
+
+    folder = NoIdentityFolder()
+    plan, _source, _folder = prepare_one_asset(tmp_path, folder=folder)
+
+    completed = execute_asset_plan(
+        plan,
+        folder=folder,
+        course_id=101,
+        canvas_origin=CANVAS_ORIGIN,
+        command="assignments update",
+        project_root=tmp_path,
+        on_duplicate="error",
+    )
+
+    assert completed.status == "indeterminate"
+    assert completed.mutation_status == "indeterminate"
+    assert "Verify Canvas Files" in str(completed.recovery_guidance)
+
+
+def test_success_without_stable_url_retains_identity_and_stops(tmp_path: Path) -> None:
+    plan, _source, folder = prepare_one_asset(tmp_path)
+
+    completed = execute_asset_plan(
+        plan,
+        folder=folder,
+        course_id=101,
+        canvas_origin="not-an-origin",
+        command="assignments update",
+        project_root=tmp_path,
+        on_duplicate="error",
+    )
+
+    assert completed.status == "indeterminate"
+    assert completed.assets[0].canvas is not None
+    assert completed.assets[0].canvas.id == 901
+    assert completed.assets[0].reason == "stable_file_evidence_incomplete"
+    assert "Do not retry" in str(completed.recovery_guidance)
+
+
+def test_public_helpers_keep_runtime_and_unbound_assets_out_of_evidence(tmp_path: Path) -> None:
+    plan, _source, _folder = prepare_one_asset(tmp_path)
+    assert asset_associations(None) == []
+    assert asset_associations(plan) == []
+    assert safe_verification(None) is None
+    assert safe_verification({"status": "matches", "private": "secret"}) == {"status": "matches"}
+    assert current_asset_matches(
+        {"source_path": tmp_path / "missing", "size": 0, "sha256": ""}
+    ) is (False)
