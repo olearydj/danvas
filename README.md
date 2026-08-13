@@ -37,6 +37,8 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - Markdown body with YAML (`---`) or TOML (`+++`) front matter
   - supports Canvas assignment metadata fields
   - dry-run mode to inspect payload before creating
+  - safely plans, uploads or reuses, rewrites, and verifies relative document and image assets
+  - leaves authored Markdown unchanged and records immediate file provenance for safe retries
   - verify every declared supported field, exact embedded Canvas file IDs, and current-course file existence
   - distinguish complete matches from mismatches, partial coverage, and indeterminate reads
 
@@ -229,7 +231,7 @@ temporary uv tool directories:
 
 ```bash
 scripts/release-smoke.sh
-scripts/release-smoke.sh --expected-version 0.12.0
+scripts/release-smoke.sh --expected-version 0.13.0
 ```
 
 The smoke script honors normal uv configuration and freshness rules, never
@@ -239,7 +241,7 @@ Install the latest exact tagged release:
 
 ```bash
 uv tool install --force --upgrade --reinstall \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.12.0"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.13.0"
 ```
 
 Verify the installed environment outside the checkout:
@@ -262,7 +264,7 @@ only:
 ```bash
 uv tool install --force --upgrade --reinstall \
   --exclude-newer YYYY-MM-DDTHH:MM:SSZ \
-  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.12.0"
+  "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.13.0"
 ```
 
 Do not remove or loosen the global cutoff merely to make resolution succeed.
@@ -551,6 +553,10 @@ danvas assignments verify --course-id 1706414 assignments/hw1.md
 danvas assignments update --course-id 1706414 assignments/hw1.md --dry-run
 danvas assignments upsert --course-id 1706414 assignments/hw1.md --dry-run
 danvas assignments upsert --course-id 1706414 assignments/hw1.md --confirm update
+danvas assignments update --course-id 1706414 content/assignments/case.md \
+  --project-root . --asset-folder "course files/case-resources" --dry-run
+danvas assignments update --course-id 1706414 content/assignments/case.md \
+  --project-root . --asset-folder "course files/case-resources"
 danvas assignments audit assignments-full.json --course-yaml course.yaml
 danvas assignments overrides --course-id 1706414 --assignment-id 19413569 \
   --output .danvas/private/assignment-overrides.yaml
@@ -660,8 +666,15 @@ recorded as Canvas course/file IDs and generated course-file URLs.
 `mismatch`, `partial`, or `indeterminate`, and its report states declared-field
 coverage plus the local/live Canvas file-ID counts and course-scoped file reads.
 `allowed_extensions` comparisons are case-insensitive and ignore a leading dot.
-Relative local assets remain partial until a later asset-upload/rewriting
-workflow resolves them.
+Relative document and image links in Markdown-backed assignments use the shared
+asset transaction. New assets require an existing Canvas Files destination via
+`--asset-folder` or `--asset-folder-id`; danvas never creates a folder or
+overwrites a file implicitly. Duplicate names and changed local bytes fail by
+default. `--asset-on-duplicate rename` explicitly uploads a new identity and
+leaves the old Canvas file untouched. A later run reuses unchanged source-map
+identities without repeating the destination option. Create, update, upsert,
+and verify fail closed for unresolved, unsafe, stale, or cross-course assets,
+while the authored Markdown remains unchanged.
 
 `files upload --dry-run` reads the resolved folder and records whether each file
 would be created, overwritten, or renamed. This is point-in-time evidence;

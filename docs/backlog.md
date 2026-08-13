@@ -202,6 +202,29 @@ section-specific announcement in
 sandbox course 1576638 read back the requested section ID and was confirmed
 absent after cleanup.
 
+## 0.13.0 Verified Markdown Asset Deployment
+
+Sprint 16 is implemented in
+`docs/sprints/16-verified-markdown-assets.md`. It integrates local asset
+planning, safe upload/reuse, Canvas-bound HTML rewriting, stable file-ID
+readback, and interrupted-run provenance with the existing Markdown-backed
+assignment write workflows. A new `danvas.authored_assets` module is warranted
+because the multi-file transaction and retry boundary is distinct from both the
+assignment feature module and the pure comparison layer.
+
+The authored Markdown remains unchanged. The implementation rejects unresolved,
+ambiguous, unsafe, cross-course, and unsupported local references before content
+mutation. It excludes implicit folder creation, overwrite, deletion, remote
+fetching, whole-tree sync, and Page/announcement/discussion integration. The
+approved assignment/Page probe established the `src`-only image profile.
+Bounded assignment acceptance then passed upload, destination-free reuse,
+explicit rename without overwrite, stable file-ID/folder readback, a rejected
+content write followed by source-map-based retry, source immutability, and
+independently verified cleanup. The implementation is released as 0.13.0. The
+clean isolated frozen suite passes
+all 565 tests; Ruff, ty, lock validation, sprint-document Markdown lint, and
+isolated editable/wheel smoke also pass.
+
 ## Delivered Baseline
 
 These features are considered delivered enough that they should not remain as
@@ -214,8 +237,8 @@ closed.
 | Override-aware assignment status | schema-v3 snapshot, `danvas assignments overrides` | Snapshots remain redacted; membership exports are explicit private artifacts. |
 | Submission evidence exports | `danvas submissions export/grades/media` | Local replacement provenance remains optional future work. |
 | Transaction-safe grade patches | `danvas grades post/clear/comments/verify` | Truthful row outcomes, private receipts/recovery, and targeted release evidence passed bounded live acceptance and shipped in `v0.10.0`. |
-| Assignment release evidence | `danvas assignments verify/export`, `danvas files upload` | Stable upload links, duplicate-action plans, exact file-ID verification, and safe projections passed bounded live acceptance and shipped in `v0.10.0`. |
-| Canvas Pages bounded workflow | `danvas pages list/export/sync/render/css-check/create/update/verify`, schema-v4 status | Assets, rename/delete, broad upsert, and broader compatibility profiles remain deferred. |
+| Assignment release evidence | `danvas assignments create/update/upsert/verify`, `danvas files upload`, `danvas.authored_assets` | Integrated Markdown document/image deployment, immediate file provenance, retry-safe reuse, explicit rename, and exact file-ID/folder verification passed bounded live acceptance in Sprint 16; Page/announcement/discussion adapters remain follow-ons. |
+| Canvas Pages bounded workflow | `danvas pages list/export/sync/render/css-check/create/update/verify`, schema-v4 status | The Sprint 16 probe established Page image-link behavior, but Page asset deployment remains a follow-on alongside rename/delete, broad upsert, and broader compatibility profiles. |
 | Canvas-facing source lint | `danvas sources lint` | External HTTP checking and automatic rewriting remain deferred. |
 | Authored discussion workflow | `danvas discussions create/verify/update` | Sprint 14 passed bounded disposable-topic Canvas acceptance and shipped in `v0.11.0`. |
 | Read-only Canvas/local status | `danvas status` | Continue refining next-action hints as new source workflows land. |
@@ -223,7 +246,7 @@ closed.
 | Local source discovery | `danvas.sources` plus `[sources.<kind>]` config | Continue reusing in future source-aware commands. |
 | Quiz shell awareness | `danvas status` | Do not compare quiz question bodies unless snapshots later include item data. |
 | QTI import, publish, verify | `danvas quiz import-qti` | Resolve assignment groups by configured name, if useful. |
-| Canvas Files upload v1 | `danvas files upload` | Markdown asset rewriting and optional folder creation remain separate future work. |
+| Canvas Files upload v1 | `danvas files upload`, Sprint 16 assignment integration | Integrated assignment asset deployment is implemented and live-verified; other authored adapters and optional explicit folder creation remain separate future work. |
 | Targeted file download/compare | `danvas files download-one`, `danvas files compare` | One-file explicit download, metadata compare, and SHA-256 compare against a supplied downloaded Canvas file are delivered; Office package-part comparison is deferred. |
 | File inventory ignore rules | `danvas files inventory`; `[files.inventory] ignore` | Configurable local-scan ignores are delivered; keep future inventory filtering scoped to local generated/cache noise. |
 | Generated report runs | `danvas.reports`; adopted by report-producing commands | Keep future verify/reconcile/compare/readback commands report-first unless they are raw exports or downloads. |
@@ -267,7 +290,7 @@ sprint sequence as canonical.
 | Sprint 3: announcement/discussion update pattern | Done | Announcement update and Sprint 14 discussion update/verify are delivered with stable identity and readback. |
 | Sprint 3: readback verification | Partial | Delivered for assignment create/update/upsert, announcement and discussion update, grade mutation verification, and bounded Page create/update; not yet broad across every write workflow. |
 | Sprint 3: round-trip metadata | Done | Sprint Candidate C; `.danvas/source-map.json` design and helpers are delivered for current update workflows. |
-| Sprint 3: Markdown asset rewriting | Not started | Sprint Candidate D, building on delivered `files upload`. |
+| Sprint 3: Markdown asset rewriting | Done for assignments | Sprint 16 covers assignments on delivered `files upload`; Page/announcement/discussion adapters remain follow-ons. |
 | Sprint 3: single-file download and compare | Done | Candidate B; `files download-one`, `files compare` metadata, and optional checksum against a supplied downloaded Canvas file are delivered. |
 | Sprint 3: file inventory report improvements | Done | Candidate B; report-run foundation, filename diagnostics, targeted metadata compare, downloaded-file checksum compare, and configurable local ignore rules are delivered. |
 | Sprint 3 stretch: human-readable operation reports | Partial | Delivered for several report-run commands; Candidate B keeps report consistency work alive for new commands. |
@@ -671,16 +694,21 @@ Recommended goals:
 
 3. Add Markdown asset rewriting on top of `files upload`.
 
-   Status: not started.
+   Status: implemented and bounded-live-verified as Sprint 16 in
+   `docs/sprints/16-verified-markdown-assets.md` and released in 0.13.0.
 
    Desired behavior:
 
-   - Scan Markdown-backed assignments, announcements, and discussions for local
-     asset links.
-   - Upload local files to configured Canvas Files folders.
-   - Rewrite links in the Canvas-bound HTML or generated Markdown output without
-     mutating source files unless explicitly requested.
-   - Preserve verifier/download URL secrecy.
+   - Scan Markdown-backed assignments for local asset links in Sprint 16.
+   - Upload or safely reuse local files in an explicitly selected Canvas Files
+     folder without implicit folder creation or overwrite.
+   - Rewrite only in-memory Canvas-bound HTML; never mutate authored Markdown.
+   - Record file identity immediately so interrupted runs retry without duplicate
+     upload.
+   - Verify final links by stable Canvas course/file identity and never retain
+     signed verifier/download URLs.
+   - Reuse the shared transaction in later Page, announcement, and discussion
+     adapters only after each feature's rendering/readback boundary is designed.
 
 Definition of done:
 
@@ -1044,18 +1072,19 @@ Definition of done:
 
 ## Sprint Candidate H: Canvas Pages Follow-Ons
 
-Implementation status (2026-07-10): Sprints 4 through 7 deliver list/export,
+Implementation status (2026-08-12): Sprints 4 through 7 deliver list/export,
 rendering, restricted CSS, draft create/readback, bounded
 body/publication/declared-roles/scheduling update, verification, local source
 linting, schema-v4 discovery/status, targeted HTML/Markdown export, and
-non-overwriting Canvas-to-local source sync. Asset upload/rewriting, deletion,
-rename, front-page mutation, general upsert, and broader compatibility profiles
-remain deferred.
+non-overwriting Canvas-to-local source sync. Sprint 16 probed Page image-link
+behavior, but Page asset upload/rewriting remains a follow-on. Deletion, rename,
+front-page mutation, general upsert, and broader compatibility profiles remain
+deferred.
 
-Implementation status: source discovery/snapshot/status is delivered by Sprint 6;
-safe Canvas-to-local source sync and targeted HTML/Markdown conversion are
-delivered by Sprint 7. Asset handling and broader Page lifecycle/profile work
-remain unscheduled.
+Implementation status: source discovery/snapshot/status is delivered by Sprint
+6; safe Canvas-to-local source sync and targeted HTML/Markdown conversion are
+delivered by Sprint 7. Page asset handling and broader lifecycle/profile work
+remain follow-ons after Sprint 16 establishes the shared assignment boundary.
 
 Theme: manage student-facing Canvas Pages from durable local sources with the
 same dry-run, verification, readback, and provenance safeguards used for
@@ -1303,18 +1332,23 @@ Recommended goals:
 5. Handle links and local assets deliberately.
 
    Status: same-page anchors are covered by the delivered renderer and tests.
-   Local asset upload and Canvas-bound link rewriting remain deferred.
+   Sprint 16 includes a Page link-profile probe, but local Page asset upload and
+   Canvas-bound rewriting remain a follow-on to its assignment implementation.
 
    Desired behavior:
 
    - Preserve ordinary external links and same-page anchors through Markdown
      conversion and Canvas readback.
-   - Detect local relative asset links before a write. In the first
-     implementation, fail with a clear message or require an explicit
-     `--allow-unresolved-assets`; do not silently publish broken links.
-   - Later integrate with the planned Markdown asset-rewriting workflow on top
-     of `danvas files upload`, rewriting only the Canvas-bound HTML and leaving
-     the authored Markdown unchanged.
+   - Detect local relative asset links before a write and fail on every
+     unresolved, ambiguous, unsafe, or unsupported reference. Sprint 16 does not
+     add `--allow-unresolved-assets`.
+   - Reuse the Sprint 16 asset transaction on top of `danvas files upload`, with
+     a Page-specific adapter that respects validation and canonical body hashing,
+     rewriting only Canvas-bound HTML and leaving authored Markdown unchanged.
+   - As part of that adapter, delegate Canvas file parsing and sensitive-query
+     names to `canvas_links`, retire the Page-specific suffix gate and duplicate
+     file regex, and document the resulting Page detection change in its own
+     migration contract.
    - Report course-relative Canvas links and embedded file/media references in
      verification output without persisting signed or verifier URLs.
 
@@ -1502,10 +1536,13 @@ initiating its native instructor gradebook CSV export.
 
 ### Current Priority Order
 
-Sprint 15 shipped in 0.12.0. Before opening another major command family:
+Sprint 15 shipped in 0.12.0. Sprint 16 is implemented for 0.13.0:
 
-1. Reassess grouped case setup versus Markdown asset rewriting for the next
-   sprint; neither is pulled into Sprint 15.
+1. Complete final Sprint 16 review, then release 0.13.0.
+2. Next, choose between grouped case setup and the Page asset adapter;
+   announcement/discussion adapters remain demand-driven follow-ons. The Page
+   adapter also owns the explicitly recorded Page parser/suffix consolidation
+   debt.
 
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas
@@ -1829,10 +1866,11 @@ ordering.
 
    Lower-priority follow-ons:
 
-   - Build the planned Markdown asset-rewriting work in Sprint Candidate D on
-     these hardened primitives so an assignment can declare local release files,
-     upload them, rewrite only Canvas-bound HTML, and verify the final targets
-     without mutating authored source unexpectedly.
+   - Implement the Sprint 16 verified Markdown asset design on these hardened
+     primitives so an assignment can declare local release files, upload or
+     reuse them, rewrite only Canvas-bound HTML, and verify the final targets
+     without mutating authored source unexpectedly. Page, announcement, and
+     discussion adapters remain separately bounded follow-ons.
    - Decide whether `danvas status` should report local-only files for configured
      release-source directories, or provide a narrower release-asset audit that
      does so without turning status into whole-tree file synchronization.

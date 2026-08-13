@@ -90,6 +90,7 @@ DiscussionExportFormat = Literal["json", "csv"]
 AnnouncementExportFormat = Literal["auto", "json", "csv", "markdown"]
 AnnouncementLatestFormat = Literal["auto", "json", "markdown"]
 FileDuplicatePolicy = Literal["overwrite", "rename"]
+AssetDuplicatePolicy = Literal["error", "rename"]
 AssignmentUpsertConfirm = Literal["", "create", "update"]
 OverrideSyncConfirm = Literal["", "apply"]
 SubmissionLayout = Literal["flat", "assignment-subdir"]
@@ -883,6 +884,33 @@ def assignments_create(
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Print the Canvas payload without creating anything.")
     ] = False,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    asset_folder: Annotated[
+        str | None,
+        typer.Option("--asset-folder", help="Existing Canvas Files folder for local assets."),
+    ] = None,
+    asset_folder_id: Annotated[
+        int | None,
+        typer.Option("--asset-folder-id", help="Existing Canvas Files folder ID for local assets."),
+    ] = None,
+    asset_on_duplicate: Annotated[
+        AssetDuplicatePolicy,
+        typer.Option("--asset-on-duplicate", help="Local-asset duplicate behavior."),
+    ] = "error",
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None, typer.Option("--report-root", help="Root for a dated report run directory.")
+    ] = None,
+    report_dir: Annotated[
+        Path | None, typer.Option("--report-dir", help="Exact report run directory to create.")
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
     api_url: ApiUrl = None,
     secret_provider: SecretProviderOption = "auto",
     op_reference: OpReference = None,
@@ -894,6 +922,14 @@ def assignments_create(
             course_id=course_id,
             source=str(source),
             dry_run=dry_run,
+            project_root=str(project_root),
+            asset_folder=asset_folder,
+            asset_folder_id=asset_folder_id,
+            asset_on_duplicate=asset_on_duplicate,
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
             api_url=api_url,
             secret_provider=secret_provider,
             op_reference=op_reference,
@@ -987,6 +1023,18 @@ def assignments_update(
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
+    asset_folder: Annotated[
+        str | None,
+        typer.Option("--asset-folder", help="Existing Canvas Files folder for local assets."),
+    ] = None,
+    asset_folder_id: Annotated[
+        int | None,
+        typer.Option("--asset-folder-id", help="Existing Canvas Files folder ID for local assets."),
+    ] = None,
+    asset_on_duplicate: Annotated[
+        AssetDuplicatePolicy,
+        typer.Option("--asset-on-duplicate", help="Local-asset duplicate behavior."),
+    ] = "error",
     no_report: Annotated[
         bool, typer.Option("--no-report", help="Suppress the default report run.")
     ] = False,
@@ -1013,6 +1061,9 @@ def assignments_update(
             match_title=match_title,
             dry_run=dry_run,
             project_root=str(project_root),
+            asset_folder=asset_folder,
+            asset_folder_id=asset_folder_id,
+            asset_on_duplicate=asset_on_duplicate,
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,
@@ -1065,6 +1116,18 @@ def assignments_upsert(
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
+    asset_folder: Annotated[
+        str | None,
+        typer.Option("--asset-folder", help="Existing Canvas Files folder for local assets."),
+    ] = None,
+    asset_folder_id: Annotated[
+        int | None,
+        typer.Option("--asset-folder-id", help="Existing Canvas Files folder ID for local assets."),
+    ] = None,
+    asset_on_duplicate: Annotated[
+        AssetDuplicatePolicy,
+        typer.Option("--asset-on-duplicate", help="Local-asset duplicate behavior."),
+    ] = "error",
     no_report: Annotated[
         bool, typer.Option("--no-report", help="Suppress the default report run.")
     ] = False,
@@ -1092,6 +1155,9 @@ def assignments_upsert(
             dry_run=dry_run,
             confirm=confirm,
             project_root=str(project_root),
+            asset_folder=asset_folder,
+            asset_folder_id=asset_folder_id,
+            asset_on_duplicate=asset_on_duplicate,
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
             report_dir=str(report_dir) if report_dir else None,

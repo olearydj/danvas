@@ -103,6 +103,37 @@ def test_extract_canvas_file_references_marks_relative_assets() -> None:
     assert "secret" not in str(refs)
 
 
+def test_extract_canvas_file_references_surfaces_unknown_root_relative_urls() -> None:
+    refs = extract_canvas_file_references(
+        '<a href="/assets/notes.txt">Notes</a>',
+        current_course_id=101,
+        canvas_origin="https://canvas.example/",
+    )
+
+    assert refs[0]["status"] == "blocked_root_relative"
+    assert refs[0]["reason"] == "blocked_root_relative"
+
+
+def test_extract_canvas_file_references_ignores_current_course_content_links() -> None:
+    refs = extract_canvas_file_references(
+        '<a href="/courses/101/pages/syllabus">Syllabus</a>',
+        current_course_id=101,
+        canvas_origin="https://canvas.example/",
+    )
+
+    assert refs == []
+
+
+def test_extract_canvas_file_references_blocks_other_course_content_links() -> None:
+    refs = extract_canvas_file_references(
+        '<a href="/courses/202/pages/syllabus">Syllabus</a>',
+        current_course_id=101,
+        canvas_origin="https://canvas.example/",
+    )
+
+    assert refs[0]["status"] == "blocked_root_relative"
+
+
 def test_canonical_canvas_object_url_drops_query_and_foreign_urls() -> None:
     assert canonical_canvas_object_url(
         "https://canvas.example/courses/101/assignments/8?verifier=secret#fragment",

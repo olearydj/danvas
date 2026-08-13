@@ -207,3 +207,28 @@ passed a bounded disposable sandbox case. Ruff, ty, and all 529 tests pass in a
 clean frozen environment. Generated sanitizer property matrices cover compound
 credential names and realistic token/signature/policy/expires/bearer prose in
 both grade-evidence and error-sanitization paths.
+
+## 0.13.0 Verified Markdown Asset Deployment
+
+The implemented 0.13.0 feature slice is:
+
+- Sprint 16: [Verified Markdown Asset Deployment](16-verified-markdown-assets.md)
+
+Sprint 16 lets Markdown-backed assignments refer to ordinary local files.
+Assignment create, update, and upsert plan and safely reuse or upload those
+files, rewrite only the in-memory Canvas-bound HTML, and verify stable
+course-file IDs after readback. The source Markdown remains unchanged. A new
+`danvas.authored_assets` module owns the transaction while reusing the
+hardened file-upload, source-map, Canvas-link, report, and authored-content
+boundaries already delivered.
+
+The implementation excludes implicit folder creation, overwrite, remote
+fetching, whole-tree synchronization, Page/announcement/discussion integration,
+and automatic publication. The assignment/Page link-profile probe established
+the `src`-only image form before implementation. Bounded assignment acceptance
+then passed upload, reuse, explicit rename, readback, failure/retry, source
+immutability, and independently verified cleanup.
+
+The clean isolated frozen suite passes all 565 tests; Ruff, ty, lock validation,
+and sprint-document Markdown lint pass. Isolated editable/wheel smoke also
+passes for the released 0.13.0 build.

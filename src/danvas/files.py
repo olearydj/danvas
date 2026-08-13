@@ -884,19 +884,35 @@ def plan_upload_rows(
     for item in existing:
         name = str(item.get("display_name") or item.get("filename") or "")
         by_name[name].append(item)
+    local_name_counts = Counter(str(row["name"]) for row in local_rows)
+    local_name_seen: Counter[str] = Counter()
     planned = []
     for row in local_rows:
-        matches = by_name.get(str(row["name"]), [])
+        name = str(row["name"])
+        matches = by_name.get(name, [])
         existing_ids = sorted(
             int(file_id)
             for item in matches
             if (file_id := item.get("id")) is not None
         )
-        if not matches:
+        if local_name_counts[name] > 1 and on_duplicate == "error":
+            status = "conflict"
+            reason = "duplicate_local_destination_name"
+        elif (
+            local_name_counts[name] > 1
+            and on_duplicate == "rename"
+            and local_name_seen[name] > 0
+        ):
+            status = "would_rename"
+            reason = "duplicate_local_destination_name"
+        elif not matches:
             status = "would_create"
             reason = "destination_name_available"
         elif on_duplicate == "rename":
             status = "would_rename"
+            reason = "destination_name_exists"
+        elif on_duplicate == "error":
+            status = "conflict"
             reason = "destination_name_exists"
         elif len(matches) == 1 and existing_ids:
             status = "would_overwrite"
@@ -912,6 +928,7 @@ def plan_upload_rows(
                 "existing_canvas_ids": existing_ids,
             }
         )
+        local_name_seen[name] += 1
     return planned
 
 

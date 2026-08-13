@@ -14,6 +14,14 @@ import yaml
 from canvasapi.exceptions import ResourceDoesNotExist
 
 from danvas.auth import canvas_from_args
+from danvas.authored_assets import (
+    asset_associations,
+    execute_asset_plan,
+    local_intent_candidates,
+    prepare_asset_plan,
+    public_asset_evidence,
+    verify_asset_readback,
+)
 from danvas.authored_content import (
     ALLOWED_EXTENSIONS,
     DATETIME,
@@ -144,6 +152,16 @@ def command_assignments_verify(args: Any) -> None:
     )
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
+    asset_plan = prepare_assignment_asset_plan(
+        args,
+        source,
+        local,
+        canvas=canvas,
+        course=course,
+        verify_only=True,
+    )
+    if asset_plan and asset_plan.get("rewritten_html"):
+        apply_asset_plan_to_local(local, asset_plan)
     canvas_record: dict[str, Any] | None = None
     fetch_error = ""
     fetch_status = "ok"
@@ -167,6 +185,15 @@ def command_assignments_verify(args: Any) -> None:
         fetch_status=fetch_status,
         canvas_origin=canvas_origin,
     )
+    if asset_plan:
+        if asset_plan["status"] == "blocked" or canvas_record is None:
+            asset_plan["verification_status"] = "mismatch"
+            report["status"] = "mismatch"
+        else:
+            verification = verify_assignment_asset_plan(asset_plan, canvas_record, course, args)
+            if verification["status"] != "matches":
+                report["status"] = "mismatch"
+        report["assets"] = public_asset_evidence(asset_plan)
     write_assignment_verify_report_run(make_assignment_verify_report_run(args, report), report)
     print_assignment_verify_summary(report)
     if report["status"] != "matches":
@@ -326,29 +353,56 @@ def command_assignments_create(args: Any) -> None:
             explicit_id=assignment.get("assignment_group_id"),
             start=source,
         )
+    local = assignment_update_local_source(
+        source,
+        course_id=int(args.course_id),
+        canvas_origin=str(getattr(args, "api_url", "") or ""),
+    )
+    asset_plan = prepare_assignment_asset_plan(args, source, local)
+    if asset_plan and asset_plan["status"] == "blocked":
+        write_assignment_asset_report(args, "assignments create", source, asset_plan)
+        print(json.dumps(public_asset_evidence(asset_plan), indent=2, ensure_ascii=False))
+        raise SystemExit(1)
+    if asset_plan and asset_plan.get("rewritten_html"):
+        apply_asset_plan_to_local(local, asset_plan)
+        assignment = local["assignment"]
     if args.dry_run:
         print("Dry run - no assignment created.")
-        print(
-            json.dumps(
-                safe_assignment_mutation_projection(
-                    assignment,
-                    course_id=int(args.course_id),
-                    canvas_origin=str(getattr(args, "api_url", "") or ""),
-                ),
-                indent=2,
-                ensure_ascii=False,
-            )
+        projection = safe_assignment_mutation_projection(
+            assignment,
+            course_id=int(args.course_id),
+            canvas_origin=str(getattr(args, "api_url", "") or ""),
         )
+        if asset_plan:
+            projection["assets"] = public_asset_evidence(asset_plan)
+            write_assignment_asset_report(args, "assignments create", source, asset_plan)
+        print(json.dumps(projection, indent=2, ensure_ascii=False))
         return
+    banner_printed = False
+    if asset_plan:
+        require_live_asset_report(args, asset_plan)
+        prepare_assignment_asset_report_run(
+            args, "assignments create", source, asset_plan
+        )
+        print_assignment_asset_banner(args, "create assignment", source, local, asset_plan)
+        banner_printed = True
+        asset_plan = execute_assignment_asset_plan(
+            args, source, local, asset_plan, command="assignments create"
+        )
+        if asset_plan["status"] != "deployed":
+            write_assignment_asset_report(args, "assignments create", source, asset_plan)
+            print(json.dumps(public_asset_evidence(asset_plan), indent=2, ensure_ascii=False))
+            raise SystemExit(1)
+        apply_asset_plan_to_local(local, asset_plan)
+        assignment = local["assignment"]
     create_assignment_from_loaded_source(
         args,
         source,
-        assignment_update_local_source(
-            source,
-            course_id=int(args.course_id),
-            canvas_origin=str(getattr(args, "api_url", "") or ""),
-        ),
+        local,
         assignment,
+        course=asset_plan.get("_course") if asset_plan else None,
+        asset_plan=asset_plan,
+        banner_printed=banner_printed,
     )
 
 
@@ -358,28 +412,63 @@ def create_assignment_from_loaded_source(
     local: dict[str, Any],
     assignment: dict[str, Any] | None = None,
     course: Any | None = None,
+    asset_plan: dict[str, Any] | None = None,
+    banner_printed: bool = False,
 ) -> None:
     assignment = assignment or local["assignment"]
-    print_mutation_banner(
-        "create assignment",
-        {
-            "course": args.course_id,
-            "name": safe_assignment_text(assignment.get("name", "")),
-            "published": assignment.get("published", False),
-            "source": source,
-        },
-    )
+    if not banner_printed:
+        print_mutation_banner(
+            "create assignment",
+            {
+                "course": args.course_id,
+                "name": safe_assignment_text(assignment.get("name", "")),
+                "published": assignment.get("published", False),
+                "source": source,
+            },
+        )
     if course is None:
         canvas = canvas_from_args(args)
         course = canvas.get_course(args.course_id)
-    created = course.create_assignment(assignment)
+    if asset_plan:
+        asset_plan["content_mutation_status"] = "in_progress"
+    try:
+        created = course.create_assignment(assignment)
+    except Exception as exc:
+        if asset_plan:
+            mutation = safe_assignment_mutation_failure(exc)
+            asset_plan.update(mutation)
+            write_assignment_asset_report(args, "assignments create", source, asset_plan)
+            raise SystemExit(1) from exc
+        raise
+    if asset_plan:
+        asset_plan["content_mutation_status"] = "succeeded"
     created_id = int(first_value(created, canvas_object_to_dict(created), "id"))
-    readback = course.get_assignment(created_id)
+    try:
+        readback = course.get_assignment(created_id)
+    except Exception as exc:
+        if asset_plan:
+            asset_plan["status"] = "readback_indeterminate"
+            asset_plan["verification_status"] = "indeterminate"
+            asset_plan["verification_error"] = safe_assignment_lookup_reason(exc)
+            asset_plan["recovery_guidance"] = (
+                "Do not repeat file uploads. Verify the created assignment and reuse recorded "
+                "file identities."
+            )
+            write_assignment_asset_report(args, "assignments create", source, asset_plan)
+            raise SystemExit(1) from exc
+        raise
     canvas_record = assignment_verify_canvas_record(
         course,
         readback,
         canvas_origin=str(getattr(args, "api_url", "") or ""),
     )
+    if asset_plan:
+        verification = verify_assignment_asset_plan(asset_plan, canvas_record, course, args)
+        if verification["status"] != "matches":
+            asset_plan["status"] = "readback_mismatch"
+            asset_plan["verification_status"] = "mismatch"
+            write_assignment_asset_report(args, "assignments create", source, asset_plan)
+            raise SystemExit(1)
     print(f"Created assignment: {safe_assignment_text(created.name)} (ID {created.id})")
     created_url = canonical_canvas_object_url(
         getattr(created, "html_url", ""),
@@ -396,6 +485,10 @@ def create_assignment_from_loaded_source(
         project_root=Path(args.project_root) if getattr(args, "project_root", None) else source,
     )
     print(f"Wrote {source_map_path}")
+    if asset_plan:
+        asset_plan["status"] = "created"
+        asset_plan["verification_status"] = "matches"
+        write_assignment_asset_report(args, "assignments create", source, asset_plan)
 
 
 def command_assignments_update(args: Any) -> None:
@@ -418,6 +511,34 @@ def command_assignments_update(args: Any) -> None:
     )
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
+    asset_plan = prepare_assignment_asset_plan(
+        args,
+        source,
+        local,
+        canvas=canvas,
+        course=course,
+    )
+    if asset_plan and asset_plan["status"] == "blocked":
+        report = build_assignment_update_report(
+            course=course,
+            source=source,
+            local=local,
+            resolved=resolved,
+            lookup={"method": "asset_plan", "status": "matched", "reason": ""},
+            canvas_before=None,
+            canvas_after=None,
+            update_payload={},
+            dry_run=bool(args.dry_run),
+            readback_status="skipped",
+            canvas_origin=canvas_origin,
+        )
+        report["status"] = "asset_blocked"
+        report["assets"] = public_asset_evidence(asset_plan)
+        write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
+        print_assignment_update_summary(report)
+        raise SystemExit(1)
+    if asset_plan and asset_plan.get("rewritten_html"):
+        apply_asset_plan_to_local(local, asset_plan)
     assignment, lookup = resolve_assignment_for_update(
         course, local, resolved, bool(args.match_title)
     )
@@ -462,16 +583,38 @@ def command_assignments_update(args: Any) -> None:
         readback_status="skipped",
         canvas_origin=canvas_origin,
     )
+    if asset_plan:
+        report["assets"] = public_asset_evidence(asset_plan)
+        if asset_plan["status"] == "planned":
+            report["status"] = "would_update"
     if args.dry_run:
         write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
         print_assignment_update_summary(report)
         return
-    if report["status"] == "no_change" or not update_payload:
+    if report["status"] == "no_change" or (not update_payload and not asset_plan):
         write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
         print_assignment_update_summary(report)
         return
 
     assert canvas_before is not None
+    banner_printed = False
+    if asset_plan:
+        require_live_asset_report(args, asset_plan)
+        update_report_run = make_assignment_update_report_run(args, report)
+        print_assignment_asset_banner(args, "update assignment", source, local, asset_plan)
+        banner_printed = True
+        asset_plan = execute_assignment_asset_plan(
+            args, source, local, asset_plan, command="assignments update"
+        )
+        if asset_plan["status"] != "deployed":
+            report["status"] = "asset_failed"
+            report["assets"] = public_asset_evidence(asset_plan)
+            write_assignment_update_report_run(
+                update_report_run, report
+            )
+            print_assignment_update_summary(report)
+            raise SystemExit(1)
+        apply_asset_plan_to_local(local, asset_plan)
     update_assignment_from_loaded_source(
         args=args,
         source=source,
@@ -482,6 +625,9 @@ def command_assignments_update(args: Any) -> None:
         lookup=lookup,
         assignment=assignment,
         canvas_before=canvas_before,
+        asset_plan=asset_plan,
+        banner_printed=banner_printed,
+        report_run=update_report_run if asset_plan else None,
     )
 
 
@@ -496,10 +642,15 @@ def update_assignment_from_loaded_source(
     lookup: dict[str, Any],
     assignment: Any,
     canvas_before: dict[str, Any],
+    asset_plan: dict[str, Any] | None = None,
+    banner_printed: bool = False,
+    report_run: ReportRun | None = None,
 ) -> None:
     canvas_origin = str(getattr(args, "api_url", "") or "")
     update_payload = assignment_update_payload(local["assignment"])
-    update_lookup = {**lookup, "status": "matched"} if lookup["status"] == "would_update" else lookup
+    update_lookup = (
+        {**lookup, "status": "matched"} if lookup["status"] == "would_update" else lookup
+    )
     planned_report = build_assignment_update_report(
         course=course,
         source=source,
@@ -514,23 +665,59 @@ def update_assignment_from_loaded_source(
         canvas_origin=canvas_origin,
     )
     print_assignment_update_summary(planned_report)
-    print_mutation_banner(
-        "update assignment",
-        {
-            "course": args.course_id,
-            "assignment_id": planned_report["assignment_id"],
-            "name": safe_assignment_text(
-                update_payload.get("name", canvas_before.get("title") if canvas_before else "")
-            ),
-            "source": source,
-        },
-    )
-    updated = assignment.edit(assignment=update_payload)
+    if not banner_printed:
+        print_mutation_banner(
+            "update assignment",
+            {
+                "course": args.course_id,
+                "assignment_id": planned_report["assignment_id"],
+                "name": safe_assignment_text(
+                    update_payload.get("name", canvas_before.get("title") if canvas_before else "")
+                ),
+                "source": source,
+            },
+        )
+    if asset_plan:
+        asset_plan["content_mutation_status"] = "in_progress"
+    try:
+        updated = assignment.edit(assignment=update_payload)
+    except Exception as exc:
+        if asset_plan:
+            mutation = safe_assignment_mutation_failure(exc)
+            asset_plan.update(mutation)
+            planned_report["status"] = asset_plan["status"]
+            planned_report["assets"] = public_asset_evidence(asset_plan)
+            write_assignment_update_report_run(
+                report_run or make_assignment_update_report_run(args, planned_report),
+                planned_report,
+            )
+            raise SystemExit(1) from exc
+        raise
+    if asset_plan:
+        asset_plan["content_mutation_status"] = "succeeded"
     updated_id = int(
         first_value(updated, canvas_object_to_dict(updated), "id")
         or planned_report["assignment_id"]
     )
-    readback = course.get_assignment(updated_id)
+    try:
+        readback = course.get_assignment(updated_id)
+    except Exception as exc:
+        if asset_plan:
+            asset_plan["status"] = "readback_indeterminate"
+            asset_plan["verification_status"] = "indeterminate"
+            asset_plan["verification_error"] = safe_assignment_lookup_reason(exc)
+            asset_plan["recovery_guidance"] = (
+                "Do not repeat file uploads. Verify the updated assignment and reuse recorded "
+                "file identities."
+            )
+            planned_report["status"] = "readback_indeterminate"
+            planned_report["assets"] = public_asset_evidence(asset_plan)
+            write_assignment_update_report_run(
+                report_run or make_assignment_update_report_run(args, planned_report),
+                planned_report,
+            )
+            raise SystemExit(1) from exc
+        raise
     canvas_after = assignment_verify_canvas_record(
         course,
         readback,
@@ -549,7 +736,14 @@ def update_assignment_from_loaded_source(
         readback_status="matches",
         canvas_origin=canvas_origin,
     )
-    write_assignment_update_report_run(make_assignment_update_report_run(args, report), report)
+    if asset_plan:
+        verification = verify_assignment_asset_plan(asset_plan, canvas_after, course, args)
+        report["assets"] = public_asset_evidence(asset_plan)
+        if verification["status"] != "matches":
+            report["status"] = "readback_mismatch"
+    write_assignment_update_report_run(
+        report_run or make_assignment_update_report_run(args, report), report
+    )
     print_assignment_update_summary(report)
     if report["status"] != "updated":
         raise SystemExit(1)
@@ -587,6 +781,39 @@ def command_assignments_upsert(args: Any) -> None:
     )
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
+    asset_plan = prepare_assignment_asset_plan(
+        args,
+        source,
+        local,
+        canvas=canvas,
+        course=course,
+    )
+    if asset_plan and asset_plan["status"] == "blocked":
+        report = {
+            "evidence_schema": "assignment-release-v1",
+            "source": str(source),
+            "dry_run": bool(args.dry_run),
+            "status": "asset_blocked",
+            "planned_action": "none",
+            "assignment_id": resolved.get("id"),
+            "id_resolution": {
+                "source": resolved.get("source"),
+                "path": resolved.get("path"),
+                "id": resolved.get("id"),
+            },
+            "lookup": {"status": "blocked", "method": "asset_plan", "reason": ""},
+            "local": safe_local_assignment_record(assignment_update_local_compare_record(local)),
+            "canvas_before": {},
+            "create_payload": {},
+            "update_payload": {},
+            "diff": [],
+            "assets": public_asset_evidence(asset_plan),
+        }
+        write_assignment_upsert_report_run(make_assignment_upsert_report_run(args, report), report)
+        print_assignment_upsert_summary(report)
+        raise SystemExit(1)
+    if asset_plan and asset_plan.get("rewritten_html"):
+        apply_asset_plan_to_local(local, asset_plan)
     assignment, lookup = resolve_assignment_for_upsert(
         course, local, resolved, bool(args.match_title)
     )
@@ -608,6 +835,8 @@ def command_assignments_upsert(args: Any) -> None:
         canvas_before=canvas_before,
         canvas_origin=canvas_origin,
     )
+    if asset_plan:
+        report["assets"] = public_asset_evidence(asset_plan)
     print_assignment_upsert_summary(report)
     if report["status"] == "error":
         write_assignment_upsert_report_run(make_assignment_upsert_report_run(args, report), report)
@@ -620,8 +849,49 @@ def command_assignments_upsert(args: Any) -> None:
             f"Upsert planned action is {report['planned_action']!r}; "
             f"refusing --confirm {confirm!r}."
         )
+    banner_printed = False
+    if asset_plan:
+        require_live_asset_report(args, asset_plan)
+        prepare_assignment_asset_report_run(
+            args,
+            f"assignments upsert {report['planned_action']}",
+            source,
+            asset_plan,
+        )
+        print_assignment_asset_banner(
+            args,
+            f"{report['planned_action']} assignment",
+            source,
+            local,
+            asset_plan,
+        )
+        banner_printed = True
+        asset_plan = execute_assignment_asset_plan(
+            args,
+            source,
+            local,
+            asset_plan,
+            command=f"assignments upsert {report['planned_action']}",
+        )
+        if asset_plan["status"] != "deployed":
+            report["status"] = "asset_failed"
+            report["assets"] = public_asset_evidence(asset_plan)
+            write_assignment_upsert_report_run(
+                asset_plan.get("_report_run")
+                or make_assignment_upsert_report_run(args, report),
+                report,
+            )
+            raise SystemExit(1)
+        apply_asset_plan_to_local(local, asset_plan)
     if report["planned_action"] == "create":
-        create_assignment_from_loaded_source(args, source, local, course=course)
+        create_assignment_from_loaded_source(
+            args,
+            source,
+            local,
+            course=course,
+            asset_plan=asset_plan,
+            banner_printed=banner_printed,
+        )
     elif assignment is not None:
         assert canvas_before is not None
         update_assignment_from_loaded_source(
@@ -634,7 +904,256 @@ def command_assignments_upsert(args: Any) -> None:
             lookup=lookup,
             assignment=assignment,
             canvas_before=canvas_before,
+            asset_plan=asset_plan,
+            banner_printed=banner_printed,
+            report_run=(asset_plan or {}).get("_report_run"),
         )
+
+
+def prepare_assignment_asset_plan(
+    args: Any,
+    source: Path,
+    local: dict[str, Any],
+    *,
+    canvas: Any | None = None,
+    course: Any | None = None,
+    verify_only: bool = False,
+) -> dict[str, Any] | None:
+    canvas_origin = str(getattr(args, "api_url", "") or "")
+    course_id = int(args.course_id)
+    html = str(local.get("rendered_html") or local["assignment"].get("description") or "")
+    candidates = local_intent_candidates(
+        html,
+        current_course_id=course_id,
+        canvas_origin=canvas_origin,
+    )
+    option_used = bool(
+        getattr(args, "asset_folder", None)
+        or getattr(args, "asset_folder_id", None) is not None
+        or str(getattr(args, "asset_on_duplicate", "error")) != "error"
+    )
+    if not candidates and not option_used:
+        return None
+
+    def load_canvas_course() -> tuple[Any, Any]:
+        resolved_canvas = canvas or canvas_from_args(args)
+        return resolved_canvas, resolved_canvas.get_course(course_id)
+
+    project_root = Path(getattr(args, "project_root", "."))
+    plan = prepare_asset_plan(
+        html,
+        source=source,
+        project_root=project_root,
+        course_id=course_id,
+        canvas_origin=canvas_origin,
+        course=course,
+        canvas=canvas,
+        folder=getattr(args, "asset_folder", None),
+        folder_id=getattr(args, "asset_folder_id", None),
+        on_duplicate=str(getattr(args, "asset_on_duplicate", "error")),
+        verify_only=verify_only,
+        canvas_loader=load_canvas_course if candidates and course is None else None,
+    )
+    if plan:
+        plan["_canvas"] = plan.pop("_resolved_canvas", canvas)
+        plan["_course"] = plan.pop("_resolved_course", course)
+        plan["_canvas_origin"] = canvas_origin
+    return plan
+
+
+def execute_assignment_asset_plan(
+    args: Any,
+    source: Path,
+    local: dict[str, Any],
+    plan: dict[str, Any],
+    *,
+    command: str,
+) -> dict[str, Any]:
+    folder = plan.get("_folder")
+    if folder is None and any(
+        asset.get("status") in {"would_upload", "would_rename"}
+        for asset in plan.get("assets") or []
+    ):
+        raise SystemExit("Asset upload plan has no resolved Canvas Files destination.")
+    return execute_asset_plan(
+        plan,
+        folder=folder,
+        course_id=int(args.course_id),
+        canvas_origin=str(getattr(args, "api_url", "") or ""),
+        command=command,
+        project_root=Path(getattr(args, "project_root", ".")),
+        on_duplicate=str(getattr(args, "asset_on_duplicate", "error")),
+    )
+
+
+def apply_asset_plan_to_local(local: dict[str, Any], plan: dict[str, Any]) -> None:
+    rewritten = str(plan.get("rewritten_html") or "")
+    if not rewritten:
+        return
+    if isinstance(local.get("assignment"), dict):
+        local["assignment"]["description"] = rewritten
+    local["rendered_html"] = rewritten
+    local["body_text"] = normalized_text(html_to_text(rewritten))
+    local["source_body_sha256"] = plan["source_body_sha256"]
+    local["deployed_body_sha256"] = plan["deployed_body_sha256"]
+    local["body_sha256"] = plan["deployed_body_sha256"]
+    local["assets"] = asset_associations(plan)
+    local["asset_plan"] = plan
+    local["file_links"] = extract_canvas_file_references(
+        rewritten,
+        current_course_id=int(plan["course_id"]),
+        canvas_origin=str(plan.get("_canvas_origin") or ""),
+    )
+
+
+def verify_assignment_asset_plan(
+    plan: dict[str, Any],
+    canvas_record: dict[str, Any],
+    course: Any,
+    args: Any,
+) -> dict[str, Any]:
+    verification = verify_asset_readback(
+        plan.get("assets") or [],
+        str(canvas_record.get("description_html") or ""),
+        expected_html=str(plan.get("rewritten_html") or ""),
+        course=course,
+        course_id=int(args.course_id),
+        canvas_origin=str(getattr(args, "api_url", "") or ""),
+    )
+    plan["verification"] = verification
+    plan["verification_status"] = verification["status"]
+    return verification
+
+
+def print_assignment_asset_banner(
+    args: Any,
+    operation: str,
+    source: Path,
+    local: dict[str, Any],
+    plan: dict[str, Any],
+) -> None:
+    destination = plan.get("destination") or {}
+    print_mutation_banner(
+        operation,
+        {
+            "course": args.course_id,
+            "name": safe_assignment_text(local["assignment"].get("name", "")),
+            "assets": len(plan.get("assets") or []),
+            "asset_folder": destination.get("full_name") or destination.get("id") or "reuse",
+            "source": source,
+        },
+    )
+
+
+def require_live_asset_report(args: Any, plan: dict[str, Any]) -> None:
+    upload_planned = any(
+        asset.get("status") in {"would_upload", "would_rename"}
+        for asset in plan.get("assets") or []
+    )
+    if upload_planned and bool(getattr(args, "no_report", False)):
+        raise SystemExit("Live local-asset deployment requires a durable report run.")
+
+
+def prepare_assignment_asset_report_run(
+    args: Any,
+    command: str,
+    source: Path,
+    plan: dict[str, Any],
+) -> None:
+    if not any(
+        asset.get("status") in {"would_upload", "would_rename"}
+        for asset in plan.get("assets") or []
+    ):
+        return
+    project_root = Path(getattr(args, "project_root", "."))
+    report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
+    report_slug = getattr(args, "report_slug", None)
+    plan["_report_run"] = create_report_run(
+        command=command,
+        slug=report_slug or command.replace(" ", "-"),
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        course_id=int(args.course_id),
+        input_paths=[source],
+        private_data=False,
+    )
+
+
+def write_assignment_asset_report(
+    args: Any,
+    command: str,
+    source: Path,
+    plan: dict[str, Any],
+) -> None:
+    project_root = Path(getattr(args, "project_root", "."))
+    report_root = Path(args.report_root) if getattr(args, "report_root", None) else None
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else None
+    report_slug = getattr(args, "report_slug", None)
+    if not should_write_report_run(
+        no_report=bool(getattr(args, "no_report", False)),
+        legacy_output=False,
+        report_root=report_root,
+        report_dir=report_dir,
+        report_slug=report_slug,
+        project_root=project_root,
+    ):
+        return
+    run = plan.get("_report_run") or create_report_run(
+        command=command,
+        slug=report_slug or command.replace(" ", "-"),
+        project_root=project_root,
+        report_root=report_root,
+        report_dir=report_dir,
+        course_id=int(args.course_id),
+        input_paths=[source],
+        private_data=False,
+    )
+    evidence = public_asset_evidence(plan) or {}
+    try:
+        json_path = run.write_json("assignment-assets.json", evidence)
+        markdown_path = run.write_text(
+            "assignment-assets.md",
+            render_assignment_assets_markdown(command, evidence),
+        )
+        successful = str(plan.get("status")) in {
+            "created",
+            "deployed",
+            "matches",
+            "planned",
+            "would_reuse",
+        }
+        manifest_path = run.finish("success" if successful else "failed")
+        print(f"Wrote {json_path}")
+        print(f"Wrote {markdown_path}")
+        print(f"Wrote {manifest_path}")
+        print(f"Report directory: {run.path}")
+    except Exception as exc:
+        run.finish("failed", error=str(exc))
+        raise
+
+
+def render_assignment_assets_markdown(command: str, evidence: dict[str, Any]) -> str:
+    lines = [
+        "# Assignment Assets",
+        "",
+        f"- Command: `{command}`",
+        f"- Status: `{evidence.get('status') or ''}`",
+        f"- Course ID: `{evidence.get('course_id') or ''}`",
+        f"- Source: `{evidence.get('source') or ''}`",
+        f"- Deployed body: `{evidence.get('deployed_body_status') or 'not_available'}`",
+        "",
+        "| Local path | Action | Canvas file ID | Evidence |",
+        "| --- | --- | --- | --- |",
+    ]
+    for asset in evidence.get("assets") or []:
+        canvas = asset.get("canvas") or {}
+        lines.append(
+            f"| `{asset.get('path') or ''}` | `{asset.get('status') or ''}` | "
+            f"`{canvas.get('id') or ''}` | `{asset.get('evidence_status') or ''}` |"
+        )
+    return "\n".join(lines) + "\n"
 
 
 def load_assignment_markdown(source: Path) -> dict[str, Any]:
@@ -1350,6 +1869,31 @@ def safe_assignment_exception_reason(exc: Exception) -> str:
     return "file_lookup_failed"
 
 
+def safe_assignment_mutation_failure(exc: Exception) -> dict[str, str]:
+    """Classify a caught asset-enabled content write without retaining response text."""
+    name = type(exc).__name__.casefold()
+    rejected = any(token in name for token in ("badrequest", "invalid", "requiredfield"))
+    if rejected:
+        return {
+            "status": "content_failed",
+            "content_mutation_status": "failed",
+            "content_error": "assignment_mutation_rejected",
+            "recovery_guidance": (
+                "Correct the assignment source before retrying. Uploaded file identities "
+                "remain reusable."
+            ),
+        }
+    return {
+        "status": "content_indeterminate",
+        "content_mutation_status": "indeterminate",
+        "content_error": "assignment_mutation_indeterminate",
+        "recovery_guidance": (
+            "Verify whether Canvas changed the assignment before retrying. Uploaded file "
+            "identities remain reusable."
+        ),
+    }
+
+
 def safe_assignment_lookup_reason(exc: Exception) -> str:
     name = type(exc).__name__.casefold()
     if "unauthorized" in name or "forbidden" in name or "access" in name:
@@ -1501,11 +2045,16 @@ def assignment_update_local_compare_record(local: dict[str, Any]) -> dict[str, A
 
 
 def assignment_source_map_fields(local: dict[str, Any]) -> dict[str, Any]:
-    return safe_assignment_value({
+    fields = {
         key: value
         for key, value in assignment_update_local_compare_record(local).items()
         if key in ASSIGNMENT_VERIFY_SUPPORTED_FIELDS and value is not None and value != ""
-    })
+    }
+    if local.get("assets"):
+        fields["assets"] = local["assets"]
+        fields["source_body_sha256"] = local.get("source_body_sha256")
+        fields["deployed_body_sha256"] = local.get("deployed_body_sha256")
+    return safe_assignment_value(fields)
 
 
 def write_assignment_source_map_entry(

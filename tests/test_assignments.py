@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,9 +17,14 @@ from danvas.assignments import (
     command_assignments_verify,
     comparable_field_value,
     load_assignment_markdown,
+    prepare_assignment_asset_report_run,
     resolve_format,
+    safe_assignment_mutation_failure,
+    verify_assignment_file_links,
     verify_check,
 )
+from danvas.canvas_links import extract_canvas_file_references
+from danvas.source_map import write_source_map_entry
 
 
 def test_allowed_extension_comparison_normalizes_empty_and_case() -> None:
@@ -31,6 +37,20 @@ def test_every_supported_assignment_field_has_explicit_comparison_policy() -> No
     assert set(ASSIGNMENT_FIELD_POLICIES) == ASSIGNMENT_VERIFY_SUPPORTED_FIELDS
 
 
+def test_asset_content_failure_distinguishes_rejection_from_indeterminate() -> None:
+    class BadRequest(Exception):
+        pass
+
+    rejected = safe_assignment_mutation_failure(BadRequest("raw response"))
+    indeterminate = safe_assignment_mutation_failure(TimeoutError("network timeout"))
+
+    assert rejected["status"] == "content_failed"
+    assert rejected["content_mutation_status"] == "failed"
+    assert indeterminate["status"] == "content_indeterminate"
+    assert indeterminate["content_mutation_status"] == "indeterminate"
+    assert "raw response" not in str(rejected)
+
+
 def test_assignment_datetime_comparison_matches_equivalent_offsets() -> None:
     check = verify_check(
         "due_at",
@@ -39,6 +59,23 @@ def test_assignment_datetime_comparison_matches_equivalent_offsets() -> None:
     )
 
     assert check["matches"] is True
+
+
+def test_assignment_file_verify_ignores_current_course_page_links() -> None:
+    links = extract_canvas_file_references(
+        '<a href="/courses/101/pages/syllabus">Syllabus</a>',
+        current_course_id=101,
+        canvas_origin="https://canvas.example/",
+    )
+
+    result = verify_assignment_file_links(
+        SimpleNamespace(id=101),
+        links,
+        links,
+        canvas_origin="https://canvas.example/",
+    )
+
+    assert result["status"] == "matches"
 
 
 def test_assignment_source_rejects_offset_free_at_value(tmp_path: Path) -> None:
@@ -241,13 +278,13 @@ def test_command_assignments_create_dry_run_does_not_write_source_map(
     assert not (tmp_path / ".danvas" / "source-map.json").exists()
 
 
-def test_command_assignments_create_dry_run_sanitizes_link_payload(
+def test_command_assignments_create_dry_run_keeps_stable_canvas_file_link(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     source = tmp_path / "assignment.md"
     source.write_text(
         "---\ntitle: Case 1\n---\n\n"
-        "[Case file](/courses/101/files/44/download?verifier=secret-value)\n",
+        "[Case file](/courses/101/files/44?wrap=1)\n",
         encoding="utf-8",
     )
 
@@ -262,8 +299,6 @@ def test_command_assignments_create_dry_run_sanitizes_link_payload(
 
     output = capsys.readouterr().out
     assert "https://canvas.example/courses/101/files/44?wrap=1" in output
-    assert "secret-value" not in output
-    assert "verifier" not in output
     assert '"description"' not in output
 
 
@@ -333,6 +368,126 @@ Submit the case memo.
     assert entry["last_posted"]["command"] == "assignments create"
     assert entry["last_posted"]["fields"]["title"] == "Case 1"
     assert "body_sha256" in entry["last_posted"]
+
+
+def test_command_assignments_create_deploys_assets_before_content_and_records_both(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "assignment.md"
+    asset = tmp_path / "assets" / "case.pdf"
+    source.parent.mkdir()
+    asset.parent.mkdir()
+    source.write_text(
+        "---\ntitle: Asset case\npublished: false\n---\n\n[Case](../assets/case.pdf)\n",
+        encoding="utf-8",
+    )
+    asset.write_bytes(b"case-pdf")
+    source_before = (source.read_bytes(), source.stat().st_mtime_ns)
+    events: list[str] = []
+
+    class AssetFolder:
+        id = 20
+        full_name = "course files/assets"
+
+        def get_files(self) -> list[object]:
+            return []
+
+        def upload(self, path: str, *, on_duplicate: str, content_type: str):
+            events.append("upload")
+            assert on_duplicate == "rename"
+            assert content_type == "application/pdf"
+            course.files[44] = SimpleNamespace(id=44, folder_id=20)
+            return True, {
+                "id": 44,
+                "display_name": "case.pdf",
+                "filename": "case.pdf",
+                "folder_id": 20,
+                "size": Path(path).stat().st_size,
+                "content_type": content_type,
+            }
+
+    class AssetCourse:
+        id = 101
+        name = "Course"
+
+        def __init__(self) -> None:
+            self.folder = AssetFolder()
+            self.files: dict[int, object] = {}
+            self.assignment: SimpleNamespace | None = None
+
+        def get_folders(self) -> list[object]:
+            return [self.folder]
+
+        def get_file(self, file_id: int) -> object:
+            return self.files[file_id]
+
+        def get_assignment_groups(self) -> list[SimpleNamespace]:
+            return []
+
+        def create_assignment(self, payload: dict[str, object]) -> SimpleNamespace:
+            events.append("create")
+            description = str(payload["description"])
+            assert "../assets/case.pdf" not in description
+            assert "/courses/101/files/44?wrap=1" in description
+            self.assignment = SimpleNamespace(
+                id=10,
+                name=payload["name"],
+                published=payload["published"],
+                description=description,
+                html_url="https://canvas.example/courses/101/assignments/10",
+                updated_at="2026-08-12T12:00:00Z",
+            )
+            return self.assignment
+
+        def get_assignment(self, assignment_id: int) -> SimpleNamespace:
+            assert assignment_id == 10 and self.assignment is not None
+            return self.assignment
+
+    course = AssetCourse()
+    canvas = SimpleNamespace(
+        get_course=lambda course_id: course,
+        get_folder=lambda folder_id: course.folder,
+    )
+    monkeypatch.setattr("danvas.assignments.canvas_from_args", lambda args: canvas)
+    monkeypatch.setattr(
+        "danvas.assignments.print_mutation_banner",
+        lambda operation, details: events.append("banner"),
+    )
+
+    command_assignments_create(
+        SimpleNamespace(
+            source=str(source),
+            course_id=101,
+            dry_run=False,
+            project_root=str(tmp_path),
+            asset_folder=None,
+            asset_folder_id=20,
+            asset_on_duplicate="error",
+            no_report=False,
+            report_root=None,
+            report_dir=str(tmp_path / "report"),
+            report_slug=None,
+            api_url="https://canvas.example/",
+        )
+    )
+
+    assert events == ["banner", "upload", "create"]
+    assert (source.read_bytes(), source.stat().st_mtime_ns) == source_before
+    source_map = json.loads((tmp_path / ".danvas" / "source-map.json").read_text("utf-8"))
+    assert [entry["kind"] for entry in source_map["sources"]] == ["assignment", "file"]
+    assignment_entry = source_map["sources"][0]
+    fields = assignment_entry["last_posted"]["fields"]
+    assert fields["assets"][0]["canvas_file_id"] == 44
+    assert fields["source_body_sha256"] != fields["deployed_body_sha256"]
+    assert assignment_entry["last_posted"]["body_sha256"] == fields["deployed_body_sha256"]
+    evidence = json.loads((tmp_path / "report" / "assignment-assets.json").read_text("utf-8"))
+    assert evidence["status"] == "created"
+    assert evidence["verification_status"] == "matches"
+    assert "case-pdf" not in json.dumps(evidence)
+    assert "../assets/case.pdf" not in capsys.readouterr().out
 
 
 def test_command_assignments_verify_matches_canvas(
@@ -731,9 +886,10 @@ def test_assignment_verify_file_lookup_failure_is_sanitized_partial(
     assert "verifier" not in text
 
 
-def test_assignment_verify_relative_asset_and_unsupported_field_are_partial(
+def test_assignment_verify_relative_asset_is_a_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    write_config(tmp_path)
     source = tmp_path / "assignment.md"
     source.write_text(
         """---
@@ -782,9 +938,85 @@ omit_from_final_grade: true
         )
 
     report = json.loads((tmp_path / "report" / "assignments-verify.json").read_text("utf-8"))
-    assert report["status"] == "partial"
+    assert report["status"] == "mismatch"
     assert report["file_links"]["status"] == "partial"
+    assert report["assets"]["status"] == "blocked"
     assert any(check["status"] == "unsupported" for check in report["checks"])
+
+
+def test_assignment_verify_reuses_mapped_asset_and_matches_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "assignment.md"
+    asset = tmp_path / "assets" / "case.pdf"
+    source.parent.mkdir()
+    asset.parent.mkdir()
+    source.write_text(
+        "---\nassignment_id: 10\ntitle: Case 1\n---\n\n[Case](../assets/case.pdf)\n",
+        encoding="utf-8",
+    )
+    asset.write_bytes(b"case-pdf")
+    write_source_map_entry(
+        kind="file",
+        source=asset,
+        course_id=101,
+        canvas={"course_id": 101, "id": 44, "folder_id": 20},
+        command="assignments create",
+        fields={
+            "sha256": hashlib.sha256(asset.read_bytes()).hexdigest(),
+            "size": asset.stat().st_size,
+            "content_type": "application/pdf",
+            "upload_name": "case.pdf",
+        },
+        project_root=tmp_path,
+    )
+
+    class Course:
+        id = 101
+        name = "Course"
+
+        def get_file(self, file_id: int) -> SimpleNamespace:
+            assert file_id == 44
+            return SimpleNamespace(id=44, folder_id=20)
+
+        def get_assignment(self, assignment_id: int) -> SimpleNamespace:
+            return SimpleNamespace(
+                id=assignment_id,
+                name="Case 1",
+                description='<p><a href="/courses/101/files/44?wrap=1">Case</a></p>',
+            )
+
+        def get_assignment_groups(self) -> list[SimpleNamespace]:
+            return []
+
+        def get_folders(self) -> list[SimpleNamespace]:
+            return [SimpleNamespace(id=20, full_name="course files/assets")]
+
+    course = Course()
+    monkeypatch.setattr(
+        "danvas.assignments.canvas_from_args",
+        lambda args: SimpleNamespace(get_course=lambda course_id: course),
+    )
+
+    command_assignments_verify(
+        SimpleNamespace(
+            source=str(source),
+            course_id=101,
+            assignment_id=None,
+            project_root=str(tmp_path),
+            no_report=False,
+            report_root=None,
+            report_dir=str(tmp_path / "report"),
+            report_slug=None,
+            api_url="https://canvas.example/",
+        )
+    )
+
+    report = json.loads((tmp_path / "report" / "assignments-verify.json").read_text("utf-8"))
+    assert report["status"] == "matches"
+    assert report["assets"]["status"] == "would_reuse"
+    assert report["assets"]["verification_status"] == "matches"
 
 
 def test_assignments_full_export_is_sanitized_projection(
@@ -906,6 +1138,31 @@ def upsert_args(source: Path, report_dir: Path, **overrides: object) -> SimpleNa
     defaults = vars(update_args(source, report_dir)).copy()
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
+
+
+def test_asset_report_destination_is_reserved_before_upload(tmp_path: Path) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    source.parent.mkdir()
+    source.write_text("---\ntitle: Case 1\n---\n\nBody\n", encoding="utf-8")
+    report_dir = tmp_path / "existing-report"
+    report_dir.mkdir()
+    plan = {"assets": [{"status": "would_upload"}]}
+
+    with pytest.raises(FileExistsError):
+        prepare_assignment_asset_report_run(
+            update_args(
+                source,
+                report_dir,
+                dry_run=False,
+                project_root=str(tmp_path),
+            ),
+            "assignments update",
+            source,
+            plan,
+        )
+
+    assert "_report_run" not in plan
 
 
 class FakeAssignment:
@@ -1054,6 +1311,98 @@ Submit the revised case memo.
     assert source_map["sources"][0]["path"] == "content/case.md"
     assert source_map["sources"][0]["canvas"]["id"] == 10
     assert source_map["sources"][0]["last_posted"]["command"] == "assignments update"
+
+
+def test_command_assignments_update_deploys_asset_with_one_preupload_banner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    asset = tmp_path / "assets" / "case.pdf"
+    source.parent.mkdir()
+    asset.parent.mkdir()
+    source.write_text(
+        "---\nassignment_id: 10\ntitle: Case 1\n---\n\n[Case](../assets/case.pdf)\n",
+        encoding="utf-8",
+    )
+    asset.write_bytes(b"case-pdf")
+    events: list[str] = []
+    assignment = FakeAssignment(
+        id=10,
+        name="Case 1",
+        description="<p>Old body.</p>",
+        html_url="https://canvas.example/courses/101/assignments/10",
+        updated_at="2026-08-12T12:00:00Z",
+    )
+
+    class Folder:
+        id = 20
+        full_name = "course files/assets"
+
+        def get_files(self) -> list[object]:
+            return []
+
+        def upload(self, path: str, *, on_duplicate: str, content_type: str):
+            events.append("upload")
+            course.files[45] = SimpleNamespace(id=45, folder_id=20)
+            return True, {
+                "id": 45,
+                "display_name": "case.pdf",
+                "filename": "case.pdf",
+                "folder_id": 20,
+                "size": Path(path).stat().st_size,
+                "content_type": content_type,
+            }
+
+    class Course(FakeUpdateCourse):
+        def __init__(self) -> None:
+            super().__init__([assignment])
+            self.folder = Folder()
+            self.files: dict[int, object] = {}
+
+        def get_folders(self) -> list[object]:
+            return [self.folder]
+
+        def get_file(self, file_id: int) -> object:
+            return self.files[file_id]
+
+    course = Course()
+    original_edit = assignment.edit
+
+    def tracked_edit(**kwargs: object) -> FakeAssignment:
+        events.append("update")
+        return original_edit(**kwargs)
+
+    monkeypatch.setattr(assignment, "edit", tracked_edit)
+    canvas = SimpleNamespace(
+        get_course=lambda course_id: course,
+        get_folder=lambda folder_id: course.folder,
+    )
+    monkeypatch.setattr("danvas.assignments.canvas_from_args", lambda args: canvas)
+    monkeypatch.setattr(
+        "danvas.assignments.print_mutation_banner",
+        lambda operation, details: events.append("banner"),
+    )
+
+    command_assignments_update(
+        update_args(
+            source,
+            tmp_path / "report",
+            dry_run=False,
+            project_root=str(tmp_path),
+            asset_folder=None,
+            asset_folder_id=20,
+            asset_on_duplicate="error",
+        )
+    )
+
+    assert events == ["banner", "upload", "update"]
+    assert "/courses/101/files/45?wrap=1" in str(assignment.description)
+    report = json.loads((tmp_path / "report" / "assignments-update.json").read_text("utf-8"))
+    assert report["status"] == "updated"
+    assert report["assets"]["verification_status"] == "matches"
+    source_map = json.loads((tmp_path / ".danvas" / "source-map.json").read_text("utf-8"))
+    assert [row["kind"] for row in source_map["sources"]] == ["assignment", "file"]
 
 
 def test_command_assignments_update_aliases_round_trip_without_phantom_change(
@@ -1353,6 +1702,59 @@ def test_command_assignments_upsert_plans_create_without_match(
     assert report["planned_action"] == "create"
     assert report["create_payload"]["name"] == "Case 1"
     assert report["lookup"]["status"] == "would_create"
+
+
+def test_command_assignments_upsert_dry_run_includes_asset_plan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_config(tmp_path)
+    source = tmp_path / "content" / "case.md"
+    asset = tmp_path / "assets" / "case.pdf"
+    source.parent.mkdir()
+    asset.parent.mkdir()
+    source.write_text(
+        "---\ntitle: Case 1\n---\n\n[Case](../assets/case.pdf)\n",
+        encoding="utf-8",
+    )
+    asset.write_bytes(b"case-pdf")
+
+    class Folder:
+        id = 20
+        full_name = "course files/assets"
+
+        def get_files(self) -> list[object]:
+            return []
+
+    class Course(FakeUpdateCourse):
+        def __init__(self) -> None:
+            super().__init__([])
+            self.folder = Folder()
+
+        def get_folders(self) -> list[object]:
+            return [self.folder]
+
+    course = Course()
+    canvas = SimpleNamespace(
+        get_course=lambda course_id: course,
+        get_folder=lambda folder_id: course.folder,
+    )
+    monkeypatch.setattr("danvas.assignments.canvas_from_args", lambda args: canvas)
+
+    command_assignments_upsert(
+        upsert_args(
+            source,
+            tmp_path / "report",
+            project_root=str(tmp_path),
+            asset_folder=None,
+            asset_folder_id=20,
+            asset_on_duplicate="error",
+        )
+    )
+
+    report = json.loads((tmp_path / "report" / "assignments-upsert.json").read_text("utf-8"))
+    assert report["planned_action"] == "create"
+    assert report["assets"]["status"] == "planned"
+    assert report["assets"]["assets"][0]["status"] == "would_upload"
 
 
 def test_command_assignments_upsert_refuses_non_dry_run(tmp_path: Path) -> None:

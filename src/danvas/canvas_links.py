@@ -24,22 +24,6 @@ SENSITIVE_QUERY_NAMES = {
     "token",
     "verifier",
 }
-LOCAL_ASSET_SUFFIXES = {
-    ".csv",
-    ".doc",
-    ".docx",
-    ".gif",
-    ".jpeg",
-    ".jpg",
-    ".pdf",
-    ".png",
-    ".ppt",
-    ".pptx",
-    ".svg",
-    ".xls",
-    ".xlsx",
-    ".zip",
-}
 
 
 def normalized_url_origin(value: str) -> tuple[str, str, int] | None:
@@ -185,6 +169,12 @@ def extract_canvas_file_references(
                 candidates.append(malformed_reference(raw, "relative_local_asset"))
                 candidates[-1]["status"] = "relative_asset"
                 attributes.append(attribute)
+            elif attribute in {"href", "src"} and blocked_root_relative_url(
+                raw, current_course_id=current_course_id
+            ):
+                candidates.append(malformed_reference(raw, "blocked_root_relative"))
+                candidates[-1]["status"] = "blocked_root_relative"
+                attributes.append(attribute)
         declared_file = str(tag.get("data-api-returntype") or "").casefold() == "file"
         if declared_file and not candidates:
             candidates.append(malformed_reference(str(tag), "declared_file_target_unparseable"))
@@ -229,6 +219,7 @@ def worst_reference(
         "unsafe",
         "foreign_origin",
         "cross_course",
+        "blocked_root_relative",
         "malformed",
         "relative_asset",
         "valid",
@@ -266,14 +257,46 @@ def looks_file_like(value: str) -> bool:
 
 
 def relative_asset_url(value: str) -> bool:
+    """Return whether a URL is structurally project-relative, regardless of suffix."""
     try:
         parsed = urlsplit(value)
     except ValueError:
         return False
-    if parsed.scheme or parsed.netloc or not parsed.path or parsed.path.startswith(("/", "#")):
+    return not (
+        parsed.scheme
+        or parsed.netloc
+        or not parsed.path
+        or parsed.path.startswith(("/", "#"))
+    )
+
+
+def current_course_root_relative_url(value: str, *, current_course_id: int) -> bool:
+    """Return whether a root-relative URL belongs to the current Canvas course."""
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
         return False
-    suffix = "." + parsed.path.rsplit(".", 1)[-1].casefold() if "." in parsed.path else ""
-    return suffix in LOCAL_ASSET_SUFFIXES
+    return (
+        not parsed.scheme
+        and not parsed.netloc
+        and parsed.path.startswith(f"/courses/{int(current_course_id)}/")
+    )
+
+
+def blocked_root_relative_url(value: str, *, current_course_id: int) -> bool:
+    """Return whether an unrecognized URL occupies the blocked root-relative bucket."""
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    return (
+        not parsed.scheme
+        and not parsed.netloc
+        and parsed.path.startswith("/")
+        and not current_course_root_relative_url(
+            value, current_course_id=current_course_id
+        )
+    )
 
 
 def malformed_reference(value: str, reason: str) -> dict[str, Any]:

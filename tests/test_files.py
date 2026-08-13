@@ -16,6 +16,7 @@ from danvas.files import (
     content_type_for,
     download_relative_path,
     local_files,
+    plan_upload_rows,
     scrub_sensitive_upload_payload,
     write_missing_report,
 )
@@ -132,6 +133,28 @@ class FakeUploadCanvas:
     def get_folder(self, folder_id: int) -> FakeUploadFolder:
         self.folder_requested = folder_id
         return self.course.slides
+
+
+def test_internal_upload_plan_error_policy_never_overwrites() -> None:
+    folder = FakeUploadFolder(id=20, full_name="course files/assets")
+    folder.files = [SimpleNamespace(id=44, display_name="case.pdf", filename="case.pdf")]
+
+    rows = plan_upload_rows(
+        [
+            {
+                "source": "/private/source/case.pdf",
+                "relative_path": "assets/case.pdf",
+                "name": "case.pdf",
+                "size": 10,
+                "content_type": "application/pdf",
+            }
+        ],
+        folder,
+        on_duplicate="error",
+    )
+
+    assert rows[0]["status"] == "conflict"
+    assert rows[0]["existing_canvas_ids"] == [44]
 
 
 def test_build_file_inventory_compares_local_files_without_urls(tmp_path: Path) -> None:

@@ -71,6 +71,16 @@ def test_refresh_cli_accepts_report_options() -> None:
     assert {"--report-root", "--report-dir", "--report-slug"} <= option_names("refresh")
 
 
+@pytest.mark.parametrize("action", ["create", "update", "upsert"])
+def test_assignment_write_cli_exposes_verified_asset_options(action: str) -> None:
+    assert {
+        "--project-root",
+        "--asset-folder",
+        "--asset-folder-id",
+        "--asset-on-duplicate",
+    } <= option_names("assignments", action)
+
+
 def test_reports_list_cli(tmp_path: Path) -> None:
     reports_root = tmp_path / ".danvas" / "reports"
     write_report_manifest(
