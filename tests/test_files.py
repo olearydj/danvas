@@ -1135,6 +1135,175 @@ def test_command_files_upload_live_uploads_and_writes_safe_report(
     assert '"status": "uploaded"' in captured
 
 
+def test_command_files_upload_error_policy_rechecks_and_uses_rename_transport(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"slides")
+    canvas = FakeUploadCanvas()
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr("danvas.files.canvas_from_args", lambda args: canvas)
+
+    command_files_upload(
+        SimpleNamespace(
+            course_id=101,
+            files=[str(source)],
+            folder="course files/slides",
+            folder_id=None,
+            on_duplicate="error",
+            dry_run=False,
+            mutation_mode="apply",
+            api_url="https://canvas.example/",
+            output=str(output),
+        )
+    )
+
+    assert canvas.course.slides.uploads[0]["on_duplicate"] == "rename"
+    row = json.loads(output.read_text(encoding="utf-8"))["files"][0]
+    assert row["requested_duplicate_policy"] == "error"
+    assert row["transport_duplicate_policy"] == "rename"
+    assert row["planned_outcome"] == "would_create"
+    assert row["observed_outcome"] == "created"
+
+
+def test_command_files_upload_error_policy_blocks_known_conflict_without_banner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"slides")
+    course = FakeUploadCourse()
+    course.slides.files = [SimpleNamespace(id=77, display_name="slides.pdf")]
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(course)
+    )
+
+    with pytest.raises(SystemExit):
+        command_files_upload(
+            SimpleNamespace(
+                course_id=101,
+                files=[str(source)],
+                folder="course files/slides",
+                folder_id=None,
+                on_duplicate="error",
+                dry_run=False,
+                mutation_mode="apply",
+                api_url="https://canvas.example/",
+                output=str(output),
+            )
+        )
+
+    assert course.slides.uploads == []
+    assert "== Canvas write:" not in capsys.readouterr().out
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["plan"]["status"] == "blocked"
+    assert report["files"][0]["status"] == "conflict"
+
+
+def test_command_files_upload_error_policy_blocks_prewrite_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class PrewriteRaceFolder(FakeUploadFolder):
+        def __init__(self, **kwargs: object) -> None:
+            super().__init__(**kwargs)
+            self.listings = 0
+
+        def get_files(self) -> list[object]:
+            self.listings += 1
+            if self.listings == 1:
+                return []
+            return [SimpleNamespace(id=77, display_name="slides.pdf")]
+
+    class PrewriteRaceCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.slides = PrewriteRaceFolder(id=20, full_name="course files/slides")
+
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"slides")
+    course = PrewriteRaceCourse()
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(course)
+    )
+
+    with pytest.raises(SystemExit):
+        command_files_upload(
+            SimpleNamespace(
+                course_id=101,
+                files=[str(source)],
+                folder="course files/slides",
+                folder_id=None,
+                on_duplicate="error",
+                dry_run=False,
+                mutation_mode="apply",
+                api_url="https://canvas.example/",
+                output=str(output),
+            )
+        )
+
+    assert course.slides.uploads == []
+    row = json.loads(output.read_text(encoding="utf-8"))["files"][0]
+    assert row["mutation_status"] == "not_attempted"
+    assert row["observed_outcome"] == "prewrite_conflict"
+
+
+def test_command_files_upload_error_policy_classifies_renamed_race_as_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class RenamedRaceFolder(FakeUploadFolder):
+        def upload(self, source: str, *, on_duplicate: str, content_type: str):
+            assert on_duplicate == "rename"
+            self.uploads.append(
+                {"source": source, "on_duplicate": on_duplicate, "content_type": content_type}
+            )
+            return True, {
+                "id": 1001,
+                "display_name": "slides-1.pdf",
+                "filename": "slides-1.pdf",
+                "folder_id": self.id,
+                "size": Path(source).stat().st_size,
+                "content_type": content_type,
+            }
+
+    class RenamedRaceCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.slides = RenamedRaceFolder(id=20, full_name="course files/slides")
+
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"slides")
+    course = RenamedRaceCourse()
+    output = tmp_path / "upload-report.json"
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args", lambda args: FakeUploadCanvas(course)
+    )
+
+    with pytest.raises(SystemExit):
+        command_files_upload(
+            SimpleNamespace(
+                course_id=101,
+                files=[str(source)],
+                folder="course files/slides",
+                folder_id=None,
+                on_duplicate="error",
+                dry_run=False,
+                mutation_mode="apply",
+                api_url="https://canvas.example/",
+                output=str(output),
+            )
+        )
+
+    row = json.loads(output.read_text(encoding="utf-8"))["files"][0]
+    assert row["status"] == "conflict"
+    assert row["mutation_status"] == "conflict"
+    assert row["observed_outcome"] == "renamed_race_conflict"
+    assert "not overwritten" in row["error"]
+    assert "do not retry" in row["safe_next_action"].lower()
+
+
 def test_command_files_upload_live_writes_legacy_and_report_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

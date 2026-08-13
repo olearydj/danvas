@@ -59,7 +59,7 @@ CURRENT_MUTATION_CALLS = Counter(
         ("discussion_sources.py", "command_discussions_create", "create_discussion_topic"): 1,
         ("discussion_sources.py", "command_discussions_update", "topic.update"): 1,
         ("discussion_sources.py", "post_seed_replies", "post_entry"): 1,
-        ("files.py", "command_files_upload", "upload"): 1,
+        ("files.py", "execute_file_upload", "upload"): 1,
         ("grades.py", "apply_grade_action", "edit"): 2,
         ("grades.py", "edit_submission_comment", "edit_comment"): 1,
         ("grades.py", "edit_submission_comment", "_requester.request"): 1,
@@ -93,6 +93,7 @@ CURRENT_APPLY_COMMANDS = {
     "grades post",
     "grades clear",
     "submissions feedback",
+    "files upload",
 }
 
 CURRENT_MUTATION_ASSERTIONS = Counter(
@@ -123,6 +124,8 @@ CURRENT_MUTATION_ASSERTIONS = Counter(
         ("quiz_import.py", "start_qti_migration"): 2,
         ("submissions.py", "command_submissions_feedback"): 1,
         ("submissions.py", "upload_feedback_comment"): 1,
+        ("files.py", "command_files_upload"): 1,
+        ("files.py", "execute_file_upload"): 1,
     }
 )
 
@@ -243,7 +246,7 @@ def test_access_policy_category_counts_match_reviewed_inventory() -> None:
     ) == 26
     assert sum(policy.dry_run_kind is DryRunKind.LOCAL_WRITE for policy in policies) == 4
     assert sum(policy.canvas_mutation for policy in policies) == 15
-    assert sum(policy.bare_canvas_mutation for policy in policies) == 1
+    assert sum(policy.bare_canvas_mutation for policy in policies) == 0
 
 
 def test_current_dry_run_surface_and_defaults_are_characterized() -> None:
@@ -281,7 +284,7 @@ def test_current_special_mutation_guards_are_characterized() -> None:
         for param in commands["discussions score"].params
         if isinstance(param, click.Option)
     )
-    assert option(commands["files upload"], "--on-duplicate").default == "overwrite"
+    assert option(commands["files upload"], "--on-duplicate").default == "error"
 
 
 def test_retained_output_registry_has_no_missing_or_stale_commands() -> None:

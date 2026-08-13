@@ -286,7 +286,6 @@ def _policies() -> tuple[CommandAccessPolicy, ...]:
             local_write=True,
             canvas_mutation=True,
             dry_run_kind=DryRunKind.CANVAS_MUTATION,
-            bare_canvas_mutation=True,
             destructive=True,
             authoritative_verification=True,
         ),

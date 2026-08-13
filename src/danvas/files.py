@@ -17,6 +17,11 @@ from urllib.parse import unquote
 
 from danvas.auth import canvas_from_args
 from danvas.canvas_links import stable_course_file_url
+from danvas.mutation import (
+    MutationMode,
+    assert_canvas_mutation_allowed,
+    mutation_mode_from_args,
+)
 from danvas.reports import ReportRun, create_report_run, find_config_dir, should_write_report_run
 from danvas.sanitize import is_sensitive_key, sanitize_error, sanitize_public
 from danvas.utils import canvas_object_to_dict, print_mutation_banner, write_json, write_rows
@@ -280,6 +285,7 @@ def command_files_upload(args: Any) -> None:
         "folder_id": folder_id,
         "folder_full_name": folder_full_name,
         "on_duplicate": args.on_duplicate,
+        "mode": "plan" if args.dry_run else "apply",
         "dry_run": bool(args.dry_run),
         "planning_limit": (
             "Point-in-time destination evidence; the live Canvas result remains authoritative."
@@ -289,18 +295,33 @@ def command_files_upload(args: Any) -> None:
         "files": [],
     }
     report_run = make_files_upload_report_run(args, report, local_rows)
-    if args.dry_run:
-        report["files"] = plan_upload_rows(local_rows, folder, on_duplicate=args.on_duplicate)
-        print("Dry run - no files uploaded.")
+    planned = plan_upload_rows(local_rows, folder, on_duplicate=args.on_duplicate)
+    report["plan"] = {
+        "status": (
+            "blocked"
+            if any(row["status"] == "conflict" for row in planned)
+            else ("ready" if planned else "no_change")
+        ),
+        "files": planned,
+    }
+    if args.dry_run or report["plan"]["status"] == "blocked":
+        report["files"] = planned
+        print(
+            "Dry run - no files uploaded."
+            if args.dry_run
+            else "Apply blocked - no files uploaded."
+        )
         print(json.dumps(report, indent=2, ensure_ascii=False))
         if args.output:
             write_json(Path(args.output), report)
             print(f"Wrote {args.output}")
         write_files_upload_report_run(report_run, report)
-        if any(row["status"] == "conflict" for row in report["files"]):
+        if report["plan"]["status"] == "blocked":
             raise SystemExit(1)
         return
 
+    mutation_mode = mutation_mode_from_args(args)
+    assert_canvas_mutation_allowed(mutation_mode, "files upload")
     print_mutation_banner(
         f"upload {len(local_rows)} file(s)",
         {
@@ -312,23 +333,15 @@ def command_files_upload(args: Any) -> None:
     failures = 0
     evidence_gaps = 0
     results = []
-    for row in local_rows:
-        try:
-            ok, response = folder.upload(
-                row["source"],
-                on_duplicate=args.on_duplicate,
-                content_type=row["content_type"],
-            )
-        except Exception as exc:  # noqa: BLE001 - sanitize per-file Canvas failures.
-            ok = False
-            response = {"error": safe_upload_error_text(f"{type(exc).__name__}: {exc}")}
-        result = upload_result_row(
+    for row, plan_row in zip(local_rows, planned, strict=True):
+        result = execute_file_upload(
             row,
-            ok=bool(ok),
-            response=response,
             folder=folder,
             course_id=int(report["course_id"]),
             canvas_origin=str(getattr(args, "api_url", "") or ""),
+            on_duplicate=args.on_duplicate,
+            planned_status=plan_row["status"],
+            mutation_mode=mutation_mode,
         )
         results.append(result)
         report["files"] = results
@@ -347,9 +360,16 @@ def command_files_upload(args: Any) -> None:
         indeterminate = sum(
             1 for row in results if row["mutation_status"] == "indeterminate"
         )
+        conflicts = sum(
+            1
+            for row in results
+            if row["mutation_status"] in {"conflict", "not_attempted"}
+        )
         outcomes = [f"{failed} failed"] if failed else []
         if indeterminate:
             outcomes.append(f"{indeterminate} indeterminate")
+        if conflicts:
+            outcomes.append(f"{conflicts} conflict")
         print(f"Upload incomplete: {uploaded} uploaded, {', '.join(outcomes)}.")
         raise SystemExit(1)
     if evidence_gaps:
@@ -358,6 +378,93 @@ def command_files_upload(args: Any) -> None:
             "Do not retry the upload; use the recorded canvas_id after correcting the "
             "Canvas origin."
         )
+
+
+def execute_file_upload(
+    local_row: dict[str, Any],
+    *,
+    folder: Any,
+    course_id: int,
+    canvas_origin: str,
+    on_duplicate: str,
+    planned_status: str,
+    mutation_mode: MutationMode,
+) -> dict[str, Any]:
+    transport_policy = on_duplicate
+    if on_duplicate == "error":
+        immediate = plan_upload_rows([local_row], folder, on_duplicate="error")[0]
+        if immediate["status"] != "would_create":
+            return {
+                **local_row,
+                "status": "conflict",
+                "mutation_status": "not_attempted",
+                "evidence_status": "complete",
+                "requested_duplicate_policy": "error",
+                "transport_duplicate_policy": "not_used",
+                "planned_outcome": planned_status,
+                "observed_outcome": "prewrite_conflict",
+                "existing_canvas_ids": immediate.get("existing_canvas_ids", []),
+                "error": immediate.get("error") or "Destination name is no longer available.",
+                "safe_next_action": "Review the destination and regenerate the upload plan.",
+            }
+        transport_policy = "rename"
+
+    assert_canvas_mutation_allowed(mutation_mode, "files upload transport")
+    try:
+        ok, response = folder.upload(
+            local_row["source"],
+            on_duplicate=transport_policy,
+            content_type=local_row["content_type"],
+        )
+    except Exception as exc:  # noqa: BLE001 - sanitize per-file Canvas failures.
+        ok = False
+        response = {"error": safe_upload_error_text(f"{type(exc).__name__}: {exc}")}
+    result = upload_result_row(
+        local_row,
+        ok=bool(ok),
+        response=response,
+        folder=folder,
+        course_id=course_id,
+        canvas_origin=canvas_origin,
+    )
+    result.update(
+        {
+            "requested_duplicate_policy": on_duplicate,
+            "transport_duplicate_policy": transport_policy,
+            "planned_outcome": planned_status,
+        }
+    )
+    if result["mutation_status"] != "succeeded":
+        result["observed_outcome"] = result["status"]
+        return result
+
+    intended_name = str(local_row["name"])
+    observed_name = str(result.get("display_name") or result.get("filename") or "")
+    if on_duplicate == "error" and observed_name != intended_name:
+        result.update(
+            {
+                "status": "conflict",
+                "mutation_status": "conflict",
+                "observed_outcome": "renamed_race_conflict",
+                "error": (
+                    "Canvas created a renamed file during a duplicate race; the existing file "
+                    "was not overwritten."
+                ),
+                "safe_next_action": (
+                    "Review both Canvas files manually; do not retry or delete automatically."
+                ),
+            }
+        )
+        return result
+
+    if observed_name != intended_name:
+        result["observed_outcome"] = "renamed"
+    elif planned_status == "would_overwrite":
+        result["observed_outcome"] = "overwritten"
+    else:
+        result["observed_outcome"] = "created"
+    result["safe_next_action"] = "No action required; retain this evidence."
+    return result
 
 
 def make_files_upload_report_run(

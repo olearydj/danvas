@@ -1387,6 +1387,7 @@ def test_files_upload_cli_options_and_args(tmp_path: Path, monkeypatch: pytest.M
     assert captured["folder_id"] is None
     assert captured["on_duplicate"] == "rename"
     assert captured["dry_run"] is True
+    assert captured["mutation_mode"] == "plan"
     assert captured["output"] == "upload.json"
     assert captured["project_root"] == "."
     assert captured["no_report"] is False
@@ -1398,12 +1399,89 @@ def test_files_upload_cli_options_and_args(tmp_path: Path, monkeypatch: pytest.M
         "--folder-id",
         "--on-duplicate",
         "--dry-run",
+        "--apply",
         "--course-id",
         "--report-root",
         "--report-dir",
         "--report-slug",
         "--no-report",
     } <= option_names("files", "upload")
+
+
+def test_files_upload_plans_bare_with_error_duplicate_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"slides")
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "danvas.cli.command_files_upload",
+        lambda args: captured.update(vars(args)),
+    )
+
+    result = runner.invoke(
+        app,
+        ["files", "upload", "--course-id", "101", "--folder-id", "20", str(source)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["on_duplicate"] == "error"
+    assert captured["dry_run"] is True
+    assert captured["mutation_mode"] == "plan"
+
+
+def test_files_upload_requires_apply_for_authorization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"slides")
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "danvas.cli.command_files_upload",
+        lambda args: captured.update(vars(args)),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "files",
+            "upload",
+            "--course-id",
+            "101",
+            "--folder-id",
+            "20",
+            "--on-duplicate",
+            "overwrite",
+            "--apply",
+            str(source),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["on_duplicate"] == "overwrite"
+    assert captured["dry_run"] is False
+    assert captured["mutation_mode"] == "apply"
+
+
+def test_files_upload_flag_conflict_fails_before_context_resolution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "slides.pdf"
+    source.write_bytes(b"slides")
+    monkeypatch.setattr(
+        "danvas.cli.args_for",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
+    )
+
+    result = runner.invoke(
+        app,
+        ["files", "upload", "--folder-id", "20", "--dry-run", "--apply", str(source)],
+    )
+
+    assert result.exit_code != 0
+    output = normalized_cli_output(result)
+    assert "--dry-run and --apply cannot be combined" in output
+    assert "context resolved" not in output
 
 
 def test_files_compare_cli_options_and_args(

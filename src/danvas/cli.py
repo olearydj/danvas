@@ -95,7 +95,7 @@ AssignmentExportFormat = Literal["auto", "json", "csv", "markdown"]
 DiscussionExportFormat = Literal["json", "csv"]
 AnnouncementExportFormat = Literal["auto", "json", "csv", "markdown"]
 AnnouncementLatestFormat = Literal["auto", "json", "markdown"]
-FileDuplicatePolicy = Literal["overwrite", "rename"]
+FileDuplicatePolicy = Literal["error", "overwrite", "rename"]
 AssetDuplicatePolicy = Literal["error", "rename"]
 AssignmentUpsertConfirm = Literal["", "create", "update"]
 OverrideSyncConfirm = Literal["", "apply"]
@@ -3563,16 +3563,11 @@ def files_upload(
         FileDuplicatePolicy,
         typer.Option(
             "--on-duplicate",
-            help="Canvas duplicate filename behavior.",
+            help="Duplicate behavior: error (default), overwrite, or rename.",
         ),
-    ] = "overwrite",
-    dry_run: Annotated[
-        bool,
-        typer.Option(
-            "--dry-run",
-            help="Inspect the destination and classify create/overwrite/rename without uploading.",
-        ),
-    ] = False,
+    ] = "error",
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Optional JSON upload report path."),
@@ -3606,7 +3601,7 @@ def files_upload(
             folder=folder,
             folder_id=folder_id,
             on_duplicate=on_duplicate,
-            dry_run=dry_run,
+            **mutation_args_from_cli(dry_run=dry_run, apply=apply),
             output=str(output) if output else None,
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
