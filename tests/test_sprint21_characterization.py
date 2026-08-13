@@ -16,6 +16,7 @@ from danvas.files import (
     DEFAULT_INVENTORY_IGNORE_PATTERNS,
     EXCLUDED_LOCAL_PARTS,
     files_inventory_ignore_patterns,
+    local_files,
 )
 from danvas.gradebook import GRADE_VARIANTS, GROUP_VARIANTS, METADATA_COLUMNS, TOTAL_VARIANTS
 from danvas.sources import DEFAULT_SOURCE_EXCLUDES, DEFAULT_SOURCE_PATTERNS, source_options
@@ -127,23 +128,24 @@ def test_status_next_actions_use_effective_source_output_paths() -> None:
     )
 
 
-def test_inventory_defaults_are_extended_and_enforced_in_two_places(tmp_path: Path) -> None:
-    assert {
-        ".git",
-        ".obsidian",
-        ".danvas",
-        "_archive",
-        "_inventory",
-        "grading",
-        "node_modules",
-        "__pycache__",
-    } == EXCLUDED_LOCAL_PARTS
+def test_inventory_mandatory_and_replaceable_exclusions_are_split(tmp_path: Path) -> None:
+    assert {".git", ".danvas"} == EXCLUDED_LOCAL_PARTS
     assert DEFAULT_INVENTORY_IGNORE_PATTERNS == [
-        ".danvas/**",
+        ".obsidian/**",
+        "**/.obsidian/**",
         "_archive/**",
+        "**/_archive/**",
         "_inventory/**",
+        "**/_inventory/**",
+        "grading/**",
+        "**/grading/**",
         "node_modules/**",
+        "**/node_modules/**",
         "__pycache__/**",
+        "**/__pycache__/**",
+        ".*",
+        "**/.*",
+        "**/.*/**",
         ".DS_Store",
         "**/.DS_Store",
         "files-inventory.csv",
@@ -159,11 +161,32 @@ def test_inventory_defaults_are_extended_and_enforced_in_two_places(tmp_path: Pa
         encoding="utf-8",
     )
 
-    # The 0.17.0 parser ignores use_default_ignores and always extends defaults.
     assert files_inventory_ignore_patterns(tmp_path) == [
-        *DEFAULT_INVENTORY_IGNORE_PATTERNS,
+        ".git/**",
+        ".danvas/**",
         "scratch/**",
     ]
+    for relative in (
+        ".git/metadata",
+        ".danvas/private/artifact",
+        "grading/grades.csv",
+        "_archive/old.pdf",
+        ".notes/outline.md",
+        "scratch/ignored.txt",
+        "content/included.md",
+    ):
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative, encoding="utf-8")
+
+    assert {row["relative_path"] for row in local_files(
+        tmp_path, ignore_patterns=files_inventory_ignore_patterns(tmp_path)
+    )} == {
+        ".notes/outline.md",
+        "_archive/old.pdf",
+        "content/included.md",
+        "grading/grades.csv",
+    }
 
 
 def test_english_gradebook_heading_profile_is_frozen() -> None:

@@ -9,6 +9,7 @@ import re
 import tomllib
 import unicodedata
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
@@ -32,28 +33,32 @@ GENERATED_INVENTORY_NAMES = {
     "files-missing-report.md",
 }
 
-EXCLUDED_LOCAL_PARTS = {
-    ".git",
-    ".obsidian",
-    ".danvas",
-    "_archive",
-    "_inventory",
-    "grading",
-    "node_modules",
-    "__pycache__",
-}
+MANDATORY_INVENTORY_IGNORE_PATTERNS = [
+    ".git/**",
+    ".danvas/**",
+]
+MANDATORY_INVENTORY_PARTS = {".git", ".danvas"}
+EXCLUDED_LOCAL_PARTS = MANDATORY_INVENTORY_PARTS
 
 DEFAULT_INVENTORY_IGNORE_PATTERNS = [
-    ".danvas/**",
+    ".obsidian/**",
+    "**/.obsidian/**",
     "_archive/**",
+    "**/_archive/**",
     "_inventory/**",
+    "**/_inventory/**",
+    "grading/**",
+    "**/grading/**",
     "node_modules/**",
+    "**/node_modules/**",
     "__pycache__/**",
+    "**/__pycache__/**",
+    ".*",
+    "**/.*",
+    "**/.*/**",
     ".DS_Store",
     "**/.DS_Store",
-    "files-inventory.csv",
-    "files-inventory.json",
-    "files-missing-report.md",
+    *sorted(GENERATED_INVENTORY_NAMES),
 ]
 
 INVENTORY_CSV_FIELDS = [
@@ -81,17 +86,52 @@ OFFICE_CONTENT_TYPES = {
 SAFE_UPLOAD_ERROR_KEYS = ("error", "message", "errors", "status", "status_code")
 
 
+@dataclass(frozen=True)
+class InventoryIgnorePolicy:
+    use_default_ignores: bool
+    mandatory_patterns: tuple[str, ...]
+    convenience_patterns: tuple[str, ...]
+    custom_patterns: tuple[str, ...]
+
+    @property
+    def effective_patterns(self) -> list[str]:
+        patterns = [*self.mandatory_patterns]
+        if self.use_default_ignores:
+            patterns.extend(self.convenience_patterns)
+        patterns.extend(self.custom_patterns)
+        return list(dict.fromkeys(patterns))
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "use_default_ignores": self.use_default_ignores,
+            "mandatory_patterns": list(self.mandatory_patterns),
+            "convenience_patterns": (
+                list(self.convenience_patterns) if self.use_default_ignores else []
+            ),
+            "custom_patterns": list(self.custom_patterns),
+            "effective_patterns": self.effective_patterns,
+        }
+
+
 def command_files_inventory(args: Any) -> None:
     local_root = Path(args.local_root).resolve() if args.local_root else None
     project_root = Path(args.project_root) if getattr(args, "project_root", None) else None
-    local_ignore_patterns = files_inventory_ignore_patterns(project_root)
+    active_output_dir = (
+        Path(args.output_dir).resolve() if getattr(args, "output_dir", None) else None
+    )
+    ignore_policy = files_inventory_ignore_policy(
+        project_root,
+        local_root=local_root,
+        active_output_dir=active_output_dir,
+    )
     canvas = canvas_from_args(args)
     course = canvas.get_course(args.course_id)
 
     inventory = build_file_inventory(
         course,
         local_root=local_root,
-        local_ignore_patterns=local_ignore_patterns,
+        local_ignore_patterns=ignore_policy.effective_patterns,
+        local_ignore_policy=ignore_policy.as_dict(),
     )
     explicit_output_dir = bool(getattr(args, "output_dir", None))
     report_root = getattr(args, "report_root", None)
@@ -585,13 +625,20 @@ def build_file_inventory(
     local_root: Path | None = None,
     *,
     local_ignore_patterns: list[str] | None = None,
+    local_ignore_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     folders = list(course.get_folders())
     folders_by_id = {int(folder.id): folder for folder in folders if getattr(folder, "id", None)}
     canvas_rows = [
         canvas_file_record(file_obj, folders_by_id) for file_obj in course.get_files()
     ]
-    effective_ignore_patterns = local_ignore_patterns or default_inventory_ignore_patterns()
+    effective_ignore_patterns = (
+        default_inventory_ignore_patterns()
+        if local_ignore_patterns is None
+        else list(local_ignore_patterns)
+    )
+    if local_ignore_policy is None:
+        local_ignore_policy = default_inventory_ignore_policy().as_dict()
     local_rows = (
         local_files(local_root, ignore_patterns=effective_ignore_patterns)
         if local_root
@@ -621,6 +668,7 @@ def build_file_inventory(
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "local_root": str(local_root) if local_root else "",
         "local_ignore_patterns": effective_ignore_patterns if local_root else [],
+        "local_ignore_policy": local_ignore_policy,
         "local_files_compared": len(local_rows),
         "canvas_files": canvas_rows,
         "comparison": comparison_rows,
@@ -1199,7 +1247,9 @@ def canvas_file_record(file_obj: Any, folders_by_id: dict[int, Any]) -> dict[str
 
 
 def local_files(root: Path, *, ignore_patterns: list[str] | None = None) -> list[dict[str, Any]]:
-    ignore_patterns = ignore_patterns or default_inventory_ignore_patterns()
+    ignore_patterns = (
+        default_inventory_ignore_patterns() if ignore_patterns is None else ignore_patterns
+    )
     rows = []
     for path in root.rglob("*"):
         if not path.is_file() or should_skip_local(path, root, ignore_patterns=ignore_patterns):
@@ -1248,14 +1298,45 @@ def csv_inventory_value(row: dict[str, Any], key: str) -> Any:
 
 
 def default_inventory_ignore_patterns() -> list[str]:
-    return list(DEFAULT_INVENTORY_IGNORE_PATTERNS)
+    return default_inventory_ignore_policy().effective_patterns
+
+
+def default_inventory_ignore_policy() -> InventoryIgnorePolicy:
+    return InventoryIgnorePolicy(
+        use_default_ignores=True,
+        mandatory_patterns=tuple(MANDATORY_INVENTORY_IGNORE_PATTERNS),
+        convenience_patterns=tuple(DEFAULT_INVENTORY_IGNORE_PATTERNS),
+        custom_patterns=(),
+    )
 
 
 def files_inventory_ignore_patterns(project_root: Path | None = None) -> list[str]:
-    patterns = default_inventory_ignore_patterns()
+    return files_inventory_ignore_policy(project_root).effective_patterns
+
+
+def files_inventory_ignore_policy(
+    project_root: Path | None = None,
+    *,
+    local_root: Path | None = None,
+    active_output_dir: Path | None = None,
+) -> InventoryIgnorePolicy:
+    mandatory_patterns = list(MANDATORY_INVENTORY_IGNORE_PATTERNS)
+    if local_root is not None and active_output_dir is not None:
+        try:
+            relative_output = active_output_dir.relative_to(local_root).as_posix()
+        except ValueError:
+            pass
+        else:
+            if relative_output not in {"", "."}:
+                mandatory_patterns.append(f"{relative_output.rstrip('/')}/**")
     config_dir = find_config_dir(project_root)
     if not config_dir:
-        return patterns
+        return InventoryIgnorePolicy(
+            use_default_ignores=True,
+            mandatory_patterns=tuple(mandatory_patterns),
+            convenience_patterns=tuple(DEFAULT_INVENTORY_IGNORE_PATTERNS),
+            custom_patterns=(),
+        )
     config_path = config_dir / "config.toml"
     try:
         config = tomllib.loads(config_path.read_text(encoding="utf-8"))
@@ -1267,11 +1348,23 @@ def files_inventory_ignore_patterns(project_root: Path | None = None) -> list[st
     inventory_config = files_config.get("inventory") or {}
     if not isinstance(inventory_config, dict):
         raise SystemExit("[files.inventory] must be a TOML table.")
+    allowed_keys = {"use_default_ignores", "ignore"}
+    unknown_keys = sorted(set(inventory_config) - allowed_keys)
+    if unknown_keys:
+        raise SystemExit(f"Unknown file inventory key: [files.inventory].{unknown_keys[0]}")
+    use_default_ignores = inventory_config.get("use_default_ignores", True)
+    if not isinstance(use_default_ignores, bool):
+        raise SystemExit("files.inventory.use_default_ignores must be true or false.")
     custom = inventory_ignore_patterns_from_config(
         inventory_config.get("ignore"),
         label="files.inventory.ignore",
     )
-    return patterns + [pattern for pattern in custom if pattern not in patterns]
+    return InventoryIgnorePolicy(
+        use_default_ignores=use_default_ignores,
+        mandatory_patterns=tuple(mandatory_patterns),
+        convenience_patterns=tuple(DEFAULT_INVENTORY_IGNORE_PATTERNS),
+        custom_patterns=tuple(custom),
+    )
 
 
 def inventory_ignore_patterns_from_config(value: Any, *, label: str) -> list[str]:
@@ -1285,6 +1378,8 @@ def inventory_ignore_patterns_from_config(value: Any, *, label: str) -> list[str
         raise SystemExit(f"{label} must be a string or list of strings.")
     normalized = []
     for pattern in patterns:
+        if not pattern:
+            raise SystemExit(f"{label} patterns must not be empty.")
         pattern_path = Path(pattern)
         if pattern_path.is_absolute() or ".." in pattern_path.parts:
             raise SystemExit(f"{label} patterns must be relative paths inside the course root.")
@@ -1300,18 +1395,12 @@ def should_skip_local(
 ) -> bool:
     rel = path.relative_to(root)
     relative = rel.as_posix()
-    if matches_inventory_ignore(relative, ignore_patterns or default_inventory_ignore_patterns()):
+    effective_patterns = (
+        default_inventory_ignore_patterns() if ignore_patterns is None else ignore_patterns
+    )
+    if matches_inventory_ignore(relative, effective_patterns):
         return True
-    if path.name in GENERATED_INVENTORY_NAMES:
-        return True
-    if path.name == ".DS_Store":
-        return True
-    if any(part.startswith(".") for part in rel.parts):
-        return True
-    if any(part in EXCLUDED_LOCAL_PARTS for part in rel.parts):
-        return True
-    parts = rel.parts
-    return len(parts) >= 3 and parts[0] == "_archive" and parts[2] == "grading"
+    return any(part in MANDATORY_INVENTORY_PARTS for part in rel.parts)
 
 
 def matches_inventory_ignore(relative_path: str, patterns: list[str]) -> bool:
@@ -1349,6 +1438,11 @@ def write_missing_report(output: Path, inventory: dict[str, Any]) -> None:
     missing_by_folder = Counter(row["folder_full_name"] or "(no folder)" for row in missing)
 
     course = inventory.get("course", {})
+    ignore_policy = inventory.get("local_ignore_policy") or {}
+    defaults_status = (
+        "enabled" if ignore_policy.get("use_default_ignores", True) else "disabled"
+    )
+    effective_patterns = ignore_policy.get("effective_patterns") or []
     course_label = course.get("name") or course.get("course_code") or course.get("id") or ""
     lines = [
         "# Canvas Files Inventory",
@@ -1363,7 +1457,11 @@ def write_missing_report(output: Path, inventory: dict[str, Any]) -> None:
         f"- Ambiguous local filename matches: `{len(ambiguous)}`",
         f"- Missing locally by filename: `{len(missing)}`",
         "",
-        "Local comparison excludes generated `_inventory` output, grading folders, hidden files, and student-response grading archives.",
+        "## Local Ignore Policy",
+        "",
+        f"- Convenience defaults: `{defaults_status}`",
+        f"- Effective patterns: `{len(effective_patterns)}`",
+        *[f"  - `{pattern}`" for pattern in effective_patterns],
         "",
         "## Canvas Folder Summary",
         "",

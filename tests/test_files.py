@@ -15,6 +15,7 @@ from danvas.files import (
     command_files_upload,
     content_type_for,
     download_relative_path,
+    files_inventory_ignore_policy,
     local_files,
     plan_upload_rows,
     scrub_sensitive_upload_payload,
@@ -242,6 +243,8 @@ def test_command_files_inventory_uses_configured_local_ignore(
     assert statuses["case.pdf"] == "present_by_name_and_size"
     assert statuses["missing.pdf"] == "missing"
     assert "scratch/**" in inventory["local_ignore_patterns"]
+    assert inventory["local_ignore_policy"]["use_default_ignores"] is True
+    assert inventory["local_ignore_policy"]["custom_patterns"] == ["scratch/**"]
     assert inventory["local_files_compared"] == 1
 
 
@@ -267,6 +270,57 @@ def test_command_files_inventory_rejects_unsafe_ignore_pattern(
 
     with pytest.raises(SystemExit, match="files.inventory.ignore patterns"):
         command_files_inventory(args)
+
+
+@pytest.mark.parametrize(
+    ("inventory_toml", "message"),
+    [
+        ("use_default_ignores = 'false'", "must be true or false"),
+        ("ignroe = ['scratch/**']", r"\[files.inventory\].ignroe"),
+        ("ignore = ['']", "must not be empty"),
+    ],
+)
+def test_inventory_policy_rejects_invalid_configuration_before_canvas(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    inventory_toml: str,
+    message: str,
+) -> None:
+    (tmp_path / ".danvas").mkdir()
+    (tmp_path / ".danvas/config.toml").write_text(
+        f"[canvas]\ncourse_id = 101\n\n[files.inventory]\n{inventory_toml}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "danvas.files.canvas_from_args",
+        lambda args: pytest.fail("Canvas context must not be constructed"),
+    )
+    args = SimpleNamespace(
+        course_id=101,
+        project_root=str(tmp_path),
+        output_dir=str(tmp_path / "inventory"),
+        local_root=str(tmp_path),
+        no_report=False,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit, match=message):
+        command_files_inventory(args)
+
+
+def test_inventory_policy_makes_active_output_mandatory(tmp_path: Path) -> None:
+    output_dir = tmp_path / "generated" / "inventory"
+
+    policy = files_inventory_ignore_policy(
+        tmp_path,
+        local_root=tmp_path,
+        active_output_dir=output_dir,
+    )
+
+    assert "generated/inventory/**" in policy.mandatory_patterns
+    assert "generated/inventory/**" in policy.effective_patterns
 
 
 def test_write_missing_report_summarizes_missing_files(tmp_path: Path) -> None:
