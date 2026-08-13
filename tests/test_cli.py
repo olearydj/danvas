@@ -37,6 +37,11 @@ def option_names(*path: str) -> set[str]:
     return names
 
 
+def normalized_cli_output(result: object) -> str:
+    """Compare Rich CLI errors independent of ANSI styling and terminal wrapping."""
+    return " ".join(click.unstyle(str(getattr(result, "output", ""))).split())
+
+
 def write_report_manifest(
     path: Path,
     *,
@@ -905,8 +910,9 @@ def test_group_2_mutation_flag_conflicts_fail_before_context_resolution(
     )
 
     assert result.exit_code != 0
-    assert "--dry-run and --apply cannot be combined" in result.output
-    assert "context resolved" not in result.output
+    output = normalized_cli_output(result)
+    assert "--dry-run and --apply cannot be combined" in output
+    assert "context resolved" not in output
 
 
 @pytest.mark.parametrize(
@@ -935,8 +941,9 @@ def test_confirmation_without_apply_fails_before_context_resolution(
     )
 
     assert result.exit_code != 0
-    assert "--confirm requires --apply" in result.output
-    assert "context resolved" not in result.output
+    output = normalized_cli_output(result)
+    assert "--confirm requires --apply" in output
+    assert "context resolved" not in output
 
 
 def test_override_live_alias_warns_and_normalizes_to_apply(
@@ -1014,8 +1021,9 @@ def test_override_live_alias_cannot_bypass_confirmation(
     )
 
     assert result.exit_code != 0
-    assert "--apply requires --confirm apply" in result.output
-    assert "context resolved" not in result.output
+    output = normalized_cli_output(result)
+    assert "--apply requires --confirm apply" in output
+    assert "context resolved" not in output
 
 
 def test_announcements_verify_cli_options_and_args(
