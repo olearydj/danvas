@@ -37,7 +37,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 - create assignments in Canvas
   - Markdown body with YAML (`---`) or TOML (`+++`) front matter
   - supports Canvas assignment metadata fields
-  - dry-run mode to inspect payload before creating
+  - plans by default; `--apply` authorizes the reviewed Canvas change
   - safely plans, uploads or reuses, rewrites, and verifies relative document and image assets
   - leaves authored Markdown unchanged and records immediate file provenance for safe retries
   - verify every declared supported field, exact embedded Canvas file IDs, and current-course file existence
@@ -53,11 +53,13 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 - upload feedback
   - upload per-student feedback files as Canvas submission comments
   - match files to students by embedded Canvas user ID
-  - dry-run mode to preview matched and unmatched files
+  - plan by default, block all unmatched files, and require `--apply`
+  - checkpoint every applied row and stop after unsafe or uncertain readback
 
 - grade submissions
   - post grades from CSV
   - optional text comments from CSV
+  - plan by default and require `--apply` before changing Canvas
   - online baseline preflight, expected-current-grade checks, comment/delta checks, and automatic rollback artifacts
   - append or replace exact instructor-owned comments and safely clear targeted grades/comments
   - classify every live row from authoritative readback as verified, unchanged failure, partial, unverified, indeterminate, or not attempted
@@ -91,12 +93,12 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - sync missing Canvas discussion prompts into local Markdown sources without overwriting
   - score discussions by original post count and response count
   - configurable points and caps
-  - private CSV grade plan with aggregate-only terminal output
-  - optional upload to graded discussion assignment
+  - private `grades post`-compatible CSV plan with expected-current-grade guards
+  - aggregate-only terminal output and no direct grade-upload path
 
 - export announcements
   - create announcements from Markdown with front matter
-  - dry-run mode to inspect the Canvas discussion-topic payload before creating
+  - plan create/update by default and require `--apply` to write Canvas
   - export the latest Canvas announcement as Markdown or JSON
   - sync missing Canvas announcements into local Markdown sources without overwriting
   - verify one local announcement source against Canvas by stable ID
@@ -112,7 +114,8 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - compares one Canvas file's metadata to one local file by file ID or exact Canvas path
   - can compare SHA-256 checksums against a supplied downloaded Canvas file
   - downloads exactly one Canvas file to an explicit output path
-  - upload dry-runs classify `would_create`, `would_overwrite`, `would_rename`, or conflict from one destination listing
+  - upload plans classify create, overwrite, rename, or conflict from the destination listing
+  - duplicate names block by default; overwrite/rename require explicit policy and `--apply`
   - live uploads return the final Canvas ID/path and a generated stable course-file URL without retaining download/verifier URLs
   - downloads Canvas Files into a local folder tree with a manifest
 
@@ -123,9 +126,9 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
 
 - upload grades
   - assignment grades from CSV
-  - discussion scores to the associated graded discussion assignment
+  - discussion score plans consumed by the same grade transaction
   - optional submission comments
-  - dry-run mode before live Canvas writes
+  - plan by default; `--apply` captures rollback, writes, and reads back
 
 - analyze Canvas quiz/survey exports
   - parse Classic Quiz / Survey student-analysis CSV files
@@ -137,7 +140,7 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - polls the migration to completion and reports failures
   - applies quiz shell settings: dates, publish state, time limit, attempts, assignment group
   - verifies the resulting Canvas quiz settings and exits nonzero on mismatch
-  - dry-run mode shows the package and settings before any Canvas write
+  - plan mode shows the package and settings; `--apply` authorizes import
 
 ## Command Tree
 
@@ -403,7 +406,9 @@ integrity sidecar; standalone JSON embeds classification metadata. Routine
 terminal output is count-first and does not repeat student rows.
 
 See [the 0.16.0 migration guide](docs/migrations/0.16.0.md) for the complete
-command inventory and compatibility changes.
+private-output inventory and compatibility changes. See
+[the 0.17.0 migration guide](docs/migrations/0.17.0.md) before upgrading
+automation that can change Canvas.
 
 Refresh the generated snapshot without changing Canvas; `--diff` summarizes what
 changed since the previous snapshot:
@@ -622,32 +627,37 @@ danvas assignments export --course-id 101 --output assignments.json
 danvas assignments export --course-id 101 --output assignments-full.json --full
 danvas assignments export --course-id 101 --output assignments.csv
 danvas assignments export --course-id 101 --output assignments-md --format markdown
-danvas assignments create --course-id 101 assignments/hw1.md --dry-run
+danvas assignments create --course-id 101 assignments/hw1.md
+danvas assignments create --course-id 101 assignments/hw1.md --apply
 danvas assignments verify --course-id 101 assignments/hw1.md
-danvas assignments update --course-id 101 assignments/hw1.md --dry-run
-danvas assignments upsert --course-id 101 assignments/hw1.md --dry-run
-danvas assignments upsert --course-id 101 assignments/hw1.md --confirm update
-danvas assignments update --course-id 101 content/assignments/case.md \
-  --project-root . --asset-folder "course files/case-resources" --dry-run
+danvas assignments update --course-id 101 assignments/hw1.md
+danvas assignments upsert --course-id 101 assignments/hw1.md
+danvas assignments upsert --course-id 101 assignments/hw1.md \
+  --apply --confirm update
 danvas assignments update --course-id 101 content/assignments/case.md \
   --project-root . --asset-folder "course files/case-resources"
+danvas assignments update --course-id 101 content/assignments/case.md \
+  --project-root . --asset-folder "course files/case-resources" --apply
 danvas assignments audit assignments-full.json --course-yaml course.yaml
 danvas assignments overrides --course-id 101 --assignment-id 202
 danvas assignments overrides-sync --course-id 101 assignments/hw1.md
 danvas assignments overrides-sync --course-id 101 assignments/hw1.md \
-  --live --confirm apply
+  --apply --confirm apply
 
 # Submissions and feedback
 danvas submissions export --course-id 101 --assignment-id 202
 danvas submissions grades --course-id 101 --assignment-id 202
 danvas submissions media --course-id 101 --assignment-id 202
 danvas submissions feedback --course-id 101 --assignment-id 202 \
-  --roster roster.csv --feedback-dir feedback --pattern "*-feedback.pdf" --dry-run
+  --roster roster.csv --feedback-dir feedback --pattern "*-feedback.pdf"
+danvas submissions feedback --course-id 101 --assignment-id 202 \
+  --roster roster.csv --feedback-dir feedback --pattern "*-feedback.pdf" --apply
 
 # Grades
-danvas grades post --course-id 101 --assignment-id 202 --grades-csv grades.csv --dry-run
+danvas grades post --course-id 101 --assignment-id 202 --grades-csv grades.csv
+danvas grades post --course-id 101 --assignment-id 202 --grades-csv grades.csv --apply
 danvas grades comments --course-id 101 --assignment-id 202 --canvas-id 303
-danvas grades clear --course-id 101 --assignment-id 202 --grades-csv rollback.csv --dry-run
+danvas grades clear --course-id 101 --assignment-id 202 --grades-csv rollback.csv
 danvas grades verify --course-id 101 --assignment-id 202 --grades-csv grades.csv
 danvas gradebook check final-canvas-gradebook.csv --course-yaml course.yaml
 danvas gradebook audit final-canvas-gradebook.csv --course-yaml course.yaml \
@@ -659,29 +669,32 @@ danvas quiz analysis student-analysis.csv --answer-term "which version" --answer
 
 # Quiz import (Classic Quizzes via QTI)
 danvas quiz import-qti chap07.zip --course-id 101 \
-  --due-at 2026-06-20T04:59:00Z --publish --dry-run
+  --due-at 2026-06-20T04:59:00Z --publish
 danvas quiz import-qti chap07.zip --course-id 101 \
-  --due-at 2026-06-20T04:59:00Z --publish --output quiz-import-report.json
+  --due-at 2026-06-20T04:59:00Z --publish --output quiz-import-report.json --apply
 
 # Discussions
 danvas discussions export https://canvas.example.edu/courses/101/discussion_topics/404 \
   --output discussion.json
 danvas discussions sync-prompts --course-id 101 --output-dir content/discussions --dry-run
 danvas discussions create --course-id 101 content/discussions/unit-4.md \
-  --seed-replies --dry-run
+  --seed-replies
+danvas discussions create --course-id 101 content/discussions/unit-4.md \
+  --seed-replies --apply
 danvas discussions verify --course-id 101 content/discussions/unit-4.md
 danvas discussions update --course-id 101 content/discussions/unit-4.md \
-  --body-only --dry-run
+  --body-only
 danvas discussions score https://canvas.example.edu/courses/101/discussion_topics/404 \
   2 2 3 2 --output discussion-scores.csv
 
 # Announcements
-danvas announcements create --course-id 101 announcements/welcome.md --dry-run
+danvas announcements create --course-id 101 announcements/welcome.md
+danvas announcements create --course-id 101 announcements/welcome.md --apply
 danvas announcements export --course-id 101 --output announcements.md
 danvas announcements latest --course-id 101 --format markdown
 danvas announcements sync --course-id 101 --output-dir content/announcements --dry-run
 danvas announcements verify --course-id 101 content/announcements/001-update.md
-danvas announcements update --course-id 101 content/announcements/001-update.md --dry-run
+danvas announcements update --course-id 101 content/announcements/001-update.md
 
 # Pages
 danvas pages sync --course-id 101 --output-dir content/pages --dry-run
@@ -689,8 +702,9 @@ danvas pages sync --course-id 101 --output-dir content/pages --page-id 123 --dry
 danvas pages export --course-id 101 --page-id 123 --format markdown --output /tmp/page.md
 danvas pages render content/pages/resources.md --output -
 danvas pages css-check content/pages/resources.canvas.css --source content/pages/resources.md
-danvas pages create --course-id 101 content/pages/resources.md --dry-run
-danvas pages update --course-id 101 content/pages/resources.md --page-id resources --dry-run
+danvas pages create --course-id 101 content/pages/resources.md
+danvas pages create --course-id 101 content/pages/resources.md --apply
+danvas pages update --course-id 101 content/pages/resources.md --page-id resources
 danvas pages verify --course-id 101 content/pages/resources.md --page-id resources
 
 # Local source lint (no Canvas authentication)
@@ -701,9 +715,10 @@ danvas sources lint content/pages/*.md --format json --output .danvas/source-lin
 danvas files inventory --course-id 101 --local-root .
 danvas files inventory --course-id 101 --output-dir .danvas/files-inventory --local-root .
 danvas files upload --course-id 101 --folder "course files/slides" \
-  --dry-run content/slides/example.pptx
+  content/slides/example.pptx
 danvas files upload --course-id 101 --folder-id 505 \
-  --on-duplicate overwrite --output .danvas/uploaded-files.json content/slides/example.pptx
+  --on-duplicate overwrite --output .danvas/uploaded-files.json \
+  content/slides/example.pptx --apply
 danvas files compare --course-id 101 --file-id 606 \
   --local content/slides/example.pptx
 danvas files compare --course-id 101 \
@@ -747,9 +762,11 @@ identities without repeating the destination option. Create, update, upsert,
 and verify fail closed for unresolved, unsafe, stale, or cross-course assets,
 while the authored Markdown remains unchanged.
 
-`files upload --dry-run` reads the resolved folder and records whether each file
-would be created, overwritten, or renamed. This is point-in-time evidence;
-Canvas's live result remains authoritative. Live rows record separate
+`files upload` plan mode reads the resolved folder and records whether each file
+would be created, overwritten, renamed, or blocked. Duplicate names block by
+default; `--on-duplicate overwrite` and `rename` are explicit policies that
+still require `--apply`. Planning is point-in-time evidence; Canvas's applied
+result remains authoritative. Apply rows record separate
 `mutation_status` and `evidence_status` values. A successful row always retains
 its `canvas_id` and `canvas_path`; when the configured Canvas origin is valid it
 also provides a reusable `canvas_url` such as
@@ -761,11 +778,12 @@ incomplete, the row remains truthfully uploaded and warns not to retry it.
 Roster exports include:
 
 ```text
-CanvasID,Name,Email,SIS_ID
+CanvasID,Name,LoginID,SIS_ID
 ```
 
-The `Email` column is populated from Canvas `login_id`; in many courses that is
-an email address, but it should be treated as the Canvas login identifier.
+The `LoginID` column is populated from Canvas `login_id`; in many courses that
+is an email address, but it should be treated as the Canvas login identifier.
+`--schema legacy-v1` temporarily retains the old `Email` header.
 
 Grade uploads require `CanvasID` and `Grade`; `Name` and `Comment` are optional:
 
@@ -781,21 +799,23 @@ success after silently omitting malformed input intent.
 
 ## Safety
 
-Use `--dry-run` before commands that write to Canvas:
+Commands that can change Canvas plan by default. Review the plan, then repeat
+the invocation with `--apply` to authorize the write. `--dry-run` is an
+explicit compatibility spelling for plan mode; it cannot be combined with
+`--apply`.
 
 ```bash
-danvas assignments create ... --dry-run
-danvas assignments update ... --dry-run
-danvas assignments upsert ... --dry-run
-danvas announcements update ... --dry-run
-danvas pages create ... --dry-run
-danvas pages update ... --dry-run
-danvas submissions feedback ... --dry-run
-danvas grades post ... --dry-run
-danvas discussions score ... --dry-run
-danvas quiz import-qti ... --dry-run
-danvas files upload ... --dry-run
+danvas assignments update SOURCE
+danvas assignments update SOURCE --apply
+
+danvas grades post --assignment-id 202 --grades-csv grades.csv
+danvas grades post --assignment-id 202 --grades-csv grades.csv --apply
 ```
+
+Assignment upsert additionally requires `--confirm create` or
+`--confirm update`, matching the plan. Override reconciliation requires
+`--confirm apply`. `discussions score` never writes grades; it emits a private
+CSV for the `grades post` transaction.
 
 `grades post --dry-run` reads the current Canvas state and validates the full
 patch without writing. Use `--offline-preview` only when authentication is

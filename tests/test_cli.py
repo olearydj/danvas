@@ -426,6 +426,13 @@ def test_help_renders_without_error() -> None:
         assert result.exit_code == 0, argv
 
 
+def test_root_help_states_plan_apply_boundary() -> None:
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "Canvas-changing commands plan by default and require --apply." in result.output
+
+
 def test_quiz_import_qti_defines_expected_options() -> None:
     options = option_names("quiz", "import-qti")
     report_options = {

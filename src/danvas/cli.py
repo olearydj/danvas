@@ -114,6 +114,7 @@ app = typer.Typer(
         "Unified Canvas operations CLI.\n\n"
         "Use this for day-to-day course work: discover courses, export rosters, "
         "create or audit assignments, move submission files, post grades, and score discussions. "
+        "Canvas-changing commands plan by default and require --apply. "
         "It intentionally does not manage archival ledger/history data."
     ),
     rich_markup_mode="rich",
