@@ -1,8 +1,10 @@
 # Mutation And Evidence Reconciliation
 
-Status: proposed Sprint 20 specification for `0.17.0`. This document records
-the implementation contract for independent review. No Sprint 20 code or live
-Canvas mutation is authorized by accepting the proposal.
+Status: accepted Sprint 20 specification for `0.17.0`. Independent design
+review on 2026-08-13 returned accept-with-edits; the accepted residual
+automation risk and all requested flag, enforcement, migration, and follow-up
+clarifications are incorporated below. No live Canvas mutation is authorized
+by accepting the proposal.
 
 ## Outcome
 
@@ -233,6 +235,14 @@ same private grade plan as omission, then exits nonzero with the replacement
 interpret plan generation as a successful grade upload. The option may be
 removed in `0.18.0` after one migration release.
 
+`discussions score --dry-run` remains an explicit, harmless spelling for its
+only behavior: generate the private plan without mutating Canvas. It exits `0`
+when the plan is ready and does not emit a deprecation warning.
+`--sleep-seconds` is removed from this command in `0.17.0`, because pacing
+belonged only to the removed direct uploader; retaining an inert option would
+make the help surface untruthful. Pacing for the generated plan is supplied to
+the subsequent `grades post` command instead.
+
 ## Plan Contract
 
 Every plan records enough information to review the proposed action and to
@@ -437,9 +447,28 @@ The guide leads with the thirteen commands whose bare invocation changes from
 Canvas mutation to planning. It separately explains override sync, assignment
 upsert, discussion scoring, and all four local-write dry-run commands.
 
+The override-sync row must show that `--confirm apply` without `--live` changes
+from a successful planning invocation in `0.16.0` to an actionable nonzero
+error without `--apply` in `0.17.0`. The upsert row must likewise show that
+either `--confirm create` or `--confirm update` without `--apply` exits nonzero.
+The feedback row names unmatched files becoming blockers rather than the
+`0.16.0` behavior of reporting them and continuing.
+
 Automation migration examples must treat a successful plan as a plan, not a
 successful mutation. Scripts that intend writes add `--apply` and verify the
 result artifact/status rather than relying only on process exit.
+
+The guide includes an explicit shell-automation example for
+`discussions score --upload`: its new nonzero exit means "grade plan generated;
+direct upload removed," not plan-generation failure. The replacement workflow
+checks the generated artifact, runs `grades post` to preflight it, and invokes
+`grades post --apply` only after review.
+
+One residual risk is accepted deliberately: a legacy script that invokes one of
+the thirteen flipped commands bare will now plan and exit `0`, so automation
+that checks only the exit code sees success without the mutation it intended.
+That failure direction is a safe no-op rather than an unauthorized write, and
+the migration guide must state it explicitly rather than leave it implied.
 
 No compatibility mode, environment variable, project configuration, or profile
 may globally restore mutation-on-omission.
@@ -452,7 +481,12 @@ may globally restore mutation-on-omission.
 2. Strengthen access and retained-output architecture tests to exact equality.
 3. Add CLI characterization tests for all 20 current `dry_run` commands and all
    16 Canvas mutation entry points before changing defaults.
-4. Pin the current additional guards, local-write behavior, and legacy options.
+4. Add an AST/source-scan architecture test that inventories Canvas mutation
+   primitives and raw upload POSTs by exact call site. Every site must be an
+   allowlisted wrapper or be dominated by the common pre-write assertion; stale
+   and newly unclassified call sites fail the gate.
+5. Pin the current additional guards, local-write behavior, and legacy options,
+   including both upsert confirmation values without apply.
 
 This group is a gate: no default flips until the independent inventory can
 detect an omitted command.
@@ -503,6 +537,9 @@ or Sprint 22 agent-interface work into this release.
   `--dry-run`; no local-only, read-only, sync, download, or scoring command
   exposes `--apply`.
 - Every runtime Canvas write passes the common pre-write assertion.
+- A source-scan inventory covers CanvasAPI create/edit/upload mutation methods,
+  nested asset uploads, and raw upload-URL POSTs; its exact call-site set cannot
+  gain or lose an entry silently.
 - Direct `resolve_api_key` call sites are bounded and always pass
   `secret_name` explicitly.
 
@@ -513,6 +550,8 @@ or Sprint 22 agent-interface work into this release.
 - Explicit `--dry-run` performs zero Canvas writes.
 - `--apply --dry-run` fails before auth and output.
 - `--confirm` without `--apply` never mutates and exits nonzero.
+- Upsert tests cover both `--confirm create` and `--confirm update` without
+  `--apply`; override sync covers `--confirm apply` without `--apply`.
 - The override `--live` alias cannot bypass confirmation or combine with the
   new flags.
 - All four local-write dry-run commands retain their `0.16.0` behavior and do
@@ -540,6 +579,8 @@ or Sprint 22 agent-interface work into this release.
   current grades and never calls a grade mutation method.
 - `--upload` creates the plan, exits nonzero, and prints the replacement command
   without private row data.
+- Discussion `--dry-run` remains a successful explicit plan spelling, while
+  removed `--sleep-seconds` is rejected by command parsing.
 - Feedback dry-run then apply uses distinct no-clobber artifacts, reads back
   each attempted row, and stops after the first unsafe outcome.
 - Notification-bearing plans show all supplied visibility, schedule, and

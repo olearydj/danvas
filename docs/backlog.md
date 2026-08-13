@@ -1622,6 +1622,11 @@ program temporarily supersedes the prior feature order:
 3. Revisit the Page asset adapter and grouped-case setup after the readiness
    program, based on concrete workflow demand.
 
+Named post-Sprint 20 maintenance: resolve interrupted Panopto caption-bundle
+restart behavior. Sprint 19 deliberately retained unique-name recovery after
+an interrupted run; Sprint 20 keeps it out of scope. Sprint 21 must either own
+the contract or assign it explicitly to a later maintenance release.
+
 Sprint 10 was selected because items 6 and 10 are two halves of the
 same operational guarantee: a grade-posting run must state exactly what Canvas
 accepted and whether the targeted students can see the resulting grades. The
