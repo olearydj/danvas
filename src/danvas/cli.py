@@ -1689,8 +1689,7 @@ def quiz_analysis(
 @quiz_app.command(
     "import-qti",
     help=(
-        "Import a QTI zip as a Classic Quiz, poll the migration to completion, "
-        "apply quiz settings, and verify the result."
+        "Plan a QTI Classic Quiz import, or apply it with --apply and verify the result."
     ),
 )
 def quiz_import_qti(
@@ -1739,10 +1738,8 @@ def quiz_import_qti(
     timeout_seconds: Annotated[
         float, typer.Option("--timeout-seconds", help="Maximum time to wait for the migration.")
     ] = 600.0,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Show the package and settings without importing."),
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Optional JSON verification report path."),
@@ -1784,7 +1781,7 @@ def quiz_import_qti(
             match_title=match_title,
             poll_seconds=poll_seconds,
             timeout_seconds=timeout_seconds,
-            dry_run=dry_run,
+            **mutation_args_from_cli(dry_run=dry_run, apply=apply),
             output=str(output) if output else None,
             no_report=no_report,
             report_root=str(report_root) if report_root else None,
@@ -2058,10 +2055,8 @@ def grades_post(
         ),
     ],
     course_id: CourseId = None,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Read Canvas and preflight rows without posting."),
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     offline_preview: Annotated[
         bool,
         typer.Option("--offline-preview", help="Print CSV rows without contacting Canvas."),
@@ -2114,7 +2109,7 @@ def grades_post(
             course_id=course_id,
             assignment_id=assignment_id,
             grades_csv=str(grades_csv),
-            dry_run=dry_run,
+            **mutation_args_from_cli(dry_run=dry_run, apply=apply),
             offline_preview=offline_preview,
             expected_assignment_title=expected_assignment_title,
             rollback_dir=str(rollback_dir) if rollback_dir else None,
@@ -2149,10 +2144,8 @@ def grades_clear(
         ),
     ],
     course_id: CourseId = None,
-    dry_run: Annotated[
-        bool,
-        typer.Option("--dry-run", help="Preflight current grade/comment state without writes."),
-    ] = False,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
     expected_assignment_title: Annotated[
         str | None,
         typer.Option(
@@ -2201,7 +2194,7 @@ def grades_clear(
             course_id=course_id,
             assignment_id=assignment_id,
             grades_csv=str(grades_csv),
-            dry_run=dry_run,
+            **mutation_args_from_cli(dry_run=dry_run, apply=apply),
             expected_assignment_title=expected_assignment_title,
             rollback_dir=str(rollback_dir) if rollback_dir else None,
             sleep_seconds=sleep_seconds,

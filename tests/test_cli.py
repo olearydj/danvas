@@ -239,6 +239,8 @@ def test_grade_commands_expose_private_report_options_and_forward_args(
     assert captured["project_root"] == str(tmp_path)
     assert captured["no_report"] is False
     assert captured["report_dir"] == str(report_dir)
+    assert captured["dry_run"] is True
+    assert captured["mutation_mode"] == "plan"
     expected = {
         "--project-root",
         "--no-report",
@@ -434,7 +436,7 @@ def test_quiz_import_qti_defines_expected_options() -> None:
         "--report-slug",
     }
 
-    assert {"--match-title", "--dry-run", "--no-publish", "--course-id"} <= options
+    assert {"--match-title", "--dry-run", "--apply", "--no-publish", "--course-id"} <= options
     assert report_options <= options
 
 
@@ -907,6 +909,95 @@ def test_group_2_mutation_flag_conflicts_fail_before_context_resolution(
     result = runner.invoke(
         app,
         [*path, str(source), "--dry-run", "--apply"],
+    )
+
+    assert result.exit_code != 0
+    output = normalized_cli_output(result)
+    assert "--dry-run and --apply cannot be combined" in output
+    assert "context resolved" not in output
+
+
+GROUP_3_MUTATION_CLI_CASES = [
+    (("quiz", "import-qti"), "command_quiz_import_qti"),
+    (("grades", "post"), "command_grades_post"),
+    (("grades", "clear"), "command_grades_clear"),
+]
+
+
+def group_3_cli_args(path: tuple[str, str], tmp_path: Path) -> list[str]:
+    if path == ("quiz", "import-qti"):
+        package = tmp_path / "quiz.zip"
+        package.write_bytes(b"qti")
+        return [str(package), "--course-id", "101"]
+    grades_csv = tmp_path / "grades.csv"
+    grades_csv.write_text("CanvasID,Grade\n1,90\n", encoding="utf-8")
+    return ["--course-id", "101", "--assignment-id", "5", "--grades-csv", str(grades_csv)]
+
+
+@pytest.mark.parametrize(
+    ("path", "target"),
+    GROUP_3_MUTATION_CLI_CASES,
+    ids=lambda value: "-".join(value) if isinstance(value, tuple) else None,
+)
+def test_group_3_mutations_plan_when_invoked_bare(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: tuple[str, str],
+    target: str,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(f"danvas.cli.{target}", lambda args: captured.update(vars(args)))
+
+    result = runner.invoke(app, [*path, *group_3_cli_args(path, tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert captured["dry_run"] is True
+    assert captured["mutation_mode"] == "plan"
+    assert {"--dry-run", "--apply"} <= option_names(*path)
+
+
+@pytest.mark.parametrize(
+    ("path", "target"),
+    GROUP_3_MUTATION_CLI_CASES,
+    ids=lambda value: "-".join(value) if isinstance(value, tuple) else None,
+)
+def test_group_3_mutations_require_apply_for_authorization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: tuple[str, str],
+    target: str,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(f"danvas.cli.{target}", lambda args: captured.update(vars(args)))
+
+    result = runner.invoke(
+        app,
+        [*path, *group_3_cli_args(path, tmp_path), "--apply"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["dry_run"] is False
+    assert captured["mutation_mode"] == "apply"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [case[0] for case in GROUP_3_MUTATION_CLI_CASES],
+    ids=lambda value: "-".join(value),
+)
+def test_group_3_mutation_flag_conflicts_fail_before_context_resolution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: tuple[str, str],
+) -> None:
+    monkeypatch.setattr(
+        "danvas.cli.args_for",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
+    )
+
+    result = runner.invoke(
+        app,
+        [*path, *group_3_cli_args(path, tmp_path), "--dry-run", "--apply"],
     )
 
     assert result.exit_code != 0

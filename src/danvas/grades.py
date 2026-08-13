@@ -34,6 +34,11 @@ from danvas.grade_evidence import (
     write_grade_report,
     write_recovery_artifacts,
 )
+from danvas.mutation import (
+    MutationMode,
+    assert_canvas_mutation_allowed,
+    mutation_mode_from_args,
+)
 from danvas.reports import safe_error
 from danvas.utils import print_mutation_banner
 
@@ -89,6 +94,8 @@ def command_grades_post(args: Any) -> None:
         )
         return
 
+    mutation_mode = mutation_mode_from_args(args)
+    assert_canvas_mutation_allowed(mutation_mode, "grades post")
     rollback_paths = capture_grade_rollback(
         source,
         plan,
@@ -106,7 +113,13 @@ def command_grades_post(args: Any) -> None:
             "rollback_directory": rollback_paths[0].parent,
         },
     )
-    results = apply_grade_plan(assignment, plan, mode="post", sleep_seconds=args.sleep_seconds)
+    results = apply_grade_plan(
+        assignment,
+        plan,
+        mode="post",
+        mutation_mode=mutation_mode,
+        sleep_seconds=args.sleep_seconds,
+    )
     recovery_paths, recovery_error = capture_grade_recovery(
         report_run=report_run,
         source=source,
@@ -170,6 +183,8 @@ def command_grades_clear(args: Any) -> None:
         )
         return
 
+    mutation_mode = mutation_mode_from_args(args)
+    assert_canvas_mutation_allowed(mutation_mode, "grades clear")
     rollback_paths = capture_grade_rollback(
         source,
         plan,
@@ -187,7 +202,13 @@ def command_grades_clear(args: Any) -> None:
             "rollback_directory": rollback_paths[0].parent,
         },
     )
-    results = apply_grade_plan(assignment, plan, mode="clear", sleep_seconds=args.sleep_seconds)
+    results = apply_grade_plan(
+        assignment,
+        plan,
+        mode="clear",
+        mutation_mode=mutation_mode,
+        sleep_seconds=args.sleep_seconds,
+    )
     recovery_paths, recovery_error = capture_grade_recovery(
         report_run=report_run,
         source=source,
@@ -488,9 +509,11 @@ def apply_grade_plan(
     plan: dict[str, Any],
     *,
     mode: str,
+    mutation_mode: MutationMode,
     sleep_seconds: float,
 ) -> list[dict[str, Any]]:
     """Apply post/clear actions with authoritative per-effect readback."""
+    assert_canvas_mutation_allowed(mutation_mode, f"grades {mode}")
     results: list[dict[str, Any]] = []
     halted = False
     for action in plan["actions"]:
@@ -510,7 +533,7 @@ def apply_grade_plan(
         error: Exception | None = None
         phase = "mutation"
         try:
-            apply_grade_action(action, mode=mode)
+            apply_grade_action(action, mode=mode, mutation_mode=mutation_mode)
             phase = "readback"
         except Exception as exc:  # noqa: BLE001
             error = exc
@@ -560,7 +583,8 @@ def apply_grade_plan(
     return results
 
 
-def apply_grade_action(action: dict[str, Any], *, mode: str) -> None:
+def apply_grade_action(action: dict[str, Any], *, mode: str, mutation_mode: MutationMode) -> None:
+    assert_canvas_mutation_allowed(mutation_mode, f"grades {mode} action")
     submission = action["submission"]
     if mode == "post":
         kwargs: dict[str, Any] = {}
@@ -573,7 +597,12 @@ def apply_grade_action(action: dict[str, Any], *, mode: str) -> None:
             submission.edit(**kwargs)
         if action["comment_action"] == "replace_exact" and action["comment_change"]:
             action["_mutation_phase"] = "comment_replace"
-            edit_submission_comment(submission, action["target_comment"]["id"], action["comment"])
+            edit_submission_comment(
+                submission,
+                action["target_comment"]["id"],
+                action["comment"],
+                mutation_mode=mutation_mode,
+            )
         return
 
     if action["grade_change"]:
@@ -581,7 +610,11 @@ def apply_grade_action(action: dict[str, Any], *, mode: str) -> None:
         submission.edit(submission={"posted_grade": ""})
     if action.get("comment_change"):
         action["_mutation_phase"] = "comment_delete"
-        delete_submission_comment(submission, action["target_comment"]["id"])
+        delete_submission_comment(
+            submission,
+            action["target_comment"]["id"],
+            mutation_mode=mutation_mode,
+        )
 
 
 def classify_action_effects(
@@ -1077,7 +1110,14 @@ def resolve_owned_comment(
     return candidates[0]
 
 
-def edit_submission_comment(submission: Any, target_id: int, text: str) -> None:
+def edit_submission_comment(
+    submission: Any,
+    target_id: int,
+    text: str,
+    *,
+    mutation_mode: MutationMode,
+) -> None:
+    assert_canvas_mutation_allowed(mutation_mode, "grades comment edit")
     if hasattr(submission, "edit_comment"):
         submission.edit_comment(target_id, text)
         return
@@ -1089,7 +1129,10 @@ def edit_submission_comment(submission: Any, target_id: int, text: str) -> None:
     )
 
 
-def delete_submission_comment(submission: Any, target_id: int) -> None:
+def delete_submission_comment(
+    submission: Any, target_id: int, *, mutation_mode: MutationMode
+) -> None:
+    assert_canvas_mutation_allowed(mutation_mode, "grades comment delete")
     if hasattr(submission, "delete_comment"):
         submission.delete_comment(target_id)
         return

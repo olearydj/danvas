@@ -78,7 +78,7 @@ CURRENT_MUTATION_CALLS = Counter(
     }
 )
 
-GROUP_2_APPLY_COMMANDS = {
+CURRENT_APPLY_COMMANDS = {
     "assignments overrides-sync",
     "assignments create",
     "assignments update",
@@ -89,6 +89,9 @@ GROUP_2_APPLY_COMMANDS = {
     "pages update",
     "announcements create",
     "announcements update",
+    "quiz import-qti",
+    "grades post",
+    "grades clear",
 }
 
 CURRENT_MUTATION_ASSERTIONS = Counter(
@@ -109,6 +112,14 @@ CURRENT_MUTATION_ASSERTIONS = Counter(
         ("override_sync.py", "command_assignments_overrides_sync"): 1,
         ("pages.py", "command_pages_create"): 1,
         ("pages.py", "command_pages_update"): 1,
+        ("grades.py", "command_grades_post"): 1,
+        ("grades.py", "command_grades_clear"): 1,
+        ("grades.py", "apply_grade_plan"): 1,
+        ("grades.py", "apply_grade_action"): 1,
+        ("grades.py", "edit_submission_comment"): 1,
+        ("grades.py", "delete_submission_comment"): 1,
+        ("quiz_import.py", "command_quiz_import_qti"): 2,
+        ("quiz_import.py", "start_qti_migration"): 2,
     }
 )
 
@@ -229,7 +240,7 @@ def test_access_policy_category_counts_match_reviewed_inventory() -> None:
     ) == 25
     assert sum(policy.dry_run_kind is DryRunKind.LOCAL_WRITE for policy in policies) == 4
     assert sum(policy.canvas_mutation for policy in policies) == 16
-    assert sum(policy.bare_canvas_mutation for policy in policies) == 5
+    assert sum(policy.bare_canvas_mutation for policy in policies) == 2
 
 
 def test_current_dry_run_surface_and_defaults_are_characterized() -> None:
@@ -274,7 +285,7 @@ def test_canvas_mutation_call_sites_match_reviewed_baseline() -> None:
     assert canvas_mutation_calls() == CURRENT_MUTATION_CALLS
 
 
-def test_group_2_apply_surface_is_exact() -> None:
+def test_current_apply_surface_is_exact() -> None:
     actual = {
         name
         for name, command in leaf_commands().items()
@@ -285,7 +296,7 @@ def test_group_2_apply_surface_is_exact() -> None:
         )
     }
 
-    assert actual == GROUP_2_APPLY_COMMANDS
+    assert actual == CURRENT_APPLY_COMMANDS
 
 
 def test_common_pre_write_assertion_sites_match_reviewed_baseline() -> None:

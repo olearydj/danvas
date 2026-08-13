@@ -10,6 +10,11 @@ from typing import Any
 import requests
 
 from danvas.auth import canvas_from_args
+from danvas.mutation import (
+    MutationMode,
+    assert_canvas_mutation_allowed,
+    mutation_mode_from_args,
+)
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
 from danvas.status import normalize_title, values_equal
 from danvas.utils import print_mutation_banner, write_json
@@ -49,6 +54,8 @@ def command_quiz_import_qti(args: Any) -> None:
             print(f"Wrote {args.output}")
         write_quiz_import_report_run(report_run, report)
         return
+    mutation_mode = mutation_mode_from_args(args)
+    assert_canvas_mutation_allowed(mutation_mode, "quiz import-qti")
     print_mutation_banner(
         "import QTI quiz package",
         {
@@ -62,7 +69,7 @@ def command_quiz_import_qti(args: Any) -> None:
         canvas = canvas_from_args(args)
         course = canvas.get_course(args.course_id)
         existing_ids = {quiz.id for quiz in course.get_quizzes()}
-        migration = start_qti_migration(course, package)
+        migration = start_qti_migration(course, package, mutation_mode=mutation_mode)
         print(f"Created content migration {migration.id}; uploading {package.name}")
         wait_for_migration(
             course,
@@ -73,6 +80,7 @@ def command_quiz_import_qti(args: Any) -> None:
         print(f"Migration {migration.id} completed.")
         quiz = find_imported_quiz(course, existing_ids, match_title=args.match_title)
         if settings:
+            assert_canvas_mutation_allowed(mutation_mode, "quiz import-qti settings")
             quiz.edit(quiz=settings)
         report = verification_report(course, quiz.id, settings)
         report["package"] = str(package)
@@ -144,7 +152,8 @@ def quiz_settings_from_args(args: Any) -> dict[str, Any]:
     return settings
 
 
-def start_qti_migration(course: Any, package: Path) -> Any:
+def start_qti_migration(course: Any, package: Path, *, mutation_mode: MutationMode) -> Any:
+    assert_canvas_mutation_allowed(mutation_mode, "quiz import-qti migration")
     migration = course.create_content_migration(
         migration_type="qti_converter",
         pre_attachment={"name": package.name, "size": package.stat().st_size},
@@ -154,6 +163,7 @@ def start_qti_migration(course: Any, package: Path) -> Any:
     if not upload_url:
         raise SystemExit("Canvas did not return an upload URL for the QTI package.")
     with package.open("rb") as handle:
+        assert_canvas_mutation_allowed(mutation_mode, "quiz import-qti package upload")
         response = requests.post(
             upload_url,
             data=pre_attachment.get("upload_params") or {},

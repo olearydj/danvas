@@ -16,6 +16,7 @@ from danvas.grades import (
     grade_matches,
     load_grade_rows,
 )
+from danvas.mutation import MutationMode
 
 
 class FakeSubmission:
@@ -582,7 +583,7 @@ def test_edit_submission_comment_uses_canvasapi_requester_parameter_shape() -> N
         _requester=Requester(),
     )
 
-    edit_submission_comment(submission, 7, "Revised.")
+    edit_submission_comment(submission, 7, "Revised.", mutation_mode=MutationMode.APPLY)
 
     assert calls == [
         (
