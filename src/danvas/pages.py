@@ -45,6 +45,7 @@ from danvas.page_sources import (
     PAGE_METADATA_COMPARE_FIELDS as PAGE_METADATA_COMPARE_FIELDS,
 )
 from danvas.reports import create_report_run, should_write_report_run
+from danvas.source_layouts import resolve_source_output_dir
 from danvas.source_map import (
     find_source_entry,
     load_source_map,
@@ -520,8 +521,6 @@ def page_public_record(record: dict[str, Any], *, include_body: bool = False) ->
 
 
 def command_pages_sync(args: Any) -> None:
-    from danvas.source_layouts import resolve_source_output_dir
-
     root = Path(args.project_root).resolve()
     output_dir = resolve_source_output_dir(
         "page", project_root=root, explicit=getattr(args, "output_dir", None)

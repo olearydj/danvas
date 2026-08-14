@@ -33,6 +33,7 @@ from danvas.authored_content import (
 from danvas.frontmatter import markdown_to_html, normalize_canvas_value, parse_frontmatter
 from danvas.mutation import assert_canvas_mutation_allowed
 from danvas.reports import ReportRun, create_report_run, should_write_report_run
+from danvas.source_layouts import resolve_source_output_dir
 from danvas.source_map import resolve_source_canvas_id, write_source_map_entry
 from danvas.utils import (
     canvas_object_to_dict,
@@ -181,8 +182,6 @@ def command_announcements_latest(args: Any) -> None:
 
 
 def command_announcements_sync(args: Any) -> None:
-    from danvas.source_layouts import resolve_source_output_dir
-
     output_dir = resolve_source_output_dir(
         "announcement",
         project_root=Path(args.project_root) if args.project_root else Path.cwd(),
