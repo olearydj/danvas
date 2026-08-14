@@ -22,9 +22,9 @@ Sprint 23 closes the supported acquisition gap for Classic Quiz analysis:
 
 Existing QTI import and local analysis behavior are unchanged. Bounded Canvas
 field acceptance passed after correcting the report attachment lookup to use
-Canvas's global file endpoint. Release remains gated on bounded agent
-acceptance, independent exact-candidate review, and the established branch/tag
-installation gates.
+Canvas's global file endpoint. Bounded agent acceptance also passed. Release
+remains gated on independent exact-candidate review and the established
+branch/tag installation gates.
 
 See [Migrating to 0.21.0](docs/migrations/0.21.0.md).
 

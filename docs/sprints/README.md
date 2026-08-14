@@ -392,5 +392,6 @@ editable/wheel installation, dependency audit, lock validation, and redacted
 secret scans. Bounded Canvas field acceptance passed on 2026-08-14 after a
 first-attempt `404` exposed the global-versus-course report-file lookup defect;
 `25f8ae4` corrected it, and the recovery reused and verified the same stable
-report ID. The agent scenario, exact-candidate review, push, and release gates
-remain open.
+report ID. Claude Code scenario-11 acceptance then passed all applicable
+criteria with one authorized apply and no bypass attempt. Exact-candidate
+review, push, and release gates remain open.
