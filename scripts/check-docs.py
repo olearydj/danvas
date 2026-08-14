@@ -20,6 +20,7 @@ PUBLIC_MARKDOWN = (
     "docs/mutation-safety.md",
     "docs/course-yaml.md",
     "docs/migrations/0.18.0.md",
+    "docs/migrations/0.19.0.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
     "SECURITY.md",

@@ -9,6 +9,11 @@ Status: signed release `v0.18.0` is the first public beta, not a 1.0 stability
 promise. This is an unofficial project.
 It is not affiliated with or endorsed by Instructure.
 
+The current source tree is the `0.19.0` credential-boundary candidate. Its
+documentation describes the candidate interface; the install command below
+remains pinned to the latest released tag until the candidate passes release
+review.
+
 ## What It Does
 
 - initializes course projects and snapshots Canvas metadata;
@@ -68,16 +73,21 @@ default_profile = "example-university"
 [profiles.example-university]
 api_url = "https://canvas.example.edu/"
 timezone = "America/New_York"
-secret_provider = "env"
 api_key_env = "CANVAS_EXAMPLE_API_KEY"
 ```
 
 Set the referenced token without writing it into either configuration file:
 
 ```bash
-export CANVAS_EXAMPLE_API_KEY="your-canvas-token"
+read -rs CANVAS_EXAMPLE_API_KEY
+export CANVAS_EXAMPLE_API_KEY
 danvas auth doctor --profile example-university --check-canvas
+unset CANVAS_EXAMPLE_API_KEY
 ```
+
+Danvas consumes the selected variable but does not own the secret store. A
+credential file or an external runner such as SecretSpec or 1Password can
+provide the same process boundary. See [Authentication](docs/authentication.md).
 
 Initialize a course project. New projects materialize the `standard-v1` source
 layout in `.danvas/config.toml`; they do not move or create authored files.
@@ -157,6 +167,7 @@ command help for the current option surface.
 - [Mutation safety](docs/mutation-safety.md)
 - [Course policy YAML](docs/course-yaml.md)
 - [0.18.0 migration guide](docs/migrations/0.18.0.md)
+- [0.19.0 credential-boundary migration](docs/migrations/0.19.0.md)
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
@@ -174,7 +185,7 @@ uv run ruff check .
 uv run ty check
 uv run pytest --cov=danvas --cov-branch --cov-fail-under=82
 uv run python scripts/check-docs.py
-scripts/release-smoke.sh --expected-version 0.18.0
+scripts/release-smoke.sh --expected-version 0.19.0
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete local gate, safe fixture

@@ -22,14 +22,13 @@ default_profile = "example-university"
 [profiles.example-university]
 api_url = "https://canvas.example.edu/"
 timezone = "America/New_York"
-secret_name = "canvas-example-university"
-secret_provider = "env"
 api_key_env = "CANVAS_EXAMPLE_API_KEY"
 ```
 
-A profile may contain `api_url`, `timezone`, `secret_name`,
-`secret_provider`, `op_reference`, and `api_key_env`. Unknown keys, unknown
-providers, and raw secret values are rejected.
+A profile may contain `api_url`, `timezone`, and exactly one of `api_key_env`
+or `api_key_file`. The environment locator must be a portable variable name;
+the file locator must be absolute. Unknown keys and raw secret values are
+rejected.
 
 Profile selection resolves in this order:
 
@@ -46,9 +45,22 @@ The Canvas API URL resolves separately:
 4. `CANVAS_API_URL`
 
 An initialized project therefore cannot be redirected by a generic shell
-`CANVAS_API_URL`. If an explicitly selected profile names a different host than
-the project, danvas keeps the project URL and prints a warning so the operator
-can verify that the credential belongs to that instance.
+`CANVAS_API_URL`. Before reading a credential, danvas also requires the
+effective origin to match the selected profile, invocation-level `--api-url`,
+or `CANVAS_API_URL`. A mismatch is a hard error, and a project-only URL is not
+enough to authorize where a token is sent.
+
+Credential input selection resolves independently:
+
+1. `--api-key-env` or `--api-key-file`
+2. selected profile `api_key_env` or `api_key_file`
+3. `CANVAS_API_KEY_ENV` or `CANVAS_API_KEY_FILE`
+4. default environment value `CANVAS_API_KEY`
+
+Both transports at one layer are an error. Course-project `[canvas]` cannot
+contain either locator because a course repository is not trusted to select a
+credential. See [Authentication](authentication.md) for transport and origin
+details.
 
 ## Course Projects
 

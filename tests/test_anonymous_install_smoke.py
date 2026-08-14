@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "anonymous-install-smoke.sh"
-VERSION = "0.18.0"
+VERSION = "0.19.0"
 COMMIT_SHA = "0123456789abcdef0123456789abcdef01234567"
 
 
@@ -31,7 +31,7 @@ if [ "$1 $2" = "tool install" ]; then
     cat > "$UV_TOOL_BIN_DIR/danvas" <<'EOF'
 #!/bin/sh
 if [ "${1:-}" = "--version" ]; then
-    echo "danvas 0.18.0"
+    echo "danvas 0.19.0"
 fi
 exit 0
 EOF
@@ -42,7 +42,7 @@ exit "${DANVAS_TEST_QUICKSTART_EXIT:-0}"
 EOF
     chmod 755 "$UV_TOOL_DIR/danvas-cli/bin/python"
 elif [ "$1 $2" = "tool list" ]; then
-    echo "danvas-cli v0.18.0"
+    echo "danvas-cli v0.19.0"
     echo "- danvas"
     if [ "${DANVAS_TEST_LEGACY:-0}" = "1" ]; then
         echo "danvas v0.17.0"
@@ -115,19 +115,19 @@ def test_candidate_install_uses_anonymous_https_and_exact_sha(tmp_path: Path) ->
 
 
 def test_tag_install_requires_tag_matching_expected_version(tmp_path: Path) -> None:
-    result, log_path = run_smoke(tmp_path, "v0.18.0")
+    result, log_path = run_smoke(tmp_path, "v0.19.0")
 
     assert result.returncode == 0, result.stderr
-    assert "@v0.18.0" in log_path.read_text(encoding="utf-8")
+    assert "@v0.19.0" in log_path.read_text(encoding="utf-8")
 
 
 def test_floating_or_mismatched_refs_fail_before_uv(tmp_path: Path) -> None:
-    for ref in ("main", "v0.17.0", "abc123"):
+    for ref in ("main", "v0.18.0", "abc123"):
         case_root = tmp_path / ref.replace("/", "-")
         case_root.mkdir()
         result, log_path = run_smoke(case_root, ref)
         assert result.returncode == 2
-        assert "full lowercase commit SHA or v0.18.0" in result.stderr
+        assert "full lowercase commit SHA or v0.19.0" in result.stderr
         assert not log_path.exists()
 
 

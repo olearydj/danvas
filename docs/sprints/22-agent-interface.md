@@ -1,10 +1,12 @@
 # Sprint 22: Agent-Facing Help And Portable Skill
 
-Status: accepted design on 2026-08-13 after independent review. Implementation
-begins only after 0.18.0 has shipped and passed its public-beta release gates.
-This design authorizes no early implementation, skill installation, external
-plugin publication, filesystem change outside the repository, or Canvas access
-or mutation.
+Status: accepted design on 2026-08-13 after independent review and refreshed
+during Sprint 21.5 Group 3 for the provider-neutral 0.19.0 candidate surface.
+Implementation begins only after 0.19.0 has shipped and passed its
+credential-boundary release gates. This design authorizes no early
+implementation, skill
+installation, external plugin publication, filesystem change outside the
+repository, or Canvas access or mutation.
 
 ## Outcome
 
@@ -28,7 +30,7 @@ Rich terminal layout. A generic Agent Skill ships with the installed CLI and can
 be installed explicitly for common agent hosts without inheriting the
 maintainer's institution, filesystem, or private teaching workflow.
 
-The target release is 0.19.0. This is an agent-interface and documentation
+The target release is 0.20.0. This is an agent-interface and documentation
 release, not a new Canvas feature family.
 
 ## Why This Sprint Follows Public Readiness
@@ -44,11 +46,14 @@ agent-facing guide would need to teach:
   for Canvas writes, separates local-write sync behavior, and reconciles grade
   evidence; and
 - Sprint 21 / 0.18.0 generalizes source layouts, schemas, integrations,
-  packaging, and public documentation.
+  packaging, and public documentation; and
+- Sprint 21.5 / 0.19.0 makes credential delivery provider-neutral, binds
+  credentials to user-controlled Canvas origins, replaces authentication
+  diagnostics, and leaves roster export `LoginID`-only.
 
 Implementing the agent interface before those contracts settle would publish
 and install guidance that immediately becomes stale. Sprint 22 begins only from
-the released 0.18.0 command surface. It extends the command-access and
+the released 0.19.0 command surface. It extends the command-access and
 artifact-policy registries established by Sprints 19-20; it does not replace
 them, weaken their safety rules, or delay their release.
 
@@ -95,20 +100,20 @@ creates a new generic `danvas` skill. The personal skill may later become a thin
 overlay that adds course-workspace and agent-host policy without restating the
 public command surface.
 
-### The implementation input will be the released 0.18.0 surface
+### The implementation input will be the released 0.19.0 surface
 
-The current 0.17.0 tree still contains the override-sync `--live` alias and the
-discussion-score `--upload` compatibility spelling. The accepted Sprint 21
-design removes both in 0.18.0. The resulting surface retains `--apply` on the
-fifteen Canvas-mutation commands and reserves that spelling for Canvas writes.
-Sprint 22 describes that released surface; no help, guide, description, or skill
-resource may reintroduce the removed spellings.
+The released input retains `--apply` on the fifteen Canvas-mutation commands
+and reserves that spelling for Canvas writes. It exposes only `--api-key-env`
+and `--api-key-file` as credential selectors on the forty-five Canvas-backed
+leaves, uses `danvas-auth-doctor-v1`, requires origin binding before credential
+access, and exports rosters with the `LoginID` schema only.
 
-Sprint 21 retains roster `--schema legacy-v1` for 0.18.0 and assigns its removal
-to this 0.19.0 release. Sprint 22 therefore removes the option and exposes only
-the `LoginID` schema through help, guides, machine description, and the portable
-skill. The removal is a migration item, not a second supported schema in the new
-agent interface.
+Sprint 22 describes that released surface. Help, guides, description output,
+and the portable skill must not revive removed mutation aliases, provider-
+specific credential controls, implicit dotenv behavior, or an alternate roster
+schema. Provider choice stays outside danvas; agent-facing guidance may teach
+the two neutral transports and point to public authentication documentation,
+but it must not select or configure a provider for the operator.
 
 The new `guide`, `describe`, and `skill show`/`install`/`doctor` surfaces must
 also enter the real command and artifact registries. None accesses Canvas;
@@ -271,8 +276,8 @@ Privacy and safety:
   --apply authorizes Canvas writes.
 ```
 
-Examples in the final implementation must be derived from the released 0.18.0
-surface. They may not preserve legacy flag names merely because they appear in
+Examples in the final implementation must be derived from the released 0.19.0
+surface. They may not preserve removed flag names merely because they appear in
 the pre-public external reference.
 
 ### Leaf-command help
@@ -574,8 +579,8 @@ The public skill and references contain no:
 - agent-sandbox escalation rule presented as universal behavior; or
 - assumption that a particular agent host is installed.
 
-Examples use the generic profile, source-layout, privacy, and mutation contracts
-released by 0.18.0.
+Examples use the generic profile, credential, source-layout, privacy, and
+mutation contracts released by 0.19.0.
 
 ### Packaging
 
@@ -731,11 +736,12 @@ the user's personal skill directory, and `danvas skill install` never modifies
 Sprint 22 is intended to preserve Canvas and course-project behavior.
 
 - Existing command names, options, exit statuses, payloads, output schemas,
-  reports, source maps, and mutation behavior remain unchanged except for the
-  already scheduled removal of roster `--schema legacy-v1`.
+  reports, source maps, authentication behavior, and mutation behavior remain
+  unchanged.
 - Roster help, guides, JSON description, and skill resources expose only
-  `LoginID`. The migration guide records the removed option and its replacement;
-  generated interface validation rejects any surviving `legacy-v1` reference.
+  `LoginID`; generated interface validation rejects any alternate schema.
+- Credential help serializes the two neutral selectors and origin-binding
+  behavior from the released interface without adding provider configuration.
 - `--help` output intentionally becomes longer and more structured. Exact
   whitespace, Rich borders, and prose were not a machine API before this sprint;
   `danvas describe --format json` becomes the supported structured discovery
@@ -750,7 +756,7 @@ Sprint 22 is intended to preserve Canvas and course-project behavior.
   `teaching-danvas` skill because the names and scopes differ.
 - Skill schema/version metadata changes through an explicit migration test.
 
-The 0.19.0 migration guide explains the roster-schema removal, richer help, new
+The 0.20.0 migration guide explains richer help, new
 discovery commands, supported skill targets, no-clobber behavior, version
 diagnostics, `danvas-cli` distribution versus `danvas` command identity, and the
 relationship between public and personal skills.
@@ -759,7 +765,7 @@ relationship between public and personal skills.
 
 ### 1. Characterize the released interface
 
-1. Capture the complete 0.18.0 Typer command tree, options, aliases, help output,
+1. Capture the complete 0.19.0 Typer command tree, options, aliases, help output,
    completion summaries, and offline behavior.
 2. Inventory current public documentation and the external skill/reference by
    command family and classify each paragraph as public command truth, public
@@ -771,14 +777,12 @@ relationship between public and personal skills.
 
 ### 2. Establish the command-guide model
 
-1. Remove roster `--schema legacy-v1`, retain `LoginID`, and pin its migration
-   behavior.
-2. Extend `ACCESS_POLICIES` and `ARTIFACT_POLICIES` for every new command without
+1. Extend `ACCESS_POLICIES` and `ARTIFACT_POLICIES` for every new command without
    adding another effects or privacy model.
-3. Add typed workflow, identity, example, relationship, and recovery records.
-4. Enumerate every actual command/group and require exactly one semantic guide
+2. Add typed workflow, identity, example, relationship, and recovery records.
+3. Enumerate every actual command/group and require exactly one semantic guide
    entry.
-5. Add validation for command paths, options used by examples, policy
+4. Add validation for command paths, options used by examples, policy
    contradictions, missing safety metadata, and removed compatibility spellings.
 
 ### 3. Render bounded default help
@@ -826,7 +830,7 @@ relationship between public and personal skills.
    partial-write, and untrusted-target cases.
 3. Run bounded agent-behavior acceptance against fixture projects without live
    Canvas mutation.
-4. Publish the 0.19.0 migration guide and complete normal release gates.
+4. Publish the 0.20.0 migration guide and complete normal release gates.
 5. Update the external personal skill only through a separately authorized
    post-release change.
 
@@ -853,7 +857,8 @@ relationship between public and personal skills.
 ### Help
 
 - `danvas --help`, every family help screen, and every leaf help screen render
-  successfully without a project, profile, token, secret provider, or network.
+  successfully without a project, profile, credential, external provider, or
+  network.
 - Root help contains the start path, effect legend, plan/apply rule, privacy
   boundary, command table, and discovery pointers.
 - Representative family help contains common workflows, identity, privacy, and
@@ -868,7 +873,8 @@ relationship between public and personal skills.
   horizontal prose.
 - No public help contains an Auburn host, maintainer path, real course/object ID,
   or private agent-workspace rule.
-- No help epilog retains `--live`, `--upload`, or `legacy-v1`.
+- No help epilog references an option, compatibility alias, credential control,
+  or roster schema absent from the released 0.19.0 interface.
 
 ### Guides
 
@@ -878,8 +884,9 @@ relationship between public and personal skills.
 - Unknown topics fail with suggestions and the exact list command.
 - Guides contain the public portions of the retired external command-reference
   inventory without importing its personal portions.
-- No guide or guide example retains `--live`, `--upload`, or `legacy-v1`; roster
-  examples use only `LoginID`.
+- No guide or guide example references an option, compatibility alias,
+  credential control, or roster schema absent from the released 0.19.0
+  interface; roster examples use only `LoginID`.
 
 ### Machine description
 
@@ -892,10 +899,11 @@ relationship between public and personal skills.
   `ArtifactClass`, then adds identity, output, plan/apply, exit, example, and
   related-command guidance where applicable.
 - No resolved API URL, profile, course ID, token reference/value, absolute
-  project path, or secret-provider result appears.
+  project path, credential source, or external-provider result appears.
 - A schema compatibility fixture distinguishes additive v1 changes from changes
   that require v2.
-- Description output contains no `--live`, `--upload`, or `legacy-v1`; the
+- Description output contains no option, compatibility alias, credential
+  control, or roster schema absent from the released 0.19.0 interface; the
   roster schema is only `LoginID`.
 
 ### Portable skill
@@ -911,8 +919,9 @@ relationship between public and personal skills.
   `SKILL.md`.
 - The skill contains no scripts, broad tool grants, institution defaults,
   maintainer paths, real IDs, or agent-specific approval bypass.
-- The skill and references contain no `--live`, `--upload`, or `legacy-v1`
-  examples; roster guidance uses only `LoginID`.
+- The skill and references contain no option, compatibility alias, credential
+  control, or roster schema absent from the released 0.19.0 interface; roster
+  guidance uses only `LoginID`.
 - Editable, `danvas-cli` sdist, and `danvas-cli` wheel installations expose the
   same canonical package resource and matching danvas/skill versions.
 
@@ -1026,7 +1035,8 @@ from the typed registry.
 
 - Implementing the Page asset adapter or another Canvas feature;
 - changing Canvas payloads, mutation order, readback, retry, or evidence schemas;
-- changing the 0.18.0 profile, privacy, source-layout, or plan/apply contracts;
+- changing the 0.19.0 credential, profile, privacy, source-layout, or plan/apply
+  contracts;
 - building an MCP server, language server, daemon, chat UI, or autonomous agent;
 - making agents a requirement for human use of danvas;
 - adding an `--agent-help` flag instead of improving default help;
@@ -1043,7 +1053,8 @@ from the typed registry.
 
 ## Resolved Design Decisions
 
-- This is Sprint 22 / 0.19.0, after the four-release public-readiness program.
+- This is Sprint 22 / 0.20.0, after the public-readiness program and the 0.19.0
+  credential-boundary release.
 - Default help becomes more useful; there is no undiscoverable agent-only help
   mode.
 - Root, group, leaf, guide, and JSON description form a progressive interface.
@@ -1052,8 +1063,8 @@ from the typed registry.
 - Typer owns executable signatures, `ACCESS_POLICIES` owns effects,
   `ARTIFACT_POLICIES` owns privacy, and the guide registry adds workflows,
   identity, examples, relationships, and recovery semantics.
-- Roster `--schema legacy-v1` is removed in 0.19.0; every new interface exposes
-  only `LoginID`.
+- The released roster surface is `LoginID`-only; every new interface preserves
+  that schema.
 - The public skill is a new generic `danvas` skill, not a published copy of the
   personal `teaching-danvas` skill.
 - Its only source is package data beneath `src/danvas/_skill/`, loaded through
@@ -1065,17 +1076,17 @@ from the typed registry.
   all discovered hosts.
 - `skill doctor` inspects all allowlisted locations by default and accepts
   `--agent` only as a narrowing option.
-- `skill install` atomically updates an unmodified `owned_stale` target without a
-  separate `--update` spelling.
+- `skill install` atomically updates an unmodified `owned_stale` target without
+  a separate `--update` spelling.
 - `--apply` remains reserved for Canvas mutation; skill installation uses its
   explicit verb plus an optional local-write dry-run.
 - Modified and unowned skill targets are refused; the first release has no
   force-overwrite path.
-- Guides emit terminal text only in 0.19.0. The listed topics are the initial
+- Guides emit terminal text only in 0.20.0. The listed topics are the initial
   shape, with measured render/token bounds deciding any further split.
 - Live behavior acceptance covers available release hosts; structural coverage
   and explicit support wording cover the remainder.
-- Native plugin/marketplace publication may follow but is not a 0.19.0 gate.
+- Native plugin/marketplace publication may follow but is not a 0.20.0 gate.
 
 ## Definition Of Done
 
@@ -1101,8 +1112,8 @@ from the typed registry.
 
 ## Release Contract
 
-The target is 0.19.0 after 0.18.0 has shipped and satisfied the public-beta
-threshold. The release candidate must pass the complete supported Python/OS
+The target is 0.20.0 after 0.19.0 has shipped and passed its credential-boundary
+release gates. The release candidate must pass the complete supported Python/OS
 matrix, independent command-truth review, adversarial installer review,
 portable-skill validation, editable/sdist/wheel smoke, and bounded agent
 acceptance before an exact tag is created.

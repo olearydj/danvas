@@ -102,6 +102,13 @@ failure-path tests.
 Keep modules acyclic. If a dependency change introduces a cycle, fix the
 ownership boundary rather than weakening the import-cycle gate.
 
+Credential delivery is deliberately provider-neutral. Production code may read
+only the selected environment variable or bounded credential file through the
+shared resolver. Do not add a password-manager SDK, provider executable,
+dotenv loader, raw-token option, or unreviewed process-spawn path. Tests use
+synthetic values and temporary files; they must never depend on an ambient
+credential or external provider login.
+
 ## Documentation
 
 Public user instructions belong in README, the public guide set, command help,

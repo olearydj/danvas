@@ -6,6 +6,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "check-docs.py"
+CURRENT_AUTHORITY_DOCS = (
+    "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "docs/authentication.md",
+    "docs/authored-sources.md",
+    "docs/compatibility.md",
+    "docs/configuration.md",
+    "docs/course-yaml.md",
+    "docs/mutation-safety.md",
+    "docs/privacy.md",
+)
 
 
 def run_checker(root: Path, *files: str) -> subprocess.CompletedProcess[str]:
@@ -27,7 +40,7 @@ def test_public_documentation_suite_passes_offline_link_check() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "12 Markdown files" in result.stdout
+    assert "13 Markdown files" in result.stdout
 
 
 def test_documentation_checker_accepts_local_links_anchors_and_external_urls(
@@ -73,3 +86,44 @@ def test_documentation_checker_ignores_links_inside_fenced_examples(tmp_path: Pa
     result = run_checker(tmp_path, "README.md")
 
     assert result.returncode == 0, result.stderr
+
+
+def test_current_guides_use_only_provider_neutral_credential_surface() -> None:
+    retired_spellings = (
+        "secret_provider",
+        "op_reference",
+        "--secret-name",
+        "--secret-provider",
+        "--op-reference",
+        "CANVAS_SECRET_PROVIDER",
+        "CANVAS_API_KEY_OP_REFERENCE",
+    )
+
+    for relative_path in CURRENT_AUTHORITY_DOCS:
+        text = (ROOT / relative_path).read_text(encoding="utf-8")
+        for spelling in retired_spellings:
+            assert spelling not in text, f"{relative_path} retains {spelling}"
+
+
+def test_current_guides_expose_only_login_id_roster_schema() -> None:
+    for relative_path in CURRENT_AUTHORITY_DOCS:
+        text = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert "roster --schema" not in text, (
+            f"{relative_path} retains the removed roster schema selector"
+        )
+
+    migration = (ROOT / "docs/migrations/0.19.0.md").read_text(encoding="utf-8")
+    assert "CanvasID,Name,LoginID,SIS_ID" in migration
+    assert "roster --schema legacy-v1" in migration
+
+
+def test_sprint22_baseline_is_provider_neutral_020_surface() -> None:
+    design = (ROOT / "docs/sprints/22-agent-interface.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "The target release is 0.20.0" in design
+    assert "released 0.19.0 command surface" in design
+    assert "`--api-key-env`" in design
+    assert "`--api-key-file`" in design
+    assert "legacy-v1" not in design

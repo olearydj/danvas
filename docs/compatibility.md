@@ -5,6 +5,10 @@ promise. A source tree before the tag completes its release gates remains a
 candidate. This project is unofficial and is not affiliated with or endorsed
 by Instructure.
 
+The current source tree targets `0.19.0` and carries a deliberate authentication
+boundary break. The released `v0.18.0` interface remains the rollback point
+until the candidate is reviewed and tagged.
+
 ## Supported Runtime
 
 Danvas supports:
@@ -92,14 +96,17 @@ Panopto deployment.
 
 ## Compatibility Lifetimes
 
-The following transition is active in `0.18.0`:
+The `0.19.0` candidate removes the provider-specific authentication interface
+and the deprecated alternate roster schema. Authentication now accepts only
+provider-neutral environment or credential-file locators, and roster export is
+`LoginID`-only. Stale automation fails loudly rather than silently choosing a
+different credential source.
 
-- `roster --schema legacy-v1` remains available, warns, and is removed in
-  `0.19.0`; use the default `LoginID` schema now.
-- The provider-specific authentication surface remains supported as documented
-  for `0.18.0`. An accepted post-beta design replaces it with provider-neutral
-  credential delivery in `0.19.0`; follow that release's migration guide before
-  upgrading authentication configuration or automation.
+The candidate also requires a user-controlled binding between the selected
+credential and effective Canvas origin. Many existing projects with only a
+project URL will fail their first authenticated command until a matching
+profile, invocation URL, or environment URL establishes that intent. Follow the
+[0.19.0 migration guide](migrations/0.19.0.md) before upgrading.
 
 These due aliases were removed in `0.18.0` and fail as unknown options:
 
@@ -112,6 +119,7 @@ Migration guides describe operator-visible changes release by release:
 - [0.16.0 private artifacts](migrations/0.16.0.md)
 - [0.17.0 plan/apply and evidence](migrations/0.17.0.md)
 - [0.18.0 public beta](migrations/0.18.0.md)
+- [0.19.0 provider-neutral credentials](migrations/0.19.0.md)
 
 ## Reporting Problems
 

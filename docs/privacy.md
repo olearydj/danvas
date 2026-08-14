@@ -49,6 +49,26 @@ invalid rather than pretending it committed.
 Windows is unsupported because this permission contract cannot be promised
 there.
 
+## Credential Transport
+
+Danvas does not store a Canvas token or contact a secret provider. It reads one
+selected environment variable or one externally managed credential file. The
+selected environment entry is removed before Canvas construction to limit
+ordinary child-process inheritance, but this is not memory zeroization. A file
+is read once and never created, modified, chmodded, renamed, or deleted by
+danvas.
+
+Credential values are excluded from terminal output, reports, snapshots,
+sidecars, and diagnostic JSON. Auth doctor may name an environment-variable
+locator because it is actionable non-secret metadata; a credential-file locator
+is reported only as a redacted classification, never as an absolute path.
+
+Environment injection and file delivery have different exposure boundaries.
+Global exports can reach unrelated children. Per-command external runners bound
+the value to their process tree subject to their own guarantees. File safety
+depends on the filesystem, mount, user, and host policy. Danvas validates its
+input but does not claim any transport is universally safer.
+
 ## Integrity Sidecars And Manifests
 
 Standalone private CSV, text, and binary files normally receive a companion

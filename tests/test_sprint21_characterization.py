@@ -267,12 +267,12 @@ def test_invalid_init_timezone_fails_before_canvas_context(
     assert not (tmp_path / ".danvas").exists()
 
 
-def test_public_beta_package_metadata_is_declared() -> None:
+def test_public_beta_package_metadata_advances_to_credential_boundary_candidate() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project = pyproject["project"]
 
     assert project["name"] == "danvas-cli"
-    assert project["version"] == "0.18.0"
+    assert project["version"] == "0.19.0"
     assert project["requires-python"] == ">=3.12,<3.15"
     assert project["scripts"] == {"danvas": "danvas.cli:main"}
     assert pyproject["tool"]["uv"]["build-backend"]["module-name"] == "danvas"

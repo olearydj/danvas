@@ -3,6 +3,26 @@
 This file records operator-visible release changes. Detailed transition steps
 live in the linked migration guides.
 
+## 0.19.0 - Provider-Neutral Credentials
+
+Sprint 21.5 moves provider choice outside danvas:
+
+- replaces provider-specific authentication with selected environment-variable
+  or single-purpose credential-file delivery;
+- requires user-controlled binding between the effective Canvas origin and the
+  credential before reading it;
+- removes implicit dotenv loading and the SecretPath/python-dotenv dependencies;
+- introduces the provider-neutral `danvas-auth-doctor-v1` diagnostic schema;
+- removes the due alternate roster schema and retains `LoginID`-only exports;
+  and
+- documents optional external SecretSpec, 1Password, CI, and platform-mount
+  patterns without making any provider a danvas dependency.
+
+This source tree remains a release candidate until the independent security
+review and exact branch/tag gates complete.
+
+See [Migrating to 0.19.0](docs/migrations/0.19.0.md).
+
 ## 0.18.0 - Public Beta
 
 Sprint 21 completes the public-readiness program:
