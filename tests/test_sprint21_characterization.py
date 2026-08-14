@@ -271,23 +271,26 @@ def test_invalid_init_timezone_fails_before_canvas_context(
     assert not (tmp_path / ".danvas").exists()
 
 
-def test_package_metadata_gaps_are_frozen() -> None:
+def test_public_beta_package_metadata_is_declared() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project = pyproject["project"]
 
-    assert project["name"] == "danvas"
-    assert project["version"] == "0.17.0"
-    assert project["requires-python"] == ">=3.12"
+    assert project["name"] == "danvas-cli"
+    assert project["version"] == "0.18.0"
+    assert project["requires-python"] == ">=3.12,<3.15"
     assert project["scripts"] == {"danvas": "danvas.cli:main"}
     assert pyproject["tool"]["uv"]["build-backend"]["module-name"] == "danvas"
-    assert {
-        "license",
-        "authors",
-        "maintainers",
-        "classifiers",
-        "keywords",
-        "urls",
-    }.isdisjoint(project)
+    assert project["license"] == "MIT"
+    assert project["license-files"] == ["LICENSE"]
+    assert project["authors"] == [{"name": "Dan O'Leary"}]
+    assert project["maintainers"] == [{"name": "Dan O'Leary"}]
+    assert set(project["urls"]) == {"Repository", "Issues", "Documentation", "Changelog"}
+    assert "Programming Language :: Python :: 3.12" in project["classifiers"]
+    assert "Programming Language :: Python :: 3.13" in project["classifiers"]
+    assert "Programming Language :: Python :: 3.14" in project["classifiers"]
+    assert "Operating System :: MacOS" in project["classifiers"]
+    assert "Operating System :: POSIX :: Linux" in project["classifiers"]
+    assert not any(value.startswith("License ::") for value in project["classifiers"])
     assert (ROOT / "LICENSE").read_text(encoding="utf-8").startswith("MIT License\n")
 
 

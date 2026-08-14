@@ -6,9 +6,9 @@ usage() {
     cat <<'EOF'
 Usage: scripts/release-smoke.sh [--expected-version X.Y.Z]
 
-Build danvas, install the checkout and wheel into separate temporary uv tool
-directories, and run non-network startup checks. The global tool installation
-is never modified.
+Build the danvas-cli distribution, inspect its metadata and contents, install
+the checkout and wheel into separate temporary uv tool directories, and run
+non-network startup checks. The global tool installation is never modified.
 EOF
 }
 
@@ -41,6 +41,7 @@ done
 SCRIPT_DIR=$(CDPATH= cd -P "$(dirname "$0")" && pwd)
 PROJECT_ROOT=$(CDPATH= cd -P "$SCRIPT_DIR/.." && pwd)
 PYPROJECT="$PROJECT_ROOT/pyproject.toml"
+DIST_CHECK="$PROJECT_ROOT/scripts/check-distributions.py"
 
 if [ ! -r "$PYPROJECT" ]; then
     echo "release smoke: cannot read $PYPROJECT" >&2
@@ -61,8 +62,32 @@ PROJECT_VERSION=$(
     ' "$PYPROJECT"
 )
 
+PROJECT_NAME=$(
+    awk '
+        $0 == "[project]" { in_project = 1; next }
+        in_project && /^\[/ { exit }
+        in_project && /^[[:space:]]*name[[:space:]]*=/ {
+            line = $0
+            sub(/^[^=]*=[[:space:]]*"/, "", line)
+            sub(/".*$/, "", line)
+            print line
+            exit
+        }
+    ' "$PYPROJECT"
+)
+
 if [ -z "$PROJECT_VERSION" ]; then
     echo "release smoke: could not resolve [project].version from pyproject.toml" >&2
+    exit 1
+fi
+
+if [ "$PROJECT_NAME" != "danvas-cli" ]; then
+    echo "release smoke: expected distribution name danvas-cli, found '$PROJECT_NAME'" >&2
+    exit 1
+fi
+
+if [ ! -r "$DIST_CHECK" ]; then
+    echo "release smoke: cannot read $DIST_CHECK" >&2
     exit 1
 fi
 
@@ -114,7 +139,7 @@ mkdir -p \
     "$WHEEL_TOOL_DIR" \
     "$WHEEL_BIN_DIR"
 
-echo "release smoke: building danvas $PROJECT_VERSION"
+echo "release smoke: building $PROJECT_NAME $PROJECT_VERSION"
 (
     cd "$PROJECT_ROOT"
     uv build --out-dir "$DIST_DIR"
@@ -122,7 +147,7 @@ echo "release smoke: building danvas $PROJECT_VERSION"
 
 WHEEL_PATH=""
 WHEEL_COUNT=0
-for candidate in "$DIST_DIR"/danvas-"$PROJECT_VERSION"-*.whl; do
+for candidate in "$DIST_DIR"/danvas_cli-"$PROJECT_VERSION"-*.whl; do
     if [ ! -f "$candidate" ]; then
         continue
     fi
@@ -135,8 +160,10 @@ if [ "$WHEEL_COUNT" -ne 1 ]; then
 fi
 
 SDIST_COUNT=0
-for candidate in "$DIST_DIR"/danvas-"$PROJECT_VERSION".tar.gz; do
+SDIST_PATH=""
+for candidate in "$DIST_DIR"/danvas_cli-"$PROJECT_VERSION".tar.gz; do
     if [ -f "$candidate" ]; then
+        SDIST_PATH=$candidate
         SDIST_COUNT=$((SDIST_COUNT + 1))
     fi
 done
@@ -144,6 +171,9 @@ if [ "$SDIST_COUNT" -ne 1 ]; then
     echo "release smoke: expected one source distribution for $PROJECT_VERSION, found $SDIST_COUNT" >&2
     exit 1
 fi
+
+uv run --project "$PROJECT_ROOT" python "$DIST_CHECK" \
+    "$WHEEL_PATH" "$SDIST_PATH" --expected-version "$PROJECT_VERSION"
 
 echo "release smoke: installing editable checkout in isolation"
 (
@@ -162,7 +192,7 @@ echo "release smoke: installing built wheel in isolation"
     UV_TOOL_DIR="$WHEEL_TOOL_DIR" \
     UV_TOOL_BIN_DIR="$WHEEL_BIN_DIR" \
     PATH="$WHEEL_BIN_DIR:$PATH" \
-        uv tool install --force --from "$WHEEL_PATH" danvas
+        uv tool install --force --from "$WHEEL_PATH" "$PROJECT_NAME"
 )
 
 check_install() {
