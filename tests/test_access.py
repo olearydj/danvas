@@ -281,11 +281,14 @@ def test_current_special_mutation_guards_are_characterized() -> None:
 
     overrides = commands["assignments overrides-sync"]
     assert option(overrides, "--dry-run").default is False
-    assert option(overrides, "--live").default is False
     assert option(overrides, "--apply").default is False
     assert option(overrides, "--confirm").default == ""
     assert option(commands["assignments upsert"], "--confirm").default == ""
-    assert option(commands["discussions score"], "--upload").default is False
+    assert all(
+        "--upload" not in (*param.opts, *param.secondary_opts)
+        for param in commands["discussions score"].params
+        if isinstance(param, click.Option)
+    )
     assert all(
         "--sleep-seconds" not in (*param.opts, *param.secondary_opts)
         for param in commands["discussions score"].params

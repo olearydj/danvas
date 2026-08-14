@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import shlex
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -182,10 +181,6 @@ def command_discussions_score(args: Any) -> None:
     )
     print(f"Scored: {len(scored)}; grade plan rows: {len(grade_rows)}")
     print(f"Private artifact: {resolved.path}")
-    if bool(getattr(args, "upload", False)):
-        print("Direct discussion upload was removed; use the grade transaction instead.")
-        print(f"Replacement: {shlex.join(next_steps['apply'])}")
-        raise SystemExit(2)
 
 
 def discussion_grade_plan_rows(

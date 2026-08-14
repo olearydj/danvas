@@ -262,7 +262,6 @@ def mutation_args_from_cli(
     *,
     dry_run: bool,
     apply: bool,
-    legacy_live: bool = False,
     confirm: str = "",
     required_confirm: str | set[str] | None = None,
 ) -> dict[str, Any]:
@@ -271,7 +270,6 @@ def mutation_args_from_cli(
         mode = resolve_mutation_mode(
             dry_run=dry_run,
             apply=apply,
-            legacy_live=legacy_live,
         )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
@@ -286,12 +284,6 @@ def mutation_args_from_cli(
         if normalized_confirm not in allowed:
             expected = " or ".join(f"--confirm {value}" for value in sorted(allowed))
             raise typer.BadParameter(f"--apply requires {expected}.")
-    if legacy_live:
-        typer.echo(
-            "Warning: --live is deprecated; use --apply instead. "
-            "It will be removed in danvas 0.18.0.",
-            err=True,
-        )
     return {
         "dry_run": mode is MutationMode.PLAN,
         "mutation_mode": mode.value,
@@ -849,7 +841,10 @@ def roster(
         RosterSchema,
         typer.Option(
             "--schema",
-            help="Roster columns: v2 uses LoginID; legacy-v1 retains the deprecated Email label.",
+            help=(
+                "Roster columns: v2 uses LoginID; legacy-v1 retains the deprecated "
+                "Email label through 0.18.x and is removed in 0.19.0."
+            ),
         ),
     ] = "v2",
     project_root: Annotated[
@@ -998,13 +993,6 @@ def assignments_overrides_sync(
     ] = None,
     dry_run: CanvasDryRun = False,
     apply: CanvasApply = False,
-    live: Annotated[
-        bool,
-        typer.Option(
-            "--live",
-            help="Deprecated alias for --apply; removed in danvas 0.18.0.",
-        ),
-    ] = False,
     confirm: Annotated[
         OverrideSyncConfirm,
         typer.Option("--confirm", help="Applying requires the exact value 'apply'."),
@@ -1034,7 +1022,6 @@ def assignments_overrides_sync(
     mutation = mutation_args_from_cli(
         dry_run=dry_run,
         apply=apply,
-        legacy_live=live,
         confirm=confirm,
         required_confirm="apply",
     )
@@ -3787,16 +3774,6 @@ def discussions_score(
     overwrite: Annotated[
         bool, typer.Option("--overwrite", help="Replace an existing private grade plan pair.")
     ] = False,
-    upload: Annotated[
-        bool,
-        typer.Option(
-            "--upload",
-            help=(
-                "Deprecated migration spelling: write the plan, print the grades post replacement, "
-                "and exit nonzero. Never uploads."
-            ),
-        ),
-    ] = False,
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -3824,7 +3801,6 @@ def discussions_score(
             max_responses=max_responses,
             output=str(output) if output else None,
             overwrite=overwrite,
-            upload=upload,
             dry_run=dry_run,
             project_root=str(project_root),
             profile=profile,

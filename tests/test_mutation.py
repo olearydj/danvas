@@ -13,48 +13,39 @@ from danvas.mutation import (
 
 
 @pytest.mark.parametrize(
-    ("dry_run", "apply", "legacy_live", "expected"),
+    ("dry_run", "apply", "expected"),
     [
-        (False, False, False, MutationMode.PLAN),
-        (True, False, False, MutationMode.PLAN),
-        (False, True, False, MutationMode.APPLY),
-        (False, False, True, MutationMode.APPLY),
+        (False, False, MutationMode.PLAN),
+        (True, False, MutationMode.PLAN),
+        (False, True, MutationMode.APPLY),
     ],
 )
 def test_resolve_mutation_mode(
     dry_run: bool,
     apply: bool,
-    legacy_live: bool,
     expected: MutationMode,
 ) -> None:
     assert (
         resolve_mutation_mode(
             dry_run=dry_run,
             apply=apply,
-            legacy_live=legacy_live,
         )
         is expected
     )
 
 
 @pytest.mark.parametrize(
-    ("dry_run", "apply", "legacy_live"),
-    [
-        (True, True, False),
-        (True, False, True),
-        (False, True, True),
-    ],
+    ("dry_run", "apply"),
+    [(True, True)],
 )
 def test_resolve_mutation_mode_rejects_conflicts(
     dry_run: bool,
     apply: bool,
-    legacy_live: bool,
 ) -> None:
     with pytest.raises(ValueError, match="cannot be combined"):
         resolve_mutation_mode(
             dry_run=dry_run,
             apply=apply,
-            legacy_live=legacy_live,
         )
 
 

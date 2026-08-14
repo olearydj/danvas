@@ -1076,7 +1076,7 @@ Recommended goals:
 
    Status: delivered for explicit private export and conservative private-file
    synchronization. `assignments overrides-sync` is dry-run by default, creates
-   or updates referenced rows, requires `--live --confirm apply` for writes, and
+   or updates referenced rows, requires `--apply --confirm apply` for writes, and
    preserves Canvas-only overrides rather than deleting them.
 
    ```bash

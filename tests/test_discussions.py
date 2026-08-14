@@ -91,7 +91,6 @@ def score_args(root: Path, **overrides: Any) -> SimpleNamespace:
         "max_responses": 1,
         "output": None,
         "overwrite": False,
-        "upload": False,
         "dry_run": False,
         "project_root": str(root),
     }
@@ -466,7 +465,7 @@ def test_discussions_score_requires_graded_discussion(
         command_discussions_score(score_args(tmp_path))
 
 
-def test_discussions_score_upload_writes_plan_and_exits_nonzero_without_mutation(
+def test_discussions_score_is_plan_only_and_never_mutates(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -497,16 +496,16 @@ def test_discussions_score_upload_writes_plan_and_exits_nonzero_without_mutation
     canvas = SimpleNamespace(get_course=lambda course_id: course)
     monkeypatch.setattr("danvas.discussions.canvas_from_args", lambda args: canvas)
 
-    with pytest.raises(SystemExit) as exc_info:
-        command_discussions_score(score_args(tmp_path, upload=True))
+    command_discussions_score(score_args(tmp_path))
 
-    assert exc_info.value.code == 2
     output = tmp_path / ".danvas/private/discussions/topic-9/grade-plan.csv"
     assert output.is_file()
+    sidecar = json.loads(
+        output.with_name(f"{output.name}.artifact.json").read_text(encoding="utf-8")
+    )
     terminal = capsys.readouterr().out
-    assert "Direct discussion upload was removed" in terminal
-    assert "danvas grades post" in terminal
-    assert "--apply" in terminal
+    assert sidecar["next_steps"]["apply"][0:3] == ["danvas", "grades", "post"]
+    assert "--apply" in sidecar["next_steps"]["apply"]
     assert "Student One" not in terminal
 
 

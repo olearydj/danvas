@@ -88,7 +88,9 @@ def test_command_roster_writes_sorted_roster(
 
 
 def test_command_roster_legacy_schema_retains_email_label(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr("danvas.courses.canvas_from_args", lambda args: FakeCanvas())
     output = tmp_path / "roster.csv"
@@ -103,3 +105,6 @@ def test_command_roster_legacy_schema_retains_email_label(
     )
 
     assert list(read_csv(output)[0]) == ["CanvasID", "Name", "Email", "SIS_ID"]
+    warning = capsys.readouterr().out
+    assert "removed in danvas 0.19.0" in warning
+    assert "--schema v2" in warning

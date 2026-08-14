@@ -18,16 +18,11 @@ def resolve_mutation_mode(
     *,
     dry_run: bool,
     apply: bool,
-    legacy_live: bool = False,
 ) -> MutationMode:
     """Resolve raw CLI flags once, rejecting ambiguous authorization."""
     if dry_run and apply:
         raise ValueError("--dry-run and --apply cannot be combined.")
-    if legacy_live and dry_run:
-        raise ValueError("--live and --dry-run cannot be combined.")
-    if legacy_live and apply:
-        raise ValueError("--live and --apply cannot be combined.")
-    return MutationMode.APPLY if apply or legacy_live else MutationMode.PLAN
+    return MutationMode.APPLY if apply else MutationMode.PLAN
 
 
 def mutation_mode_from_args(args: Any) -> MutationMode:

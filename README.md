@@ -20,7 +20,9 @@ It is intentionally separate from archival/history tooling such as Canvas ledger
   - list active Canvas courses visible to the authenticated user
   - export course rosters by course
   - roster format includes `CanvasID`, name, Canvas login ID in the `LoginID` column, and SIS ID
-  - private roster output defaults beneath `.danvas/private/`; `--schema legacy-v1` temporarily retains the old `Email` label
+  - private roster output defaults beneath `.danvas/private/`
+  - `--schema legacy-v1` retains the old `Email` label through 0.18.x and is
+    removed in 0.19.0
 
 - export assignments from Canvas by course
   - JSON, CSV, Markdown directory formats
@@ -783,7 +785,8 @@ CanvasID,Name,LoginID,SIS_ID
 
 The `LoginID` column is populated from Canvas `login_id`; in many courses that
 is an email address, but it should be treated as the Canvas login identifier.
-`--schema legacy-v1` temporarily retains the old `Email` header.
+`--schema legacy-v1` retains the old `Email` header through 0.18.x and is
+removed in 0.19.0.
 
 Grade uploads require `CanvasID` and `Grade`; `Name` and `Comment` are optional:
 

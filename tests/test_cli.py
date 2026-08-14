@@ -538,7 +538,7 @@ def test_local_report_commands_define_report_options() -> None:
     score_options = option_names("discussions", "score")
     assert "--project-root" in score_options
     assert "--dry-run" in score_options
-    assert "--upload" in score_options
+    assert "--upload" not in score_options
     assert "--apply" not in score_options
     assert "--sleep-seconds" not in score_options
     assert (expected - {"--project-root"}).isdisjoint(score_options)
@@ -827,7 +827,6 @@ def test_assignments_overrides_sync_is_dry_run_by_default(
         "--assignment-id",
         "--dry-run",
         "--apply",
-        "--live",
         "--confirm",
         "--project-root",
         "--no-report",
@@ -1157,43 +1156,33 @@ def test_confirmation_without_apply_fails_before_context_resolution(
     assert "context resolved" not in output
 
 
-def test_override_live_alias_warns_and_normalizes_to_apply(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    source = tmp_path / "source.md"
-    captured: dict[str, object] = {}
-    monkeypatch.setattr(
-        "danvas.cli.command_assignments_overrides_sync",
-        lambda args: captured.update(vars(args)),
-    )
-
-    result = runner.invoke(
-        app,
-        [
-            "assignments",
-            "overrides-sync",
-            str(source),
-            "--course-id",
-            "101",
-            "--live",
-            "--confirm",
-            "apply",
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert "--live is deprecated" in result.output
-    assert captured["mutation_mode"] == "apply"
-    assert captured["dry_run"] is False
-
-
-@pytest.mark.parametrize("conflicting_flag", ["--dry-run", "--apply"])
-def test_override_live_alias_rejects_new_flag_combinations_before_context(
+@pytest.mark.parametrize(
+    ("command", "removed_option"),
+    [
+        (["assignments", "overrides-sync", "SOURCE"], "--live"),
+        (
+            [
+                "discussions",
+                "score",
+                "https://canvas.example.edu/courses/101/discussion_topics/202",
+                "2",
+                "1",
+                "1",
+                "1",
+            ],
+            "--upload",
+        ),
+    ],
+)
+def test_removed_compatibility_options_fail_before_context_or_output(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    conflicting_flag: str,
+    command: list[str],
+    removed_option: str,
 ) -> None:
     source = tmp_path / "source.md"
+    source.write_text("sentinel", encoding="utf-8")
+    output = tmp_path / "must-not-exist.csv"
     monkeypatch.setattr(
         "danvas.cli.args_for",
         lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
@@ -1202,39 +1191,18 @@ def test_override_live_alias_rejects_new_flag_combinations_before_context(
     result = runner.invoke(
         app,
         [
-            "assignments",
-            "overrides-sync",
-            str(source),
-            "--live",
-            conflicting_flag,
-            "--confirm",
-            "apply",
+            *(str(source) if item == "SOURCE" else item for item in command),
+            removed_option,
+            "--output",
+            str(output),
         ],
     )
 
     assert result.exit_code != 0
-    assert "cannot be combined" in result.output
+    assert removed_option in result.output
+    assert "No such option" in result.output
     assert "context resolved" not in result.output
-
-
-def test_override_live_alias_cannot_bypass_confirmation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    source = tmp_path / "source.md"
-    monkeypatch.setattr(
-        "danvas.cli.args_for",
-        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
-    )
-
-    result = runner.invoke(
-        app,
-        ["assignments", "overrides-sync", str(source), "--live"],
-    )
-
-    assert result.exit_code != 0
-    output = normalized_cli_output(result)
-    assert "--apply requires --confirm apply" in output
-    assert "context resolved" not in output
+    assert not output.exists()
 
 
 def test_announcements_verify_cli_options_and_args(

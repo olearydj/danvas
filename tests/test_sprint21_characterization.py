@@ -214,7 +214,7 @@ def test_english_gradebook_heading_profile_is_frozen() -> None:
     } == METADATA_COLUMNS
 
 
-def test_deprecated_options_and_panopto_language_default_are_frozen() -> None:
+def test_due_deprecations_are_removed_and_roster_compatibility_remains() -> None:
     commands = leaf_commands()
     options_by_name = {
         option_name: {
@@ -230,8 +230,8 @@ def test_deprecated_options_and_panopto_language_default_are_frozen() -> None:
     }
 
     assert options_by_name == {
-        "--live": {"assignments overrides-sync"},
-        "--upload": {"discussions score"},
+        "--live": set(),
+        "--upload": set(),
         "--schema": {"roster"},
     }
     roster_schema = option(commands["roster"], "--schema")
