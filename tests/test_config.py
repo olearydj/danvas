@@ -1095,6 +1095,7 @@ course_id = 101
     source = project / "assignment.md"
     source.write_text("---\ntitle: Test\n---\n", encoding="utf-8")
     monkeypatch.chdir(other)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "user-config"))
     monkeypatch.setenv("CANVAS_API_URL", "https://canvas.example/")
     monkeypatch.delenv("CANVAS_SECRET_PROVIDER", raising=False)
     monkeypatch.delenv("CANVAS_API_KEY_OP_REFERENCE", raising=False)
