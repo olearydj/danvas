@@ -389,5 +389,8 @@ publication outside the feature-completion gate. Groups 0-2 completed in
 separately as `f27d113`. The local `0.21.0` candidate is assembled. The
 local candidate gate passes 1,046 tests, coverage, lint/type/docs, isolated
 editable/wheel installation, dependency audit, lock validation, and redacted
-secret scans. The bounded live report request, agent scenario, exact-candidate
-review, push, and release gates remain open.
+secret scans. Bounded Canvas field acceptance passed on 2026-08-14 after a
+first-attempt `404` exposed the global-versus-course report-file lookup defect;
+`25f8ae4` corrected it, and the recovery reused and verified the same stable
+report ID. The agent scenario, exact-candidate review, push, and release gates
+remain open.

@@ -7,9 +7,10 @@ Group 3 assembled the local `0.21.0` candidate with public workflow/migration
 documentation. The local gate passes 1,046 tests at 85.57% branch-aware
 coverage, Ruff, ty, Markdown/docs checks, isolated editable/wheel installation,
 dependency audit, lock validation, and redacted current-tree/all-history secret
-scans. No Canvas report or agent scenario has been run; remote CI,
-exact-candidate review, tag, and release gates remain open. No release claim is
-made.
+scans. Bounded Canvas field acceptance passed on 2026-08-14 after its first
+download attempt exposed and corrected a global-versus-course file-lookup
+defect in `25f8ae4`. Agent acceptance, remote CI, exact-candidate review, tag,
+and release gates remain open. No release claim is made.
 
 ## Outcome
 
@@ -560,6 +561,35 @@ truthful aggregate counts, URL-free evidence, and a second read-only plan.
 Do not publish answer rows. Do not automatically delete the report. Disclose
 its exact stable ID and retained server state; cleanup is separately authorized.
 
+### Field Result: 2026-08-14
+
+Acceptance used sandbox course `1576638` and a newly imported, unpublished
+Classic Quiz containing one synthetic true/false question and no submissions:
+
+- quiz ID `5089723` remained unpublished;
+- the initial report plan observed matching report ID `1069125` without a
+  completed file;
+- the first authorized apply reused and completed that report, yielding
+  progress ID `20060187` and file ID `287389484`, but the download failed with
+  `404` because danvas used CanvasAPI's course-scoped file lookup for a global
+  report attachment;
+- commit `25f8ae4` changed the adapter to CanvasAPI's global file lookup,
+  removed the now-unneeded course parameter from the transaction engine, added
+  an exact regression assertion, and passed all 1,046 tests plus Ruff and ty;
+- a disclosed recovery apply issued a second `POST` only after the stable
+  report/file identities and local root cause were known. Canvas reused the
+  same report ID `1069125`; no second report was created;
+- the recovery settled `applied_verified` / `reused` / `completed` /
+  `downloaded_verified` and committed a valid `0600` CSV/sidecar pair;
+- local `quiz analysis` accepted the zero-student CSV and truthfully reported
+  zero students, zero submissions, and zero question pairs; and
+- the final read-only plan matched report `1069125`, progress `20060187`, and
+  file `287389484` without requesting another report.
+
+No student rows, answers, scores, protected URLs, credentials, or raw Canvas
+payloads were retained in this record. The synthetic quiz and report remain on
+the sandbox course; no deletion or publication was performed.
+
 ## Non-Goals
 
 - New Quizzes reports or analytics;
@@ -602,7 +632,8 @@ Independent review should challenge:
 - [x] Existing local analysis consumes the acquired CSV.
 - [x] Help, guides, description, and skill teach the safe two-step workflow.
 - [ ] Automated, platform, packaging, and release gates pass.
-- [ ] Separately authorized Canvas and agent acceptance pass.
+- [x] Separately authorized Canvas field acceptance passes.
+- [ ] Separately authorized agent acceptance passes.
 - [ ] Independent final review accepts the exact candidate.
 - [ ] Signed `v0.21.0`, tag CI, tagged install, global verification, and release
       records complete.

@@ -20,8 +20,9 @@ Sprint 23 closes the supported acquisition gap for Classic Quiz analysis:
 - teaches the human and agent interfaces that missing command coverage does not
   authorize direct API, browser, or provider-specific fallback.
 
-Existing QTI import and local analysis behavior are unchanged. Release remains
-gated on one separately authorized sandbox report request, bounded agent
+Existing QTI import and local analysis behavior are unchanged. Bounded Canvas
+field acceptance passed after correcting the report attachment lookup to use
+Canvas's global file endpoint. Release remains gated on bounded agent
 acceptance, independent exact-candidate review, and the established branch/tag
 installation gates.
 

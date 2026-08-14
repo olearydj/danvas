@@ -12,8 +12,8 @@ Feature priority follows concrete course-workflow demand.
 
 ## Current Priority Order
 
-1. Complete Sprint 23's separately authorized Canvas and agent acceptance,
-   exact-candidate review, and release gates.
+1. Complete Sprint 23's agent acceptance, exact-candidate review, and release
+   gates.
 2. Add the Page asset adapter on top of the verified assignment asset
    transaction.
 3. Add group-category, membership-import, verification, and local group-planning
@@ -29,10 +29,11 @@ course deadline makes one more valuable.
 
 [Sprint 23](sprints/23-classic-quiz-analysis-export.md) now contains the complete
 local implementation and its reviewed transaction/interface contracts. The
-remaining work is bounded there: one separately authorized sandbox report
-request, scenario-11 agent acceptance, independent exact-candidate review, and
-the established exact-ref release sequence. GitHub Release and PyPI publication
-remain optional, separately authorized post-tag actions.
+bounded Canvas field request passed after exposing and correcting a report-file
+lookup defect. Remaining work is scenario-11 agent acceptance, independent
+exact-candidate review, and the established exact-ref release sequence. GitHub
+Release and PyPI publication remain optional, separately authorized post-tag
+actions.
 
 ## Candidate: Page Asset Deployment
 

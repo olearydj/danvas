@@ -10,8 +10,8 @@ promise. This is an unofficial project.
 It is not affiliated with or endorsed by Instructure.
 
 The source tree currently contains the reviewed `0.21.0` Classic Quiz analysis
-export candidate. It is not released until its live, agent, independent-review,
-and exact-ref gates pass.
+export candidate. Canvas field acceptance has passed; it is not released until
+its agent, independent-review, and exact-ref gates pass.
 
 ## What It Does
 
