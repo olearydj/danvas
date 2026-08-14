@@ -243,7 +243,8 @@ def test_file_transport_rejects_invalid_content(
 def test_file_transport_rejects_directory_device_fifo_and_socket(tmp_path: Path) -> None:
     fifo = tmp_path / "token.fifo"
     os.mkfifo(fifo)
-    with tempfile.TemporaryDirectory(prefix="danvas-socket-", dir="/private/tmp") as temp:
+    # Keep the AF_UNIX path short on macOS while using a root present on Linux.
+    with tempfile.TemporaryDirectory(prefix="danvas-socket-", dir="/tmp") as temp:
         socket_path = Path(temp) / "s"
         server = socket.socket(socket.AF_UNIX)
         try:
