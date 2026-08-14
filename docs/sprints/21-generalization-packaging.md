@@ -5,10 +5,10 @@ through 20 are released as `v0.15.x`, `v0.16.0`, and `v0.17.0`. This sprint is
 the final generalization and packaging slice of the accepted public-readiness
 program and targets `0.18.0`. Group 0 characterization is complete at
 `ded6b2e`; Groups 1 through 3 have passed focused review; and Group 4 CI and
-security hardening is implementation-complete and awaiting focused review. The
-sprint does not authorize external publication, tagging, global installation,
-or live Canvas use. A separately authorized repository-setting change enabled
-GitHub private vulnerability reporting on 2026-08-13.
+security hardening has passed focused review and awaits exact-commit remote CI.
+The sprint does not authorize external publication, tagging, global
+installation, or live Canvas use. A separately authorized repository-setting
+change enabled GitHub private vulnerability reporting on 2026-08-13.
 
 The reviewed Python distribution name is `danvas-cli`. The Python import
 package and installed command remain `danvas`.
@@ -838,7 +838,9 @@ quality gate passed 831 tests at 84.99% branch-aware coverage, the
 authored-assets module floor at 88.87%, Ruff, ty, frozen-lock validation, the
 dependency audit, the 12-document offline checker, the focused 95-test POSIX
 privacy/recovery matrix, and isolated sdist/wheel installation smoke. Focused
-review and exact-commit remote CI remain open before Group 5 may begin.
+review accepted Group 4 on 2026-08-13 after independently resolving both action
+SHAs and all four Gitleaks archive checksums against their authoritative
+upstreams. Exact-commit remote CI remains open before Group 5 may begin.
 
 ### Group 5: beta audit and release
 
