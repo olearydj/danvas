@@ -2,8 +2,9 @@
 
 Status: design accepted on 2026-08-13 after independent review and the required
 contract edits. Sprint 21 shipped as verified public-beta tag `v0.18.0`; Group 0
-characterization is complete at `1145791` with no production change. Group 1 is
-the next implementation gate. This sprint authorizes no secret migration,
+characterization is complete at `1145791` with no production change. Group 1's
+neutral resolver and trust gate are complete at `c50d170` and await focused
+review; Group 2 has not started. This sprint authorizes no secret migration,
 external secret-manager installation, Canvas access, release, or modification
 outside this repository.
 
@@ -663,16 +664,42 @@ the dependency audit.
 
 ### Group 1: neutral resolver and trust gate
 
-1. Add typed credential descriptors and independent precedence fixtures.
-2. Implement bounded environment and credential-file readers.
-3. Remove the selected environment value before Canvas construction.
-4. Add origin binding and conflict-before-credential ordering.
-5. Route CanvasAPI and Panopto through the same neutral resolver.
-6. Replace routine provider attribution with truthful transport attribution or
-   no routine line.
+1. [x] Add typed credential descriptors and independent precedence fixtures.
+2. [x] Implement bounded environment and credential-file readers.
+3. [x] Remove the selected environment value before Canvas construction.
+4. [x] Add origin binding and conflict-before-credential ordering.
+5. [x] Route CanvasAPI and Panopto through the same neutral resolver.
+6. [x] Replace routine provider attribution with truthful transport
+   attribution or no routine line.
 
 Group 1 does not yet remove legacy options or dependencies; characterization
 keeps the old path available until the new path is independently exercised.
+
+Implementation record: `c50d170` adds a provider-neutral credential module with
+typed environment/file descriptors, independent layer-precedence fixtures, and
+a redacting resolved-value representation. The environment reader consumes and
+removes exactly the selected variable before downstream construction. The file
+reader performs one bounded descriptor open, requires a regular file, supports
+projected-volume symlinks, rejects active-project containment and path
+replacement, preserves the source artifact, and emits only a path/value-free
+POSIX permissions warning. User profiles may select the neutral file transport;
+course projects may select neither transport nor legacy provider metadata.
+
+The effective HTTPS Canvas origin is now bound before credential access to a
+matching selected profile, invocation-level `--api-url`, or matching
+`CANVAS_API_URL`; all profile-selection paths enforce conflicts, while custom
+domains and trailing-slash/default-port equivalence remain supported. Ordinary
+CanvasAPI and Panopto authentication share one reviewed resolver entry point,
+and runtime attribution names only an observed environment or credential-file
+transport. Group 0's warning-only mismatch and project-only-authentication tests
+were deliberately inverted. The transitional 45-command legacy option surface,
+SecretPath wrapper, auth-doctor schema, dotenv behavior, and dependencies remain
+available for explicit Group 2 removal.
+
+The full Group 1 gate passes 908 tests at 85.20% branch-aware coverage, the new
+credential module at 94%, and the authored-assets module floor at 88.87%, plus
+Ruff, ty, frozen-lock validation, and the dependency audit. No Canvas, Panopto,
+external provider, or out-of-repository operation was performed.
 
 ### Group 2: remove provider ownership
 

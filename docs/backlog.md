@@ -370,8 +370,10 @@ platform injection an individual/organization decision. The design targets
 release, and moves the remaining accepted Sprint 22 agent-interface work to
 `0.20.0`. Independent review accepted the threat model, release sequence, and
 design on 2026-08-13 after the required contract edits. Group 0 characterization
-is complete at `1145791` with no production behavior change; Group 1's neutral
-resolver and trust gate are next.
+is complete at `1145791` with no production behavior change. Group 1's neutral
+resolver and origin trust gate are complete at `c50d170`, with the legacy option,
+auth-doctor, dotenv, and dependency surface deliberately retained for Group 2;
+focused Group 1 review is next.
 
 Named post-beta maintenance: when Python 3.15 is released, revisit the
 `<3.15` upper bound. Expand support only with an explicit compatibility review
