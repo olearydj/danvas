@@ -50,12 +50,10 @@ if [ -z "$REF" ] || [ -z "$EXPECTED_VERSION" ]; then
     exit 2
 fi
 
-case "$EXPECTED_VERSION" in
-    *[!0-9.]*|.*|*..*|*.)
-        echo "anonymous install smoke: invalid expected version: $EXPECTED_VERSION" >&2
-        exit 2
-        ;;
-esac
+if ! printf '%s\n' "$EXPECTED_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    echo "anonymous install smoke: invalid expected version: $EXPECTED_VERSION" >&2
+    exit 2
+fi
 
 EXACT_REF=0
 if [ "$REF" = "v$EXPECTED_VERSION" ]; then

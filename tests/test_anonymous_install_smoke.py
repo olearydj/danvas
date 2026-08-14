@@ -118,3 +118,19 @@ def test_smoke_rejects_legacy_and_new_distributions_sharing_command(tmp_path: Pa
 
     assert result.returncode == 1
     assert "legacy danvas distribution is also installed" in result.stderr
+
+
+def test_smoke_rejects_non_release_version_before_uv(tmp_path: Path) -> None:
+    env, log_path = fake_uv_environment(tmp_path)
+    result = subprocess.run(
+        [str(SCRIPT), "--ref", COMMIT_SHA, "--expected-version", "0.18"],
+        cwd=tmp_path,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "invalid expected version" in result.stderr
+    assert not log_path.exists()
