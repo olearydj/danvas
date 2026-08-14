@@ -28,7 +28,9 @@ class CommandAccessPolicy:
 
     def __post_init__(self) -> None:
         if self.canvas_mutation and not self.canvas_read:
-            raise ValueError(f"Canvas mutation policy must also declare Canvas read: {self.command}")
+            raise ValueError(
+                f"Canvas mutation policy must also declare Canvas read: {self.command}"
+            )
         if self.bare_canvas_mutation and not self.canvas_mutation:
             raise ValueError(f"Bare mutation requires Canvas mutation: {self.command}")
         if self.dry_run_kind is DryRunKind.CANVAS_MUTATION and not self.canvas_mutation:
@@ -66,6 +68,8 @@ def _policy(
 
 def _policies() -> tuple[CommandAccessPolicy, ...]:
     local_only = (
+        _policy("guide"),
+        _policy("describe"),
         _policy("status", local_write=True, authoritative_verification=True),
         _policy("reports list", local_write=True),
         _policy("reports latest", local_write=True),

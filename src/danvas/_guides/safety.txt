@@ -1,0 +1,8 @@
+Canvas-changing commands plan when invoked without an apply authorization. Read
+the plan and any expected-state guards before applying. Local-writing sync and
+download commands are a different axis: their dry-run previews local changes and
+they never accept the Canvas apply authorization.
+
+After a write, trust classified readback and retained evidence rather than a
+transport response alone. An accepted-unverified or indeterminate outcome is a
+stop condition, not an invitation to retry blindly.

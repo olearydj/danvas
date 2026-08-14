@@ -64,16 +64,29 @@ def render_help(path: tuple[str, ...], *, width: int, color: bool) -> str:
     return result.output
 
 
+def normalize_help(output: str) -> str:
+    normalized = "\n".join(line.rstrip() for line in output.splitlines())
+    return normalized + ("\n" if output.endswith("\n") else "")
+
+
 def test_released_executable_tree_still_matches_complete_fixture() -> None:
     expected = json.loads((FIXTURES / "command-tree-v0.19.json").read_text(encoding="utf-8"))
     actual = command_tree_record(root_command())
 
-    assert without_long_help(actual) == without_long_help(expected)
+    actual_by_path = {
+        record["path"]: without_long_help(record) for record in command_records(actual)
+    }
+    for released in command_records(expected):
+        current = actual_by_path[released["path"]]
+        released_without_help = without_long_help(released)
+        current.pop("children", None)
+        released_without_help.pop("children", None)
+        assert current == released_without_help
     assert actual["help"] != expected["help"]
     records = command_records(actual)
     assert sum(record["kind"] == "group" for record in records) == 14
-    assert sum(record["kind"] == "leaf" for record in records) == 55
-    assert sum(len(record["parameters"]) for record in records) == 614
+    assert sum(record["kind"] == "leaf" for record in records) == 57
+    assert sum(len(record["parameters"]) for record in records) == 617
 
 
 @pytest.mark.parametrize("width", WIDTHS)
@@ -88,8 +101,8 @@ def test_representative_help_matches_width_and_color_baseline(
     plain = render_help(path, width=width, color=False)
     colored = render_help(path, width=width, color=True)
 
-    assert plain.rstrip("\n") == expected.rstrip("\n")
-    assert click.unstyle(colored).rstrip("\n") == expected.rstrip("\n")
+    assert normalize_help(plain).rstrip("\n") == expected.rstrip("\n")
+    assert normalize_help(click.unstyle(colored)).rstrip("\n") == expected.rstrip("\n")
     assert "\x1b[" not in plain
     assert "\x1b[" in colored
     assert max(map(len, expected.splitlines())) <= width
@@ -128,7 +141,7 @@ def test_released_help_has_neutral_auth_surface_and_no_removed_spellings() -> No
     canvas_commands = {name for name, policy in ACCESS_POLICIES.items() if policy.canvas_read}
     neutral = {"--api-url", "--profile", "--api-key-env", "--api-key-file"}
 
-    assert len(leaves) == 55
+    assert len(leaves) == 57
     assert len(canvas_commands) == 45
     for name, record in leaves.items():
         options = {option for parameter in record["parameters"] for option in parameter["options"]}

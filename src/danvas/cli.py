@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal
 
 import typer
 from canvasapi.exceptions import ResourceDoesNotExist
+from typer.main import get_command as get_typer_command
 
 from danvas import __version__, assignment_audit, gradebook, quiz
 from danvas.announcements import (
@@ -33,6 +34,7 @@ from danvas.assignments import (
     command_assignments_verify,
 )
 from danvas.auth import command_auth_doctor
+from danvas.command_description import describe_json, describe_text
 from danvas.config import (
     command_init,
     command_refresh,
@@ -65,6 +67,7 @@ from danvas.grades import (
 )
 from danvas.help_rendering import install_guided_help
 from danvas.mutation import APPLY_HELP, DRY_RUN_HELP, MutationMode, resolve_mutation_mode
+from danvas.offline_guides import render_guide
 from danvas.override_sync import command_assignments_overrides_sync
 from danvas.pages import (
     command_pages_create,
@@ -111,6 +114,7 @@ LintFailOn = Literal["error", "warning"]
 PageExportFormat = Literal["json", "html", "markdown"]
 PageSyncFormat = Literal["html", "markdown"]
 SourceLayout = Literal["standard-v1", "legacy-v1"]
+DescribeFormat = Literal["text", "json"]
 
 
 app = typer.Typer(
@@ -3614,6 +3618,45 @@ def discussions_score(
             api_key_file=api_key_file,
         ),
     )
+
+
+@app.command(
+    "guide",
+    help="Render a packaged offline task guide, or use the list topic to show every guide.",
+)
+def guide(
+    topic: Annotated[
+        str,
+        typer.Argument(help="Guide topic name, or 'list' to show every topic."),
+    ] = "list",
+) -> None:
+    try:
+        typer.echo(render_guide(topic), nl=False)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@app.command(
+    "describe",
+    help="Describe the public command tree as deterministic text or versioned JSON.",
+)
+def describe(
+    command_path: Annotated[
+        list[str] | None,
+        typer.Argument(help="Optional command path, such as assignments create."),
+    ] = None,
+    format: Annotated[
+        DescribeFormat,
+        typer.Option("--format", help="Description rendering format."),
+    ] = "text",
+) -> None:
+    root = get_typer_command(app)
+    path = tuple(command_path or ())
+    try:
+        output = describe_json(root, path) if format == "json" else describe_text(root, path)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(output, nl=False)
 
 
 install_guided_help(app)

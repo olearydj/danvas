@@ -1,0 +1,9 @@
+Agents should begin with help, use task guides for workflow context, and use the
+versioned command description instead of scraping terminal layout for structured
+facts. Effects and privacy come from the same registries that govern the human
+help surface.
+
+Never infer mutation authority from the presence of an apply option. Plan first,
+retain bounded evidence, and request explicit authorization before applying.
+Credential providers remain outside danvas; agents pass only the neutral
+environment-variable name or credential-file path selected by the operator.

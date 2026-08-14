@@ -66,8 +66,8 @@ def validate_argv(argv: tuple[str, ...], commands: dict[str, click.Command]) -> 
 def test_command_guides_cover_every_released_group_and_leaf_exactly() -> None:
     commands = command_tree()
 
-    assert len(commands) == 69
-    assert len(COMMAND_GUIDES) == 69
+    assert len(commands) == 71
+    assert len(COMMAND_GUIDES) == 71
     assert set(COMMAND_GUIDES) == set(commands)
 
 

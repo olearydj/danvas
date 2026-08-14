@@ -1,32 +1,36 @@
-                                                                                
- Usage: danvas [OPTIONS] COMMAND [ARGS]...                                      
-                                                                                
- Unified Canvas operations CLI.                                                 
-                                                                                
- Use this for day-to-day course work: discover courses, export rosters, create  
- or audit assignments, move submission files, post grades, and score            
- discussions. Canvas-changing commands plan by default and require --apply. It  
- intentionally does not manage archival ledger/history data.                    
-                                                                                
- Danvas supports operational Canvas course work; archival ledger and history    
- tooling is out of scope.                                                       
-                                                                                
- Start here:                                                                    
-   danvas auth doctor                                                           
-   danvas init 12345 --profile example                                          
-   danvas refresh --diff                                                        
-   danvas status                                                                
-                                                                                
- Effects:                                                                       
-   Read-only commands inspect local or Canvas state. Local-write commands       
- retain reports, exports, downloads, or authored sources. Canvas-changing       
- commands plan on omission; --apply authorizes Canvas writes.                   
-                                                                                
- Privacy:                                                                       
-   Student-identifying artifacts default beneath .danvas/private/ in an         
- initialized project. Course-internal output is not automatically safe to       
- publish.                                                                       
-                                                                                
+
+ Usage: danvas [OPTIONS] COMMAND [ARGS]...
+
+ Unified Canvas operations CLI.
+
+ Use this for day-to-day course work: discover courses, export rosters, create
+ or audit assignments, move submission files, post grades, and score
+ discussions. Canvas-changing commands plan by default and require --apply. It
+ intentionally does not manage archival ledger/history data.
+
+ Danvas supports operational Canvas course work; archival ledger and history
+ tooling is out of scope.
+
+ Start here:
+   danvas auth doctor
+   danvas init 12345 --profile example
+   danvas refresh --diff
+   danvas status
+
+ Effects:
+   Read-only commands inspect local or Canvas state. Local-write commands
+ retain reports, exports, downloads, or authored sources. Canvas-changing
+ commands plan on omission; --apply authorizes Canvas writes.
+
+ Privacy:
+   Student-identifying artifacts default beneath .danvas/private/ in an
+ initialized project. Course-internal output is not automatically safe to
+ publish.
+
+ More guidance:
+   danvas guide list
+   danvas describe assignments create --format json
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --version                     Show the danvas version and exit.              │
 │ --install-completion          Install completion for the current shell.      │
@@ -47,6 +51,10 @@
 │                safe to publish.                                              │
 │ roster         Export active course enrollments to a roster CSV for later    │
 │                grade/feedback matching.                                      │
+│ guide          Render a packaged offline task guide, or use the list topic   │
+│                to show every guide.                                          │
+│ describe       Describe the public command tree as deterministic text or     │
+│                versioned JSON.                                               │
 │ assignments    Create assignments from Markdown sources or export assignment │
 │                metadata for review.                                          │
 │ auth           Inspect Canvas authentication configuration without printing  │
@@ -70,5 +78,3 @@
 │ sources        Validate local Canvas-facing authored sources without Canvas  │
 │                access.                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-
-

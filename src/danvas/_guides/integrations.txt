@@ -1,0 +1,8 @@
+Optional integrations are configured selectors, not institution defaults.
+Recording caption downloads use the configured Canvas external tool and retain
+private bundles. Interrupted bundles are reconciled only when their pairs and
+hashes are consistent; unexpected artifacts are refused rather than deleted.
+
+Compatibility statements are bounded to tested runtimes, platforms, formats,
+and integration behavior. Inspect the compatibility guide before assuming a
+different deployment has equivalent semantics.

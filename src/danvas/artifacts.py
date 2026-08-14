@@ -37,6 +37,7 @@ class ArtifactPolicy:
     command: str
     artifact_class: ArtifactClass
     default_relative: str | None = None
+    retained: bool = True
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,10 @@ class ResolvedPrivatePath:
 
 
 def _policies() -> tuple[ArtifactPolicy, ...]:
+    shareable = (
+        "guide",
+        "describe",
+    )
     course_internal = (
         "init",
         "refresh",
@@ -104,7 +109,8 @@ def _policies() -> tuple[ArtifactPolicy, ...]:
         "recordings panopto-captions",
     )
     return tuple(
-        [ArtifactPolicy(command, ArtifactClass.COURSE_INTERNAL) for command in course_internal]
+        [ArtifactPolicy(command, ArtifactClass.SHAREABLE, retained=False) for command in shareable]
+        + [ArtifactPolicy(command, ArtifactClass.COURSE_INTERNAL) for command in course_internal]
         + [ArtifactPolicy(command, ArtifactClass.PRIVATE) for command in private]
     )
 

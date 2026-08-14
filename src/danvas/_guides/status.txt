@@ -1,0 +1,8 @@
+Use snapshot refresh when Canvas may have changed, then use status for the local
+comparison. Status itself is local-only: it reads the saved snapshot and the
+configured authored-source layout. A stale or partial snapshot limits the claims
+status can make.
+
+Retain a report run when an operational decision needs durable evidence. Report
+discovery spans both course-internal and private project roots without guessing
+directory names.

@@ -24,6 +24,7 @@ OUTPUT_OPTIONS = {
 }
 POSITIONAL_OUTPUT_NAMES = {"output", "output_dir", "destination"}
 IMPLICIT_RETAINED_OUTPUT_COMMANDS = {"init"}
+NONRETAINED_INTERFACE_ARTIFACT_COMMANDS = {"guide", "describe"}
 
 CURRENT_DRY_RUN_DEFAULTS = {
     "assignments overrides-sync": False,
@@ -236,15 +237,15 @@ def canvas_mutation_assertions() -> Counter[tuple[str, str]]:
 def test_access_policy_registry_matches_click_tree_exactly() -> None:
     commands = set(leaf_commands())
 
-    assert len(commands) == 55
-    assert len(ACCESS_POLICIES) == 55
+    assert len(commands) == 57
+    assert len(ACCESS_POLICIES) == 57
     assert set(ACCESS_POLICIES) == commands
 
 
 def test_access_policy_category_counts_match_reviewed_inventory() -> None:
     policies = tuple(ACCESS_POLICIES.values())
 
-    assert sum(not policy.canvas_read for policy in policies) == 10
+    assert sum(not policy.canvas_read for policy in policies) == 12
     assert sum(
         policy.canvas_read
         and not policy.canvas_mutation
@@ -298,7 +299,9 @@ def test_current_special_mutation_guards_are_characterized() -> None:
 
 
 def test_retained_output_registry_has_no_missing_or_stale_commands() -> None:
-    assert set(ARTIFACT_POLICIES) == retained_output_commands()
+    assert set(ARTIFACT_POLICIES) == (
+        retained_output_commands() | NONRETAINED_INTERFACE_ARTIFACT_COMMANDS
+    )
 
 
 def test_canvas_mutation_call_sites_match_reviewed_baseline() -> None:

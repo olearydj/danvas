@@ -1,13 +1,13 @@
-                                                                                
- Usage: danvas [OPTIONS] COMMAND [ARGS]...                                      
-                                                                                
- Unified Canvas operations CLI.                                                 
-                                                                                
- Use this for day-to-day course work: discover courses, export rosters, create  
- or audit assignments, move submission files, post grades, and score            
- discussions. Canvas-changing commands plan by default and require --apply. It  
- intentionally does not manage archival ledger/history data.                    
-                                                                                
+
+ Usage: danvas [OPTIONS] COMMAND [ARGS]...
+
+ Unified Canvas operations CLI.
+
+ Use this for day-to-day course work: discover courses, export rosters, create
+ or audit assignments, move submission files, post grades, and score
+ discussions. Canvas-changing commands plan by default and require --apply. It
+ intentionally does not manage archival ledger/history data.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --version                     Show the danvas version and exit.              │
 │ --install-completion          Install completion for the current shell.      │
@@ -51,5 +51,3 @@
 │ sources        Validate local Canvas-facing authored sources without Canvas  │
 │                access.                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-
-

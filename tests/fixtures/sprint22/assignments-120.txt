@@ -1,8 +1,8 @@
-                                                                                                                        
- Usage: danvas assignments [OPTIONS] COMMAND [ARGS]...                                                                  
-                                                                                                                        
- Create assignments from Markdown sources or export assignment metadata for review.                                     
-                                                                                                                        
+
+ Usage: danvas assignments [OPTIONS] COMMAND [ARGS]...
+
+ Create assignments from Markdown sources or export assignment metadata for review.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
@@ -16,5 +16,3 @@
 │ upsert          Plan whether one assignment source would update an existing assignment or create a new one.          │
 │ audit           Compare a saved assignments export to course policy weights and basic setup expectations.            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-
-

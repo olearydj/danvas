@@ -41,7 +41,7 @@ def _lines_for_commands(commands: Iterable[tuple[str, ...]]) -> list[str]:
 
 def _artifact_text(command: str) -> str:
     policy = ARTIFACT_POLICIES.get(command)
-    if policy is None:
+    if policy is None or not policy.retained:
         return "No retained artifact is declared by default."
     if policy.artifact_class is ArtifactClass.PRIVATE:
         return (
@@ -203,6 +203,10 @@ def _root_help(summary: str) -> str:
             "",
             "Privacy:",
             "  Student-identifying artifacts default beneath .danvas/private/ in an initialized project. Course-internal output is not automatically safe to publish.",
+            "",
+            "More guidance:",
+            "  danvas guide list",
+            "  danvas describe assignments create --format json",
         )
     )
 

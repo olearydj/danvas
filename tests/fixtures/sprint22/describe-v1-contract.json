@@ -1,0 +1,28 @@
+{
+  "schema_version": "danvas-command-guide-v1",
+  "required_paths": {
+    "schema_version": "string",
+    "danvas_version": "string",
+    "command_path": "string",
+    "command.command_path": "string",
+    "command.name": "string",
+    "command.kind": "string",
+    "command.aliases": "array",
+    "command.summary": "string",
+    "command.purpose": "string",
+    "command.parameters": "array",
+    "command.requirements": "object",
+    "command.access": "object",
+    "command.artifact": "object",
+    "command.plan_apply": "object",
+    "command.identity": "array",
+    "command.outputs": "array",
+    "command.guards": "array",
+    "command.exit_statuses": "array",
+    "command.examples": "array",
+    "command.workflows": "array",
+    "command.recovery": "array",
+    "command.related_commands": "array",
+    "command.guide_topics": "array"
+  }
+}

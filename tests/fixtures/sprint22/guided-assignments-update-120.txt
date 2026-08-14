@@ -1,10 +1,10 @@
-                                                                                                                        
- Usage: danvas assignments update [OPTIONS] SOURCE                                                                      
-                                                                                                                        
- Plan one assignment update from Markdown; use --apply to write Canvas.                                                 
-                                                                                                                        
- Plan or update one assignment resolved by stable identity.                                                             
-                                                                                                                        
+
+ Usage: danvas assignments update [OPTIONS] SOURCE
+
+ Plan one assignment update from Markdown; use --apply to write Canvas.
+
+ Plan or update one assignment resolved by stable identity.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ *    source      PATH  Markdown source with assignment_id/canvas_id front matter, source-map entry, or               │
 │                        --assignment-id.                                                                              │
@@ -31,26 +31,23 @@
 │ --api-key-file              PATH            Absolute path to a single-purpose file containing the Canvas API token.  │
 │ --help                                      Show this message and exit.                                              │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-                                                                                                                        
- Effect:                                                                                                                
- Reads Canvas and can change Canvas only with --apply. Omission or --dry-run produces a plan. The workflow can affect   
- grades. The workflow can affect notifications or visibility.                                                           
- Privacy:                                                                                                               
- Retained output is course-internal and is not automatically safe to publish.                                           
- Resolution:                                                                                                            
- Uses the explicit target ID, source front matter, or project source-map provenance.                                    
- Typical sequence:                                                                                                      
- danvas assignments update SOURCE                                                                                       
- danvas assignments update SOURCE --apply                                                                               
- Verification:                                                                                                          
- Applied or compared state is checked against authoritative evidence.                                                   
- Safety guards:                                                                                                         
- Omission plans; --apply alone authorizes Canvas mutation.                                                              
- Failure boundary:                                                                                                      
- Inspect the retained plan/result evidence before deciding what to do next.                                             
- Refresh current Canvas state and generate a new plan before applying again.                                            
- Related:                                                                                                               
- danvas assignments verify                                                                                              
-                                                                                                                        
 
-
+ Effect:
+ Reads Canvas and can change Canvas only with --apply. Omission or --dry-run produces a plan. The workflow can affect
+ grades. The workflow can affect notifications or visibility.
+ Privacy:
+ Retained output is course-internal and is not automatically safe to publish.
+ Resolution:
+ Uses the explicit target ID, source front matter, or project source-map provenance.
+ Typical sequence:
+ danvas assignments update SOURCE
+ danvas assignments update SOURCE --apply
+ Verification:
+ Applied or compared state is checked against authoritative evidence.
+ Safety guards:
+ Omission plans; --apply alone authorizes Canvas mutation.
+ Failure boundary:
+ Inspect the retained plan/result evidence before deciding what to do next.
+ Refresh current Canvas state and generate a new plan before applying again.
+ Related:
+ danvas assignments verify

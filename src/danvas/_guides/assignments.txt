@@ -1,0 +1,6 @@
+Use authored Markdown plus stable identity for assignment create, update, and
+verification. Update and verification resolve explicit IDs, front matter, or
+project provenance; title matching is never an implicit fallback.
+
+Lint locally, inspect the Canvas-backed plan, apply only an authorized plan, and
+verify. Assignment override membership follows the private-artifact boundary.

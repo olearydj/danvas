@@ -109,13 +109,23 @@ ROOT_GUIDE = CommandGuide(
     ),
     examples=(
         CommandExample("Inspect command families", ("danvas", "--help"), ExampleStage.INSPECT),
+        CommandExample("List task guides", ("danvas", "guide", "list"), ExampleStage.INSPECT),
         CommandExample(
-            "Inspect local course state", ("danvas", "status", "--help"), ExampleStage.INSPECT
+            "Describe a command",
+            (
+                "danvas",
+                "describe",
+                "assignments",
+                "create",
+                "--format",
+                "json",
+            ),
+            ExampleStage.INSPECT,
         ),
     ),
     outputs=("Command output is stdout-first unless a command declares retained artifacts.",),
     recovery=(RecoveryCategory.CORRECT_INPUT,),
-    related_commands=("auth doctor", "init", "refresh", "status"),
+    related_commands=("auth doctor", "init", "refresh", "status", "guide", "describe"),
     guide_topics=("setup", "safety", "privacy", "agents"),
 )
 
@@ -435,6 +445,8 @@ GROUP_GUIDES: tuple[CommandGuide, ...] = (
 
 
 _LEAF_PURPOSES = {
+    "guide": "Render a packaged offline task guide or list every available topic.",
+    "describe": "Describe the public command tree as deterministic text or versioned JSON.",
     "init": "Create project configuration and an initial Canvas course snapshot.",
     "refresh": "Refresh the project course snapshot with explicit partial-evidence handling.",
     "status": "Compare the saved Canvas snapshot with configured local authored sources.",
@@ -494,6 +506,8 @@ _LEAF_PURPOSES = {
 
 
 _BASE_EXAMPLES: Mapping[str, tuple[str, ...]] = {
+    "guide": ("guide", "list"),
+    "describe": ("describe", "assignments", "create", "--format", "json"),
     "init": ("init", "12345", "--profile", "example"),
     "refresh": ("refresh", "--diff"),
     "status": ("status",),
@@ -587,6 +601,7 @@ _LOCAL_PATH_COMMANDS = {
     "sources lint",
 }
 _CANVAS_URL_COMMANDS = {"discussions export", "discussions score"}
+_NO_IDENTITY_COMMANDS = {"guide", "describe"}
 _CANVAS_ID_COMMANDS = {
     "assignments overrides",
     "submissions export",
@@ -612,6 +627,8 @@ _CONFIRM_GUARDS: Mapping[str, tuple[str, ...]] = {
     "assignments upsert": ("--confirm", "update"),
 }
 _RELATED: Mapping[str, tuple[str, ...]] = {
+    "guide": ("describe",),
+    "describe": ("guide",),
     "refresh": ("status",),
     "status": ("refresh", "sources lint"),
     "roster": ("submissions feedback", "grades post"),
@@ -630,6 +647,13 @@ _RELATED: Mapping[str, tuple[str, ...]] = {
 
 
 def _identity_for(command: str) -> tuple[IdentityRule, ...]:
+    if command in _NO_IDENTITY_COMMANDS:
+        return (
+            IdentityRule(
+                IdentityKind.NONE,
+                "Uses only the installed command model and packaged resources.",
+            ),
+        )
     if command in _SOURCE_COMMANDS:
         return (
             IdentityRule(
@@ -746,7 +770,9 @@ def _leaf_guides() -> tuple[CommandGuide, ...]:
                 related_commands=_RELATED.get(
                     command, (command.split()[0],) if " " in command else ()
                 ),
-                guide_topics=group_topics.get(command.split()[0], ("setup",)),
+                guide_topics=("agents",)
+                if command in _NO_IDENTITY_COMMANDS
+                else group_topics.get(command.split()[0], ("setup",)),
             )
         )
     return tuple(guides)

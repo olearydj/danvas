@@ -1,0 +1,7 @@
+Pages, announcements, and discussions share authored-source, local-sync,
+plan/apply, provenance, and verification concepts, but their allowed update
+scopes differ. Use each family help before applying a change.
+
+Local render and lint checks run before Canvas planning. Sync brings missing
+Canvas content into local sources without overwriting, while create and update
+remain explicit Canvas mutation workflows.

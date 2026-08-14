@@ -1,8 +1,8 @@
-                                                                                
- Usage: danvas assignments update [OPTIONS] SOURCE                              
-                                                                                
- Plan one assignment update from Markdown; use --apply to write Canvas.         
-                                                                                
+
+ Usage: danvas assignments update [OPTIONS] SOURCE
+
+ Plan one assignment update from Markdown; use --apply to write Canvas.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    source      PATH  Markdown source with assignment_id/canvas_id front    │
 │                        matter, source-map entry, or --assignment-id.         │
@@ -47,5 +47,3 @@
 │                                             the Canvas API token.            │
 │ --help                                      Show this message and exit.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-
-
