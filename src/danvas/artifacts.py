@@ -52,6 +52,7 @@ def _policies() -> tuple[ArtifactPolicy, ...]:
     shareable = (
         "guide",
         "describe",
+        "skill show",
     )
     course_internal = (
         "init",

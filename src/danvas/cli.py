@@ -88,6 +88,7 @@ from danvas.reports import (
     latest_report_run,
     should_write_report_run,
 )
+from danvas.skill_resources import render_skill_show
 from danvas.source_layouts import resolve_source_output_dir
 from danvas.source_lint import command_sources_lint
 from danvas.status import command_status
@@ -181,6 +182,10 @@ sources_app = typer.Typer(
     help="Validate local Canvas-facing authored sources without Canvas access.",
     no_args_is_help=True,
 )
+skill_app = typer.Typer(
+    help="Inspect, install, and diagnose the bundled portable danvas Agent Skill.",
+    no_args_is_help=True,
+)
 
 
 def version_callback(value: bool) -> None:
@@ -217,6 +222,7 @@ app.add_typer(files_app, name="files")
 app.add_typer(recordings_app, name="recordings")
 app.add_typer(reports_app, name="reports")
 app.add_typer(sources_app, name="sources")
+app.add_typer(skill_app, name="skill")
 
 
 ApiUrl = Annotated[
@@ -3657,6 +3663,14 @@ def describe(
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     typer.echo(output, nl=False)
+
+
+@skill_app.command(
+    "show",
+    help="Show the version-matched bundled danvas Agent Skill and its file hashes.",
+)
+def skill_show() -> None:
+    typer.echo(render_skill_show(), nl=False)
 
 
 install_guided_help(app)

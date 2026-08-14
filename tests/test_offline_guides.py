@@ -79,8 +79,8 @@ def test_unknown_guide_topic_has_suggestion_and_list_command() -> None:
     assert "danvas guide list" in result.output
 
 
-def test_guide_and_describe_are_shareable_local_only_commands() -> None:
-    for command in ("guide", "describe"):
+def test_discovery_commands_are_shareable_and_local_only() -> None:
+    for command in ("guide", "describe", "skill show"):
         assert ACCESS_POLICIES[command].canvas_read is False
         assert ACCESS_POLICIES[command].local_write is False
         assert ARTIFACT_POLICIES[command].artifact_class is ArtifactClass.SHAREABLE

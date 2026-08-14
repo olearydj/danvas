@@ -30,6 +30,7 @@
  More guidance:
    danvas guide list
    danvas describe assignments create --format json
+   danvas skill show
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --version                     Show the danvas version and exit.              │
@@ -77,4 +78,6 @@
 │ reports        List and inspect generated .danvas report runs.               │
 │ sources        Validate local Canvas-facing authored sources without Canvas  │
 │                access.                                                       │
+│ skill          Inspect, install, and diagnose the bundled portable danvas    │
+│                Agent Skill.                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯

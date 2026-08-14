@@ -80,7 +80,7 @@ GUIDE_TOPICS: Final[tuple[GuideTopic, ...]] = (
         "agents",
         "Discover commands and operate safely from an agent.",
         "agents.txt",
-        ("guide", "describe"),
+        ("guide", "describe", "skill"),
     ),
 )
 GUIDE_TOPIC_MAP: Final = {topic.name: topic for topic in GUIDE_TOPICS}

@@ -70,6 +70,7 @@ def _policies() -> tuple[CommandAccessPolicy, ...]:
     local_only = (
         _policy("guide"),
         _policy("describe"),
+        _policy("skill show"),
         _policy("status", local_write=True, authoritative_verification=True),
         _policy("reports list", local_write=True),
         _policy("reports latest", local_write=True),

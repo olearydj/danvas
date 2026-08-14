@@ -207,6 +207,7 @@ def _root_help(summary: str) -> str:
             "More guidance:",
             "  danvas guide list",
             "  danvas describe assignments create --format json",
+            "  danvas skill show",
         )
     )
 
