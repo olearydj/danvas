@@ -1488,7 +1488,11 @@ def gradebook_check(
     ] = None,
 ) -> None:
     policy = gradebook.load_policy(course_yaml)
-    gb = gradebook.CanvasGradebook.read(gradebook_csv, policy.get("exclude_students") or [])
+    gb = gradebook.CanvasGradebook.read(
+        gradebook_csv,
+        policy.get("exclude_students") or [],
+        policy.get("gradebook_heading_aliases"),
+    )
     payload = gradebook.check_gradebook(gb, final_score_column=policy.get("final_score_column"))
     typer.echo(f"Canvas gradebook check: {gradebook_csv}")
     typer.echo(f"  Included rows: {payload['structure']['included_rows']}")
@@ -1579,7 +1583,11 @@ def gradebook_audit(
         assignment_weights = assignment_audit.assignment_group_weights(
             assignment_audit.load_assignment_snapshot(assignments_path)
         )
-    gb = gradebook.CanvasGradebook.read(gradebook_csv, policy.get("exclude_students") or [])
+    gb = gradebook.CanvasGradebook.read(
+        gradebook_csv,
+        policy.get("exclude_students") or [],
+        policy.get("gradebook_heading_aliases"),
+    )
     payload = gradebook.audit_gradebook(
         gb,
         policy=policy,

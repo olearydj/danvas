@@ -11,34 +11,52 @@ from typing import Any
 
 import yaml
 
-TOTAL_VARIANTS = [
-    "Unposted Final Score",
-    "Final Score",
-    "Unposted Current Score",
-    "Current Score",
-]
-GRADE_VARIANTS = [
-    "Unposted Final Grade",
-    "Final Grade",
-    "Unposted Current Grade",
-    "Current Grade",
-]
-GROUP_VARIANTS = [
-    "Unposted Final Score",
-    "Final Score",
-    "Unposted Current Score",
-    "Current Score",
-]
-METADATA_COLUMNS = {
-    "Student",
-    "ID",
-    "SIS User ID",
-    "SIS Login ID",
-    "Section",
-    "Email",
-    "Root Account",
+SCORE_ROLES = (
+    "unposted_final_score",
+    "final_score",
+    "unposted_current_score",
+    "current_score",
+)
+GRADE_ROLES = (
+    "unposted_final_grade",
+    "final_grade",
+    "unposted_current_grade",
+    "current_grade",
+)
+METADATA_ROLES = (
+    "student",
+    "id",
+    "sis_user_id",
+    "sis_login_id",
+    "section",
+    "email",
+    "root_account",
+)
+BUILTIN_HEADING_ROLES = {
+    "student": "Student",
+    "id": "ID",
+    "sis_user_id": "SIS User ID",
+    "sis_login_id": "SIS Login ID",
+    "section": "Section",
+    "email": "Email",
+    "root_account": "Root Account",
+    "points_possible": "Points Possible",
+    "unposted_final_score": "Unposted Final Score",
+    "final_score": "Final Score",
+    "unposted_current_score": "Unposted Current Score",
+    "current_score": "Current Score",
+    "unposted_final_grade": "Unposted Final Grade",
+    "final_grade": "Final Grade",
+    "unposted_current_grade": "Unposted Current Grade",
+    "current_grade": "Current Grade",
 }
+TOTAL_VARIANTS = [BUILTIN_HEADING_ROLES[role] for role in SCORE_ROLES]
+GRADE_VARIANTS = [BUILTIN_HEADING_ROLES[role] for role in GRADE_ROLES]
+GROUP_VARIANTS = list(TOTAL_VARIANTS)
+METADATA_COLUMNS = {BUILTIN_HEADING_ROLES[role] for role in METADATA_ROLES}
+GRADEBOOK_HEADING_ROLES = (*METADATA_ROLES, "points_possible", *SCORE_ROLES, *GRADE_ROLES)
 MISSING_STRINGS = {"", "N/A", "(read only)"}
+OBSERVED_HEADING_LIMIT = 12
 
 
 def parse_number(value: Any) -> float | None:
@@ -75,34 +93,56 @@ class CanvasGradebook:
         points: list[str],
         rows: list[list[str]],
         points_row_index: int,
+        heading_aliases: dict[str, tuple[str, ...]] | None = None,
+        role_headers: dict[str, str | None] | None = None,
     ) -> None:
         self.path = path
         self.headers = headers
         self.points = points
         self.rows = rows
         self.points_row_index = points_row_index
+        self.heading_aliases = heading_aliases or resolve_gradebook_heading_aliases(None)
+        self.role_headers = role_headers or resolve_observed_role_headers(
+            headers, self.heading_aliases
+        )
 
     @classmethod
-    def read(cls, path: Path, exclude_patterns: list[str] | None = None) -> CanvasGradebook:
+    def read(
+        cls,
+        path: Path,
+        exclude_patterns: list[str] | None = None,
+        heading_aliases: Any = None,
+    ) -> CanvasGradebook:
         with path.open(newline="", encoding="utf-8-sig") as handle:
             raw_rows = list(csv.reader(handle))
         if len(raw_rows) < 3:
             raise ValueError(f"{path} does not look like a Canvas gradebook export")
         headers = raw_rows[0]
-        points_idx = next(
-            (
-                idx
-                for idx, row in enumerate(raw_rows[:8])
-                if row and row[0].strip().lower().startswith("points possible")
-            ),
-            None,
-        )
-        if points_idx is None:
-            raise ValueError(f"Could not find Points Possible row in {path}")
+        aliases = resolve_gradebook_heading_aliases(heading_aliases)
+        role_headers = resolve_observed_role_headers(headers, aliases)
+        points_rows = [
+            idx
+            for idx, row in enumerate(raw_rows[:8])
+            if row and row[0].strip() in aliases["points_possible"]
+        ]
+        if len(points_rows) > 1:
+            raise ValueError(
+                gradebook_role_error(
+                    "points_possible", aliases, headers, problem="ambiguous points rows"
+                )
+            )
+        if not points_rows:
+            raise ValueError(
+                gradebook_role_error(
+                    "points_possible", aliases, headers, problem="missing points row"
+                )
+            )
+        points_idx = points_rows[0]
         points = pad_row(raw_rows[points_idx], len(headers))
         compiled = [re.compile(pattern) for pattern in exclude_patterns or []]
         rows = []
-        student_idx = headers.index("Student") if "Student" in headers else None
+        student_header = role_headers["student"]
+        student_idx = headers.index(student_header) if student_header is not None else None
         for row in raw_rows[points_idx + 1 :]:
             if not row:
                 continue
@@ -111,44 +151,82 @@ class CanvasGradebook:
             if any(pattern.search(student) for pattern in compiled):
                 continue
             rows.append(row)
-        return cls(path, headers, points, rows, points_idx)
+        return cls(
+            path,
+            headers,
+            points,
+            rows,
+            points_idx,
+            heading_aliases=aliases,
+            role_headers=role_headers,
+        )
 
     def choose_final_score_column(self, requested: str | None = None) -> tuple[str, int]:
-        candidates = [requested] if requested else []
-        candidates += [candidate for candidate in TOTAL_VARIANTS if candidate not in candidates]
-        for candidate in candidates:
-            if candidate and candidate in self.headers:
-                return candidate, self.headers.index(candidate)
-        raise ValueError("No Canvas final score column found")
+        if requested:
+            requested_matches = [header for header in self.headers if header.strip() == requested.strip()]
+            if len(requested_matches) == 1:
+                observed = requested_matches[0]
+                return observed, self.headers.index(observed)
+            if len(requested_matches) > 1:
+                raise ValueError(
+                    f"Requested final score heading is ambiguous: {requested!r}. "
+                    f"Observed headings: {bounded_observed_headings(self.headers)}"
+                )
+        for role in SCORE_ROLES:
+            observed = self.role_headers[role]
+            if observed is not None:
+                return observed, self.headers.index(observed)
+        aliases = [alias for role in SCORE_ROLES for alias in self.heading_aliases[role]]
+        raise ValueError(
+            "Missing canonical gradebook role 'final score'. "
+            f"Configured aliases: {aliases!r}. "
+            f"Observed headings: {bounded_observed_headings(self.headers)}"
+        )
 
     def choose_final_grade_column(self) -> str | None:
-        return next((candidate for candidate in GRADE_VARIANTS if candidate in self.headers), None)
+        return next(
+            (self.role_headers[role] for role in GRADE_ROLES if self.role_headers[role]),
+            None,
+        )
 
     def discover_groups(self) -> dict[str, dict[str, int]]:
         groups: dict[str, dict[str, int]] = {}
         for idx, header in enumerate(self.headers):
-            if header in TOTAL_VARIANTS:
+            if header in {self.role_headers[role] for role in SCORE_ROLES}:
                 continue
-            for variant in GROUP_VARIANTS:
+            normalized_header = header.strip()
+            for role, variant in self.group_score_suffixes():
                 suffix = f" {variant}"
-                if header.endswith(suffix):
-                    group = header[: -len(suffix)]
-                    groups.setdefault(group, {})[variant] = idx
+                if normalized_header.endswith(suffix):
+                    group = normalized_header[: -len(suffix)]
+                    groups.setdefault(group, {})[role] = idx
                     break
         return groups
+
+    def group_score_suffixes(self) -> list[tuple[str, str]]:
+        suffixes = [
+            (role, alias)
+            for role in SCORE_ROLES
+            for alias in self.heading_aliases[role]
+        ]
+        return sorted(suffixes, key=lambda item: len(item[1]), reverse=True)
 
     def assignment_columns(self) -> list[int]:
         first_group_col = min(
             [
                 idx
                 for idx, header in enumerate(self.headers)
-                if any(header.endswith(f" {variant}") for variant in GROUP_VARIANTS)
+                if any(
+                    header.endswith(f" {variant}")
+                    for _role, variant in self.group_score_suffixes()
+                )
             ]
             or [len(self.headers)]
         )
         out = []
         for idx, header in enumerate(self.headers[:first_group_col]):
-            if header in METADATA_COLUMNS:
+            metadata_headers = {self.role_headers[role] for role in METADATA_ROLES}
+            if header in metadata_headers:
                 continue
             if parse_number(self.points[idx] if idx < len(self.points) else "") is not None:
                 out.append(idx)
@@ -159,6 +237,82 @@ def pad_row(row: list[str], width: int) -> list[str]:
     if len(row) < width:
         return [*row, *("" for _ in range(width - len(row)))]
     return row[:width]
+
+
+def resolve_gradebook_heading_aliases(value: Any) -> dict[str, tuple[str, ...]]:
+    if value is None:
+        raw: dict[str, Any] = {}
+    elif isinstance(value, dict):
+        raw = value
+    else:
+        raise ValueError("gradebook_heading_aliases must be a mapping")
+    unknown = sorted(set(raw) - set(GRADEBOOK_HEADING_ROLES))
+    if unknown:
+        raise ValueError(f"Unknown gradebook heading role: gradebook_heading_aliases.{unknown[0]}")
+
+    resolved: dict[str, tuple[str, ...]] = {}
+    for role in GRADEBOOK_HEADING_ROLES:
+        configured = raw.get(role, [])
+        if isinstance(configured, str):
+            configured_values = [configured]
+        elif isinstance(configured, list) and all(isinstance(item, str) for item in configured):
+            configured_values = configured
+        else:
+            raise ValueError(f"gradebook_heading_aliases.{role} must be a string or list of strings")
+        aliases = [BUILTIN_HEADING_ROLES[role], *configured_values]
+        normalized = []
+        for alias in aliases:
+            stripped = alias.strip()
+            if not stripped:
+                raise ValueError(f"gradebook_heading_aliases.{role} contains an empty alias")
+            if stripped not in normalized:
+                normalized.append(stripped)
+        resolved[role] = tuple(normalized)
+
+    owners: dict[str, list[str]] = {}
+    for role, aliases in resolved.items():
+        for alias in aliases:
+            owners.setdefault(alias, []).append(role)
+    conflicts = [(alias, roles) for alias, roles in owners.items() if len(roles) > 1]
+    if conflicts:
+        alias, roles = sorted(conflicts)[0]
+        raise ValueError(
+            f"Gradebook heading alias {alias!r} maps to multiple canonical roles: "
+            f"{', '.join(roles)}"
+        )
+    return resolved
+
+
+def resolve_observed_role_headers(
+    headers: list[str], aliases: dict[str, tuple[str, ...]]
+) -> dict[str, str | None]:
+    resolved: dict[str, str | None] = {}
+    for role in GRADEBOOK_HEADING_ROLES:
+        matches = [header for header in headers if header.strip() in aliases[role]]
+        if len(matches) > 1:
+            raise ValueError(gradebook_role_error(role, aliases, headers, problem="ambiguous"))
+        resolved[role] = matches[0] if matches else None
+    return resolved
+
+
+def gradebook_role_error(
+    role: str,
+    aliases: dict[str, tuple[str, ...]],
+    headers: list[str],
+    *,
+    problem: str,
+) -> str:
+    return (
+        f"Gradebook role {role!r} is {problem}. "
+        f"Configured aliases: {list(aliases[role])!r}. "
+        f"Observed headings: {bounded_observed_headings(headers)}"
+    )
+
+
+def bounded_observed_headings(headers: list[str]) -> str:
+    observed = [header.strip() for header in headers[:OBSERVED_HEADING_LIMIT]]
+    suffix = f" (+{len(headers) - OBSERVED_HEADING_LIMIT} more)" if len(headers) > len(observed) else ""
+    return f"{observed!r}{suffix}"
 
 
 def load_policy(path: Path | None) -> dict[str, Any]:
@@ -192,8 +346,8 @@ def check_gradebook(
             "included_rows": len(gradebook.rows),
             "columns": len(gradebook.headers),
             "points_possible_row_index": gradebook.points_row_index,
-            "id_column_present": "ID" in gradebook.headers,
-            "student_column_present": "Student" in gradebook.headers,
+            "id_column_present": gradebook.role_headers["id"] is not None,
+            "student_column_present": gradebook.role_headers["student"] is not None,
             "final_score_column": final_name,
             "final_grade_column": final_grade,
         },
@@ -235,7 +389,11 @@ def missing_summary(gradebook: CanvasGradebook, assignment_cols: list[int]) -> d
 
 
 def score_variant_summary(gradebook: CanvasGradebook) -> tuple[dict[str, Any], int]:
-    variants = [variant for variant in TOTAL_VARIANTS if variant in gradebook.headers]
+    variants: list[str] = []
+    for role in SCORE_ROLES:
+        observed = gradebook.role_headers[role]
+        if observed is not None:
+            variants.append(observed)
     values_by_variant = {
         variant: [parse_number(row[gradebook.headers.index(variant)]) for row in gradebook.rows]
         for variant in variants
@@ -259,7 +417,11 @@ def audit_gradebook(
     weights = weights_from_policy(policy) or assignment_weights or {}
     final_name, final_idx = gradebook.choose_final_score_column(policy.get("final_score_column"))
     groups = gradebook.discover_groups()
-    matched = match_group_columns(groups, weights, final_name)
+    final_role = next(
+        (role for role in SCORE_ROLES if gradebook.role_headers[role] == final_name),
+        SCORE_ROLES[0],
+    )
+    matched = match_group_columns(groups, weights, final_role)
     reconstruction = reconstruct_scores(
         gradebook,
         final_idx,
@@ -287,22 +449,18 @@ def audit_gradebook(
 def match_group_columns(
     groups: dict[str, dict[str, int]],
     weights: dict[str, float],
-    final_score_column: str,
+    preferred_role: str,
 ) -> dict[str, int]:
-    preferred_variant = (
-        final_score_column if final_score_column in GROUP_VARIANTS else GROUP_VARIANTS[0]
-    )
+    if preferred_role not in SCORE_ROLES:
+        preferred_role = SCORE_ROLES[0]
     matched = {}
     for group in weights:
         cols = groups.get(group)
         if not cols:
             continue
-        for variant in [
-            preferred_variant,
-            *[item for item in GROUP_VARIANTS if item != preferred_variant],
-        ]:
-            if variant in cols:
-                matched[group] = cols[variant]
+        for role in [preferred_role, *[item for item in SCORE_ROLES if item != preferred_role]]:
+            if role in cols:
+                matched[group] = cols[role]
                 break
     return matched
 

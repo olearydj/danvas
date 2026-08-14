@@ -169,6 +169,11 @@ def test_source_configuration_rejects_unknown_or_unsafe_values(
         resolve_source_config(source_config)
 
 
+def test_source_configuration_rejects_singular_plural_table_conflict() -> None:
+    with pytest.raises(SystemExit, match="either .*sources.assignments.*sources.assignment"):
+        resolve_source_config({"assignment": {}, "assignments": {}})
+
+
 def test_invalid_existing_sources_fail_before_canvas_context(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

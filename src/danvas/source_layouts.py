@@ -99,6 +99,10 @@ def resolve_source_config(
         config_key = SOURCE_CONFIG_KEYS[kind]
         plural_options = raw.get(config_key)
         singular_options = raw.get(kind)
+        if plural_options is not None and singular_options is not None:
+            raise SystemExit(
+                f"Configure either [sources.{config_key}] or [sources.{kind}], not both."
+            )
         for table_name, options in (
             (config_key, plural_options),
             (kind, singular_options),
