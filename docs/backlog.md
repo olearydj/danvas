@@ -331,7 +331,10 @@ suite, POSIX/macOS and Python support, workflow hardening, secret scanning, and
 the cross-release beta audit. Independent review selected `danvas-cli` as the
 distribution while preserving the `danvas` import package and executable. The
 Sprint 22 design review and Sprint 21 Group 0 characterization are complete.
-Group 1 project generalization is next.
+Groups 1 and 2 have passed focused review. Group 3 packaging and public
+documentation is implementation-complete and awaiting focused review; the real
+anonymous exact-candidate/tag installs remain release gates after those refs
+exist remotely.
 
 ## Accepted 0.19.0 Agent Interface Design
 

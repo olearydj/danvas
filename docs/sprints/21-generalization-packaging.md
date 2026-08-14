@@ -4,10 +4,11 @@ Status: design accepted on 2026-08-13 after independent review. Sprints 18
 through 20 are released as `v0.15.x`, `v0.16.0`, and `v0.17.0`. This sprint is
 the final generalization and packaging slice of the accepted public-readiness
 program and targets `0.18.0`. Group 0 characterization is complete at
-`ded6b2e`; Group 1 project generalization has passed focused review; and Group
-2 parser and integration work is implementation-complete and awaiting focused
-review. The sprint does not authorize external publication, tagging,
-repository-setting changes, global installation, or live Canvas use.
+`ded6b2e`; Groups 1 and 2 have passed focused review; and Group 3 packaging and
+public documentation work is implementation-complete and awaiting focused
+review. The sprint does not authorize external publication, tagging, global
+installation, or live Canvas use. A separately authorized repository-setting
+change enabled GitHub private vulnerability reporting on 2026-08-13.
 
 The reviewed Python distribution name is `danvas-cli`. The Python import
 package and installed command remain `danvas`.
@@ -765,16 +766,49 @@ Group 2 is implementation-complete in three reviewed-scope commits:
 
 The exact local gate passed 815 tests at 84.99% branch-aware coverage, the
 authored-assets module floor at 88.87%, Ruff, ty, frozen-lock validation, and
-the dependency audit. Group 3 remains gated on focused review of this group.
+the dependency audit. Independent review accepted Group 2 on 2026-08-13 and
+cleared Group 3 to proceed.
 
 ### Group 3: package and public docs
 
-1. Adopt the reviewed distribution name and complete package metadata.
-2. Add anonymous candidate/tag install smoke and distribution migration tests.
-3. Build the public guide suite, shorten README, add the changelog and
+1. [x] Adopt the reviewed distribution name and complete package metadata.
+2. [x] Add anonymous candidate/tag install smoke and distribution migration
+   tests.
+3. [x] Build the public guide suite, shorten README, add the changelog and
    contribution/security policies, and remove external maintainer paths from
    the authority chain.
-4. Publish the `0.18.0` migration guide and local documentation checker.
+4. [x] Publish the `0.18.0` migration guide and local documentation checker.
+
+Group 3 is implementation-complete in six reviewed-scope commits:
+
+- `701acc0` adopts the `danvas-cli` distribution identity, `0.18.0` candidate
+  metadata, Python upper bound, SPDX license declaration, archive inspection,
+  and renamed editable/wheel release smoke;
+- `8ef1e4e` adds the isolated exact-SHA/exact-tag anonymous HTTPS installation
+  smoke and distribution-shadowing guard;
+- `61b9d2b` closes the accepted Group 1 import tidy-up without introducing a
+  module cycle;
+- `0a41757` and `d360727` harden exact-version validation and keep the invalid
+  ref fixture within the public placeholder policy; and
+- `7dc5681` publishes the public guide suite, concise README, changelog,
+  contribution and security policies, `0.18.0` migration guide, and offline
+  local-link/anchor checker.
+
+On 2026-08-13, the repository API first reported private vulnerability
+reporting disabled. After separate operator authorization, the setting was
+enabled and a second API read returned `{"enabled": true}`. `SECURITY.md`
+therefore points to a verified repository security-advisory route rather than
+inventing or publishing a personal security contact. External availability is
+reviewed at release time; the ordinary documentation gate remains offline.
+
+The exact local gate passed 827 tests at 84.99% branch-aware coverage, the
+authored-assets module floor at 88.87%, Ruff, ty, frozen-lock validation, the
+dependency audit, all 12 public-document Markdown/link checks, distribution
+archive inspection, and isolated editable/wheel installation smoke. The
+anonymous installer is structurally tested against exact SHA/tag and legacy
+shadowing cases; the real exact-candidate and tag runs remain Group 5 release
+gates after those refs exist remotely. Group 4 remains gated on focused review
+of this group.
 
 ### Group 4: CI and security
 
@@ -792,8 +826,8 @@ the dependency audit. Group 3 remains gated on focused review of this group.
 5. Require signed-tag CI and anonymous exact-tag install before the global CLI
    advances or public docs call the release complete.
 
-Each group lands in logical commits. Groups 1 and 2 should receive focused
-review before the documentation and beta-claim work builds on their contracts.
+Each group lands in logical commits. Groups 1 through 3 receive focused review
+before CI/security hardening and the beta-claim audit build on their contracts.
 
 ## Automated Acceptance
 
