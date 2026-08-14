@@ -1,0 +1,55 @@
+                                                                                
+ Usage: danvas [OPTIONS] COMMAND [ARGS]...                                      
+                                                                                
+ Unified Canvas operations CLI.                                                 
+                                                                                
+ Use this for day-to-day course work: discover courses, export rosters, create  
+ or audit assignments, move submission files, post grades, and score            
+ discussions. Canvas-changing commands plan by default and require --apply. It  
+ intentionally does not manage archival ledger/history data.                    
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --version                     Show the danvas version and exit.              │
+│ --install-completion          Install completion for the current shell.      │
+│ --show-completion             Show completion for the current shell, to copy │
+│                               it or customize the installation.              │
+│ --help                        Show this message and exit.                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ init           Create .danvas/config.toml and .danvas/course.json for a      │
+│                Canvas course project.                                        │
+│ refresh        Refresh .danvas/course.json from Canvas using --course-id or  │
+│                .danvas/config.toml. Optional endpoint failures produce an    │
+│                explicit partial snapshot.                                    │
+│ status         Report Canvas-vs-local course state from the snapshot and     │
+│                local sources. Read-only.                                     │
+│ courses        Export active courses visible to the authenticated Canvas     │
+│                user. The CSV is course-internal and is not automatically     │
+│                safe to publish.                                              │
+│ roster         Export active course enrollments to a roster CSV for later    │
+│                grade/feedback matching.                                      │
+│ assignments    Create assignments from Markdown sources or export assignment │
+│                metadata for review.                                          │
+│ auth           Inspect Canvas authentication configuration without printing  │
+│                secrets.                                                      │
+│ gradebook      Check Canvas gradebook exports and audit final-score setup.   │
+│ quiz           Analyze Canvas Classic Quiz/Survey student-analysis CSV       │
+│                exports.                                                      │
+│ submissions    Download submitted media/attachments or upload per-student    │
+│                feedback files.                                               │
+│ grades         Safely post, clear, and verify CSV grades/comments with       │
+│                private readback evidence.                                    │
+│ discussions    Create, verify, export, update, or score Canvas discussions.  │
+│ announcements  Create/export course announcements and filtered instructor    │
+│                replies.                                                      │
+│ pages          Render, inspect, sync, create, update, and verify Canvas      │
+│                Pages.                                                        │
+│ files          Inventory Canvas course Files and compare them to local       │
+│                course files.                                                 │
+│ recordings     Discover and download course recording transcripts/captions.  │
+│ reports        List and inspect generated .danvas report runs.               │
+│ sources        Validate local Canvas-facing authored sources without Canvas  │
+│                access.                                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+

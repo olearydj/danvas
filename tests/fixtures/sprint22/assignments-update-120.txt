@@ -1,0 +1,33 @@
+                                                                                                                        
+ Usage: danvas assignments update [OPTIONS] SOURCE                                                                      
+                                                                                                                        
+ Plan one assignment update from Markdown; use --apply to write Canvas.                                                 
+                                                                                                                        
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ *    source      PATH  Markdown source with assignment_id/canvas_id front matter, source-map entry, or               │
+│                        --assignment-id.                                                                              │
+│                        [required]                                                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --course-id                 INTEGER         Canvas course ID.                                                        │
+│ --assignment-id             INTEGER         Canvas assignment ID to update.                                          │
+│ --match-title                               Resolve by exact Canvas assignment title only when no ID is available.   │
+│ --dry-run                                   Plan without changing Canvas (also the default).                         │
+│ --apply                                     Apply the planned change to Canvas.                                      │
+│ --project-root              PATH            Course project root containing .danvas. [default: .]                     │
+│ --asset-folder              TEXT            Existing Canvas Files folder for local assets.                           │
+│ --asset-folder-id           INTEGER         Existing Canvas Files folder ID for local assets.                        │
+│ --asset-on-duplicate        [error|rename]  Local-asset duplicate behavior. [default: error]                         │
+│ --no-report                                 Suppress the default report run.                                         │
+│ --report-root               PATH            Root for a dated report run directory.                                   │
+│ --report-dir                PATH            Exact report run directory to create.                                    │
+│ --report-slug               TEXT            Override the report run slug.                                            │
+│ --profile                   TEXT            User-level Canvas instance profile from the danvas platform config.      │
+│ --api-url                   TEXT            Canvas base URL. Overrides project and profile configuration;            │
+│                                             CANVAS_API_URL is the final fallback.                                    │
+│ --api-key-env               TEXT            Name of the environment variable containing the Canvas API token.        │
+│ --api-key-file              PATH            Absolute path to a single-purpose file containing the Canvas API token.  │
+│ --help                                      Show this message and exit.                                              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
