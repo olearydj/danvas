@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import configparser
+import re
 import sys
 import tarfile
 import zipfile
@@ -26,6 +27,7 @@ REQUIRED_CLASSIFIERS = {
     "Programming Language :: Python :: 3.14",
 }
 REQUIRED_PROJECT_URLS = {"Repository", "Issues", "Documentation", "Changelog"}
+FORBIDDEN_REQUIREMENTS = {"python-dotenv", "secretpath"}
 
 
 class DistributionError(ValueError):
@@ -82,6 +84,16 @@ def verify_metadata(metadata: Message, *, expected_version: str) -> None:
             f"{sorted(project_url_labels)}; expected {sorted(REQUIRED_PROJECT_URLS)}"
         )
 
+    requirements = {
+        re.split(r"[\s\[<>=!~;]", value, maxsplit=1)[0].casefold()
+        for value in metadata.get_all("Requires-Dist", [])
+    }
+    forbidden = sorted(requirements.intersection(FORBIDDEN_REQUIREMENTS))
+    if forbidden:
+        raise DistributionError(
+            f"METADATA retains removed credential dependencies: {forbidden}"
+        )
+
 
 def verify_wheel(path: Path, *, expected_version: str) -> None:
     with zipfile.ZipFile(path) as archive:
@@ -121,6 +133,12 @@ def verify_sdist(path: Path, *, expected_version: str) -> None:
         expected_root = f"danvas_cli-{expected_version}"
         if root != expected_root:
             raise DistributionError(f"sdist root is {root!r}; expected {expected_root!r}")
+
+        metadata_path = only_match(names, suffix="/PKG-INFO", label="sdist")
+        member = archive.extractfile(metadata_path)
+        if member is None:
+            raise DistributionError("sdist PKG-INFO is unreadable")
+        verify_metadata(parse_metadata(member.read()), expected_version=expected_version)
 
         required = {
             f"{root}/LICENSE",

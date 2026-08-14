@@ -17,14 +17,11 @@ default_profile = "institution-a"
 [profiles.institution-a]
 api_url = "https://profile.canvas.example/"
 timezone = "Central Time (US & Canada)"
-secret_name = "canvas-institution-a"
-secret_provider = "env"
 api_key_env = "INSTITUTION_A_CANVAS_TOKEN"
 
 [profiles.institution-b]
 api_url = "https://other.canvas.example/"
 timezone = "America/New_York"
-secret_name = "canvas-institution-b"
 """.lstrip(),
         encoding="utf-8",
     )
@@ -67,9 +64,8 @@ course_id = 101
     assert context.api_url == "https://profile.canvas.example/"
     assert context.api_url_source == ".danvas/config.toml"
     assert context.origin_binding_source == "profile 'institution-a'"
-    assert context.secret_name == "canvas-institution-a"
-    assert context.secret_provider == "env"
-    assert context.api_key_env == "INSTITUTION_A_CANVAS_TOKEN"
+    assert context.credential_input.locator == "INSTITUTION_A_CANVAS_TOKEN"
+    assert context.credential_input.selection_source.value == "user_profile"
 
 
 def test_explicit_profile_mismatch_is_rejected(tmp_path: Path) -> None:
@@ -134,8 +130,7 @@ def test_profile_selection_and_instance_precedence(tmp_path: Path) -> None:
     assert explicit.api_url_source == "--api-url"
     assert explicit.origin_binding_source == "profile 'institution-b'"
     assert explicit.profile_timezone == "America/New_York"
-    assert explicit.secret_name == "canvas-institution-b"
-    assert explicit.api_key_env == "CANVAS_API_KEY"
+    assert explicit.credential_input.locator == "CANVAS_API_KEY"
     assert selected_by_environment.profile == "institution-b"
     assert selected_by_environment.api_url == "https://other.canvas.example/"
     assert selected_by_environment.origin_binding_source == "profile 'institution-b'"
@@ -149,9 +144,7 @@ def test_environment_url_is_last_resort(tmp_path: Path) -> None:
 
     assert context.api_url == "https://shell.canvas.example/"
     assert context.origin_binding_source == "CANVAS_API_URL"
-    assert context.secret_name == "canvas"
-    assert context.secret_provider == "auto"
-    assert context.api_key_env == "CANVAS_API_KEY"
+    assert context.credential_input.locator == "CANVAS_API_KEY"
 
 
 def test_matching_environment_url_binds_a_project_origin(tmp_path: Path) -> None:
@@ -316,29 +309,19 @@ def test_user_config_rejects_top_level_raw_secret_values(tmp_path: Path) -> None
         load_user_profiles(path)
 
 
-def test_explicit_secret_references_outrank_profile_and_environment(tmp_path: Path) -> None:
+def test_explicit_neutral_selector_outranks_profile_and_environment(tmp_path: Path) -> None:
     path = tmp_path / "config.toml"
     write_profiles(path)
 
     context = resolve_canvas_context(
         explicit_profile="institution-a",
-        explicit_secret_name="explicit-canvas",
-        explicit_secret_provider="1password",
-        explicit_op_reference="op://Explicit/Canvas/credential",
         explicit_api_key_env="EXPLICIT_CANVAS_TOKEN",
         profiles_path=path,
-        environ={
-            "CANVAS_SECRET_PROVIDER": "auto",
-            "CANVAS_API_KEY_OP_REFERENCE": "op://Environment/Canvas/credential",
-            "CANVAS_API_KEY_ENV": "ENVIRONMENT_CANVAS_TOKEN",
-        },
+        environ={"CANVAS_API_KEY_ENV": "ENVIRONMENT_CANVAS_TOKEN"},
     )
 
-    assert context.secret_name == "explicit-canvas"
-    assert context.secret_provider == "1password"
-    assert context.op_reference == "op://Explicit/Canvas/credential"
-    assert context.api_key_env == "EXPLICIT_CANVAS_TOKEN"
-    assert context.credential_input is None
+    assert context.credential_input.locator == "EXPLICIT_CANVAS_TOKEN"
+    assert context.credential_input.selection_source.value == "cli"
 
 
 def test_neutral_profile_file_is_selected_without_reading_it(tmp_path: Path) -> None:
@@ -374,7 +357,7 @@ def test_neutral_profile_file_is_selected_without_reading_it(tmp_path: Path) -> 
         ),
         (
             'api_key_file = "/run/secrets/token"\nsecret_provider = "env"',
-            "cannot combine",
+            "removed provider-specific keys",
         ),
     ],
 )
@@ -391,20 +374,34 @@ def test_profile_credential_locators_are_validated(
         load_user_profiles(profiles_path)
 
 
-def test_explicit_neutral_environment_overrides_legacy_profile(tmp_path: Path) -> None:
+@pytest.mark.parametrize("key", ["secret_name", "secret_provider", "op_reference"])
+def test_retired_profile_keys_fail_with_migration_guidance(
+    tmp_path: Path, key: str
+) -> None:
     profiles_path = tmp_path / "config.toml"
-    write_profiles(profiles_path)
-
-    context = resolve_canvas_context(
-        explicit_profile="institution-a",
-        explicit_api_key_env="CLI_CANVAS_TOKEN",
-        profiles_path=profiles_path,
-        environ={"CANVAS_SECRET_PROVIDER": "1password"},
+    profiles_path.write_text(
+        f'[profiles.stale]\napi_url = "https://canvas.example/"\n{key} = "old"\n',
+        encoding="utf-8",
     )
 
-    assert context.credential_input is not None
-    assert context.credential_input.locator == "CLI_CANVAS_TOKEN"
-    assert context.credential_input.selection_source.value == "cli"
+    with pytest.raises(SystemExit, match="api_key_env or api_key_file"):
+        load_user_profiles(profiles_path)
+
+
+@pytest.mark.parametrize(
+    "key", ["CANVAS_SECRET_PROVIDER", "CANVAS_API_KEY_OP_REFERENCE"]
+)
+@pytest.mark.parametrize("value", ["1password", ""])
+def test_retired_environment_controls_fail_before_credential_access(
+    tmp_path: Path, key: str, value: str
+) -> None:
+    with pytest.raises(SystemExit, match="Removed Canvas credential environment controls"):
+        resolve_canvas_context(
+            explicit_api_url="https://canvas.example/",
+            explicit_api_key_env="NEVER_READ",
+            profiles_path=tmp_path / "missing.toml",
+            environ={key: value, "NEVER_READ": "must-not-read"},
+        )
 
 
 def test_origin_failure_does_not_read_default_credential_value(tmp_path: Path) -> None:

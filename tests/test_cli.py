@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import click
 import pytest
@@ -9,6 +10,7 @@ from typer.testing import CliRunner
 
 from danvas.auth import canvas_from_args
 from danvas.cli import app, run_command
+from danvas.credentials import CredentialInput
 from tests.fixtures import write_assignment_fixture, write_gradebook_fixture, write_quiz_fixture
 
 runner = CliRunner()
@@ -18,6 +20,8 @@ runner = CliRunner()
 def _configured_canvas_instance(monkeypatch: pytest.MonkeyPatch) -> None:
     """CLI adapter tests run with the explicit environment fallback configured."""
     monkeypatch.setenv("CANVAS_API_URL", "https://environment.canvas.example/")
+    monkeypatch.delenv("CANVAS_SECRET_PROVIDER", raising=False)
+    monkeypatch.delenv("CANVAS_API_KEY_OP_REFERENCE", raising=False)
 
 
 def command(*path: str) -> click.Command:
@@ -93,8 +97,12 @@ def test_refresh_cli_accepts_report_options() -> None:
         ("pages", "list"),
     ],
 )
-def test_canvas_commands_expose_profile_and_secret_name(path: tuple[str, ...]) -> None:
-    assert {"--profile", "--secret-name"} <= option_names(*path)
+def test_canvas_commands_expose_provider_neutral_credential_selectors(
+    path: tuple[str, ...],
+) -> None:
+    options = option_names(*path)
+    assert {"--profile", "--api-key-env", "--api-key-file"} <= options
+    assert {"--secret-name", "--secret-provider", "--op-reference"}.isdisjoint(options)
 
 
 @pytest.mark.parametrize("action", ["create", "update", "upsert"])
@@ -468,8 +476,6 @@ def test_auth_doctor_cli_options_and_args(monkeypatch: pytest.MonkeyPatch) -> No
             "--json",
             "--api-url",
             "https://canvas.example/",
-            "--secret-provider",
-            "env",
             "--api-key-env",
             "CANVAS_TOKEN",
         ],
@@ -479,14 +485,37 @@ def test_auth_doctor_cli_options_and_args(monkeypatch: pytest.MonkeyPatch) -> No
     assert captured["check_canvas"] is True
     assert captured["json"] is True
     assert captured["api_url"] == "https://canvas.example/"
-    assert captured["secret_provider"] == "env"
     assert captured["api_key_env"] == "CANVAS_TOKEN"
-    assert {"--check-canvas", "--json", "--api-url", "--secret-provider"} <= option_names(
+    assert cast(CredentialInput, captured["credential_input"]).locator == "CANVAS_TOKEN"
+    assert {"--check-canvas", "--json", "--api-url", "--api-key-file"} <= option_names(
         "auth", "doctor"
     )
     assert {"--report-root", "--report-dir", "--no-report"}.isdisjoint(
         option_names("auth", "doctor")
     )
+
+
+def test_credential_selector_conflict_fails_before_context_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "danvas.cli.resolve_canvas_context",
+        lambda **kwargs: pytest.fail("context resolution must not run"),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "courses",
+            "--api-key-env",
+            "CANVAS_TOKEN",
+            "--api-key-file",
+            "/run/secrets/canvas-token",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Use either --api-key-env or --api-key-file" in normalized_cli_output(result)
 
 
 def test_canvas_command_without_instance_fails_before_dispatch(

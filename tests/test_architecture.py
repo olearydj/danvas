@@ -17,30 +17,16 @@ LEGACY_COMPLEXITY_EXCEPTIONS = {
     ("pages.py", "build_pages_sync_plan"),
     ("status.py", "compare_pages"),
 }
-RESOLVE_API_KEY_CALLS = {
-    ("auth.py", "resolve_canvas_credential"),
-}
 RESOLVE_CANVAS_CREDENTIAL_CALLS = {
     ("auth.py", "canvas_from_args"),
     ("panopto.py", "command_panopto_captions"),
 }
 RESOLVE_NEUTRAL_CREDENTIAL_CALLS = {
     ("auth.py", "resolve_canvas_credential"),
+    ("auth.py", "build_auth_doctor_report"),
 }
-CURRENT_PROVIDER_IMPORTS = Counter(
-    {
-        ("auth.py", "secretpath"): 1,
-        ("cli.py", "dotenv"): 1,
-    }
-)
-CURRENT_PROVIDER_CALLS = Counter(
-    {
-        ("auth.py", "resolve_api_key", "resolve_named_secret"): 1,
-        ("auth.py", "build_auth_doctor_report", "doctor_report"): 1,
-        ("auth.py", "build_auth_doctor_report", "resolve_named_secret"): 1,
-        ("cli.py", "main", "load_dotenv"): 1,
-    }
-)
+CURRENT_PROVIDER_IMPORTS: Counter[tuple[str, str]] = Counter()
+CURRENT_PROVIDER_CALLS: Counter[tuple[str, str, str]] = Counter()
 PROVIDER_PACKAGES = {
     "azure",
     "boto3",
@@ -186,30 +172,6 @@ def test_only_documented_legacy_functions_suppress_complexity() -> None:
     assert exceptions == LEGACY_COMPLEXITY_EXCEPTIONS
 
 
-def test_legacy_resolve_api_key_call_site_is_bounded_and_passes_secret_name() -> None:
-    found: set[tuple[str, str]] = set()
-    missing_secret_name: set[tuple[str, str]] = set()
-    for path in PACKAGE_ROOT.glob("*.py"):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for function in (
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        ):
-            for node in ast.walk(function):
-                if not isinstance(node, ast.Call):
-                    continue
-                if not isinstance(node.func, ast.Name) or node.func.id != "resolve_api_key":
-                    continue
-                call_site = (path.name, function.name)
-                found.add(call_site)
-                if "secret_name" not in {keyword.arg for keyword in node.keywords}:
-                    missing_secret_name.add(call_site)
-
-    assert found == RESOLVE_API_KEY_CALLS
-    assert missing_secret_name == set()
-
-
 def test_canvas_and_panopto_share_one_credential_boundary() -> None:
     found: set[tuple[str, str]] = set()
     for path in PACKAGE_ROOT.glob("*.py"):
@@ -250,7 +212,7 @@ def test_neutral_credential_reader_has_one_reviewed_entry_point() -> None:
     assert found == RESOLVE_NEUTRAL_CREDENTIAL_CALLS
 
 
-def test_current_provider_imports_and_calls_match_reviewed_baseline() -> None:
+def test_production_provider_imports_and_calls_are_absent() -> None:
     imports: Counter[tuple[str, str]] = Counter()
     calls: Counter[tuple[str, str, str]] = Counter()
     provider_call_names = {"doctor_report", "load_dotenv", "resolve_named_secret"}

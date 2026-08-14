@@ -56,24 +56,7 @@ def command_roster(args: Any) -> None:
             }
         )
     rows.sort(key=lambda row: row["Name"])
-    schema = getattr(args, "schema", "v2")
-    if schema == "legacy-v1":
-        print(
-            "WARNING: roster schema legacy-v1 labels Canvas login_id as Email; migrate to "
-            "--schema v2 before legacy-v1 is removed in danvas 0.19.0."
-        )
-        rows = [
-            {
-                "CanvasID": row["CanvasID"],
-                "Name": row["Name"],
-                "Email": row["LoginID"],
-                "SIS_ID": row["SIS_ID"],
-            }
-            for row in rows
-        ]
-        fields = ["CanvasID", "Name", "Email", "SIS_ID"]
-    else:
-        fields = ["CanvasID", "Name", "LoginID", "SIS_ID"]
+    fields = ["CanvasID", "Name", "LoginID", "SIS_ID"]
     try:
         write_private_rows(
             resolved.path,

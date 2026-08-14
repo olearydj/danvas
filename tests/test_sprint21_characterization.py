@@ -214,7 +214,7 @@ def test_english_gradebook_heading_profile_is_frozen() -> None:
     } == METADATA_COLUMNS
 
 
-def test_due_deprecations_are_removed_and_roster_compatibility_remains() -> None:
+def test_due_deprecations_and_roster_compatibility_are_removed() -> None:
     commands = leaf_commands()
     options_by_name = {
         option_name: {
@@ -232,12 +232,8 @@ def test_due_deprecations_are_removed_and_roster_compatibility_remains() -> None
     assert options_by_name == {
         "--live": set(),
         "--upload": set(),
-        "--schema": {"roster"},
+        "--schema": set(),
     }
-    roster_schema = option(commands["roster"], "--schema")
-    assert roster_schema.default == "v2"
-    assert isinstance(roster_schema.type, click.Choice)
-    assert tuple(roster_schema.type.choices) == ("v2", "legacy-v1")
     assert option(commands["recordings panopto-captions"], "--caption-language").default is None
 
 

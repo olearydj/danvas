@@ -85,26 +85,3 @@ def test_command_roster_writes_sorted_roster(
         "SIS_ID": "JL1",
     }
     assert output.with_name("roster.csv.artifact.json").is_file()
-
-
-def test_command_roster_legacy_schema_retains_email_label(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.setattr("danvas.courses.canvas_from_args", lambda args: FakeCanvas())
-    output = tmp_path / "roster.csv"
-
-    command_roster(
-        SimpleNamespace(
-            course_id=101,
-            output=str(output),
-            enrollment_type="StudentEnrollment",
-            schema="legacy-v1",
-        )
-    )
-
-    assert list(read_csv(output)[0]) == ["CanvasID", "Name", "Email", "SIS_ID"]
-    warning = capsys.readouterr().out
-    assert "removed in danvas 0.19.0" in warning
-    assert "--schema v2" in warning

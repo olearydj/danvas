@@ -169,7 +169,7 @@ run_clean "$EXECUTABLE" sources lint --help >/dev/null
         PYTHONPATH= \
         DANVAS_ANONYMOUS_SMOKE_TOKEN="not-a-real-canvas-token" \
         "$EXECUTABLE" auth doctor \
-            --secret-provider env \
+            --api-url https://canvas.example.invalid/ \
             --api-key-env DANVAS_ANONYMOUS_SMOKE_TOKEN >/dev/null
 )
 

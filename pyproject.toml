@@ -32,10 +32,8 @@ dependencies = [
     "canvasapi>=3.3",
     "markdown>=3.6",
     "platformdirs>=4.0",
-    "python-dotenv>=1.0",
     "pyyaml>=6.0",
     "requests>=2.31",
-    "secretpath>=0.3.0",
     "tinycss2>=1.4",
     "typer>=0.19",
 ]
@@ -73,9 +71,6 @@ source = ["danvas"]
 [tool.coverage.report]
 fail_under = 82
 show_missing = true
-
-[tool.uv.exclude-newer-package]
-secretpath = "2026-06-25T00:00:00Z"
 
 [project.scripts]
 danvas = "danvas.cli:main"

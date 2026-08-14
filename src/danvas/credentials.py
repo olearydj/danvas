@@ -31,6 +31,22 @@ class SelectionSource(StrEnum):
     DEFAULT = "default"
 
 
+class CredentialErrorReason(StrEnum):
+    """Stable diagnostic classifications for credential-read failures."""
+
+    MISSING = "missing"
+    UNREADABLE = "unreadable"
+    INVALID = "invalid"
+
+
+class CredentialResolutionError(SystemExit):
+    """Credential failure with a safe diagnostic classification."""
+
+    def __init__(self, message: str, *, reason: CredentialErrorReason) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 @dataclass(frozen=True)
 class CredentialInput:
     """A validated, non-secret locator for one Canvas credential."""
@@ -46,6 +62,7 @@ class ResolvedCredential:
 
     value: str
     source_kind: CredentialKind
+    warnings: tuple[str, ...] = ()
 
     def __repr__(self) -> str:
         return (
@@ -116,11 +133,16 @@ def resolve_credential(
     *,
     project_root: Path | None = None,
     environ: MutableMapping[str, str] | None = None,
+    emit_warnings: bool = True,
 ) -> ResolvedCredential:
     """Read exactly one selected input and return a redacting result."""
     if credential_input.kind is CredentialKind.ENVIRONMENT:
         return resolve_environment_credential(credential_input, environ=environ)
-    return resolve_file_credential(credential_input, project_root=project_root)
+    return resolve_file_credential(
+        credential_input,
+        project_root=project_root,
+        emit_warnings=emit_warnings,
+    )
 
 
 def resolve_environment_credential(
@@ -136,7 +158,10 @@ def resolve_environment_credential(
     try:
         value = environment.pop(name)
     except KeyError as exc:
-        raise SystemExit(f"Canvas credential environment variable {name} is not set.") from exc
+        raise CredentialResolutionError(
+            f"Canvas credential environment variable {name} is not set.",
+            reason=CredentialErrorReason.MISSING,
+        ) from exc
     _validate_credential_text(value, source="environment variable")
     return ResolvedCredential(value=value, source_kind=CredentialKind.ENVIRONMENT)
 
@@ -145,6 +170,7 @@ def resolve_file_credential(
     credential_input: CredentialInput,
     *,
     project_root: Path | None = None,
+    emit_warnings: bool = True,
 ) -> ResolvedCredential:
     """Read one bounded regular file through a single opened descriptor."""
     if credential_input.kind is not CredentialKind.FILE:
@@ -158,20 +184,32 @@ def resolve_file_credential(
     try:
         descriptor = os.open(path, flags)
     except OSError as exc:
-        raise SystemExit("Could not open the selected Canvas credential file.") from exc
+        raise CredentialResolutionError(
+            "Could not open the selected Canvas credential file.",
+            reason=CredentialErrorReason.UNREADABLE,
+        ) from exc
 
     try:
         opened = os.fstat(descriptor)
         if not stat.S_ISREG(opened.st_mode):
-            raise SystemExit("The selected Canvas credential file is not a regular file.")
+            raise CredentialResolutionError(
+                "The selected Canvas credential file is not a regular file.",
+                reason=CredentialErrorReason.INVALID,
+            )
         _reject_project_contained_file(path, opened=opened, project_root=project_root)
         content = _read_bounded(descriptor)
-        _warn_if_broad_permissions(opened)
+        warning = _broad_permissions_warning(opened)
+        if warning and emit_warnings:
+            print(warning, file=sys.stderr)
     finally:
         os.close(descriptor)
 
     value = _decode_file_value(content)
-    return ResolvedCredential(value=value, source_kind=CredentialKind.FILE)
+    return ResolvedCredential(
+        value=value,
+        source_kind=CredentialKind.FILE,
+        warnings=(warning,) if warning else (),
+    )
 
 
 def require_environment_name(value: str, *, source: str) -> str:
@@ -221,11 +259,20 @@ def _reject_blank_selector(value: object, *, source: str) -> None:
 
 def _validate_credential_text(value: str, *, source: str) -> None:
     if not value:
-        raise SystemExit(f"The selected Canvas credential {source} is empty.")
+        raise CredentialResolutionError(
+            f"The selected Canvas credential {source} is empty.",
+            reason=CredentialErrorReason.INVALID,
+        )
     if "\0" in value:
-        raise SystemExit(f"The selected Canvas credential {source} contains a NUL byte.")
+        raise CredentialResolutionError(
+            f"The selected Canvas credential {source} contains a NUL byte.",
+            reason=CredentialErrorReason.INVALID,
+        )
     if "\n" in value or "\r" in value:
-        raise SystemExit(f"The selected Canvas credential {source} contains multiple lines.")
+        raise CredentialResolutionError(
+            f"The selected Canvas credential {source} contains multiple lines.",
+            reason=CredentialErrorReason.INVALID,
+        )
 
 
 def _read_bounded(descriptor: int) -> bytes:
@@ -239,8 +286,9 @@ def _read_bounded(descriptor: int) -> bytes:
         remaining -= len(chunk)
     content = b"".join(chunks)
     if len(content) > MAX_CREDENTIAL_BYTES:
-        raise SystemExit(
-            f"The selected Canvas credential file exceeds {MAX_CREDENTIAL_BYTES} bytes."
+        raise CredentialResolutionError(
+            f"The selected Canvas credential file exceeds {MAX_CREDENTIAL_BYTES} bytes.",
+            reason=CredentialErrorReason.INVALID,
         )
     return content
 
@@ -253,7 +301,10 @@ def _decode_file_value(content: bytes) -> str:
     try:
         value = content.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise SystemExit("The selected Canvas credential file is not valid UTF-8.") from exc
+        raise CredentialResolutionError(
+            "The selected Canvas credential file is not valid UTF-8.",
+            reason=CredentialErrorReason.INVALID,
+        ) from exc
     _validate_credential_text(value, source="file")
     return value
 
@@ -267,27 +318,31 @@ def _reject_project_contained_file(
         resolved = path.resolve(strict=True)
         current = resolved.stat()
     except OSError as exc:
-        raise SystemExit(
-            "Could not verify the selected Canvas credential file after opening it."
+        raise CredentialResolutionError(
+            "Could not verify the selected Canvas credential file after opening it.",
+            reason=CredentialErrorReason.INVALID,
         ) from exc
     if (current.st_dev, current.st_ino) != (opened.st_dev, opened.st_ino):
-        raise SystemExit("The selected Canvas credential file changed while it was opened.")
+        raise CredentialResolutionError(
+            "The selected Canvas credential file changed while it was opened.",
+            reason=CredentialErrorReason.INVALID,
+        )
     root = project_root.resolve()
     if resolved == root or root in resolved.parents:
-        raise SystemExit(
+        raise CredentialResolutionError(
             "Canvas credential files cannot be stored inside the active course project. "
-            "Use a user-controlled config directory or a platform secret mount."
+            "Use a user-controlled config directory or a platform secret mount.",
+            reason=CredentialErrorReason.INVALID,
         )
 
 
-def _warn_if_broad_permissions(opened: os.stat_result) -> None:
+def _broad_permissions_warning(opened: os.stat_result) -> str | None:
     if os.name != "posix" or opened.st_mode & 0o077 == 0:
-        return
+        return None
     owner = getattr(opened, "st_uid", None)
     if hasattr(os, "getuid") and owner not in {None, os.getuid()}:
-        return
-    print(
+        return None
+    return (
         "WARNING: the selected Canvas credential file is readable by group or other "
-        "users; consider mode 0600 where the deployment model permits it.",
-        file=sys.stderr,
+        "users; consider mode 0600 where the deployment model permits it."
     )

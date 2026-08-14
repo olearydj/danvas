@@ -237,7 +237,7 @@ check_install() {
             PYTHONPATH= \
             DANVAS_RELEASE_SMOKE_TOKEN="not-a-real-canvas-token" \
             "$executable" auth doctor \
-                --secret-provider env \
+                --api-url https://canvas.example.invalid/ \
                 --api-key-env DANVAS_RELEASE_SMOKE_TOKEN >/dev/null
     )
     echo "release smoke: $label install passed version, help, and auth doctor"

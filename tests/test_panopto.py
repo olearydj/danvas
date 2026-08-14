@@ -11,8 +11,12 @@ import pytest
 import requests
 
 from danvas.artifacts import write_private_pair
-from danvas.auth import CanvasCredential
-from danvas.credentials import CredentialInput, CredentialKind, SelectionSource
+from danvas.credentials import (
+    CredentialInput,
+    CredentialKind,
+    ResolvedCredential,
+    SelectionSource,
+)
 from danvas.panopto import (
     caption_filename_from_response,
     collect_lti_sessions,
@@ -91,14 +95,12 @@ def test_command_uses_shared_canvas_credential_boundary(
 ) -> None:
     captured: dict[str, str] = {}
 
-    def fake_resolve_canvas_credential(args: Any) -> CanvasCredential:
+    def fake_resolve_canvas_credential(args: Any) -> ResolvedCredential:
         captured.update(
-            secret_provider=args.secret_provider,
-            op_reference=args.op_reference,
-            api_key_env=args.api_key_env,
-            secret_name=args.secret_name,
+            kind=args.credential_input.kind.value,
+            locator=args.credential_input.locator,
         )
-        return CanvasCredential(value="token", transport_notice=None)
+        return ResolvedCredential(value="token", source_kind=CredentialKind.ENVIRONMENT)
 
     def stop_after_auth(*args: Any, **kwargs: Any) -> dict[str, Any]:
         raise RuntimeError("stop after authentication")
@@ -111,10 +113,11 @@ def test_command_uses_shared_canvas_credential_boundary(
     with pytest.raises(RuntimeError, match="stop after authentication"):
         command_panopto_captions(
             SimpleNamespace(
-                secret_provider="env",
-                op_reference="",
-                api_key_env="INSTITUTION_TOKEN",
-                secret_name="canvas-institution",
+                credential_input=CredentialInput(
+                    CredentialKind.ENVIRONMENT,
+                    "INSTITUTION_TOKEN",
+                    SelectionSource.USER_PROFILE,
+                ),
                 api_url="https://canvas.example/",
                 course_id=101,
                 output_dir=str(tmp_path / "captions"),
@@ -124,10 +127,8 @@ def test_command_uses_shared_canvas_credential_boundary(
         )
 
     assert captured == {
-        "secret_provider": "env",
-        "op_reference": "",
-        "api_key_env": "INSTITUTION_TOKEN",
-        "secret_name": "canvas-institution",
+        "kind": "environment",
+        "locator": "INSTITUTION_TOKEN",
     }
 
 
@@ -682,7 +683,7 @@ def test_cross_session_filename_collision_blocks_without_suffix_or_manifest(
 def test_panopto_requires_private_destination_before_auth(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fail(args: Any) -> CanvasCredential:
+    def fail(args: Any) -> ResolvedCredential:
         raise AssertionError("credentials must not resolve before private path")
 
     monkeypatch.setattr("danvas.panopto.resolve_canvas_credential", fail)
@@ -693,9 +694,5 @@ def test_panopto_requires_private_destination_before_auth(
                 output_dir=None,
                 project_root=str(tmp_path),
                 overwrite=False,
-                secret_provider="env",
-                op_reference="",
-                api_key_env="TOKEN",
-                secret_name="canvas",
             )
         )

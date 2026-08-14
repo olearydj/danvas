@@ -9,7 +9,6 @@ from typing import Annotated, Any, Literal
 
 import typer
 from canvasapi.exceptions import ResourceDoesNotExist
-from dotenv import load_dotenv
 
 from danvas import __version__, assignment_audit, gradebook, quiz
 from danvas.announcements import (
@@ -96,7 +95,6 @@ from danvas.submissions import (
 )
 from danvas.utils import slugify, write_json
 
-SecretProvider = Literal["auto", "1password", "env"]
 AssignmentExportFormat = Literal["auto", "json", "csv", "markdown"]
 DiscussionExportFormat = Literal["json", "csv"]
 AnnouncementExportFormat = Literal["auto", "json", "csv", "markdown"]
@@ -111,7 +109,6 @@ LintFormat = Literal["text", "json"]
 LintFailOn = Literal["error", "warning"]
 PageExportFormat = Literal["json", "html", "markdown"]
 PageSyncFormat = Literal["html", "markdown"]
-RosterSchema = Literal["v2", "legacy-v1"]
 SourceLayout = Literal["standard-v1", "legacy-v1"]
 
 
@@ -234,23 +231,19 @@ ProfileName = Annotated[
         help="User-level Canvas instance profile from the danvas platform config.",
     ),
 ]
-SecretProviderOption = Annotated[
-    SecretProvider | None,
-    typer.Option("--secret-provider", help="Secret source for the Canvas API token."),
-]
-SecretName = Annotated[
-    str | None,
-    typer.Option("--secret-name", help="secretpath name for the Canvas API token."),
-]
-OpReference = Annotated[
-    str | None,
-    typer.Option(
-        "--op-reference", help="1Password item reference, such as op://Dev/Canvas/credential."
-    ),
-]
 ApiKeyEnv = Annotated[
     str | None,
-    typer.Option("--api-key-env", help="Environment variable containing the Canvas API token."),
+    typer.Option(
+        "--api-key-env",
+        help="Name of the environment variable containing the Canvas API token.",
+    ),
+]
+ApiKeyFile = Annotated[
+    Path | None,
+    typer.Option(
+        "--api-key-file",
+        help="Absolute path to a single-purpose file containing the Canvas API token.",
+    ),
 ]
 CourseId = Annotated[int | None, typer.Option("--course-id", help="Canvas course ID.")]
 AssignmentId = Annotated[int, typer.Option("--assignment-id", help="Canvas assignment ID.")]
@@ -292,8 +285,11 @@ def mutation_args_from_cli(
 
 def args_for(**kwargs: Any) -> SimpleNamespace:
     """Build the namespace expected by operation modules."""
+    if kwargs.get("api_key_env") and kwargs.get("api_key_file"):
+        raise typer.BadParameter("Use either --api-key-env or --api-key-file, not both.")
     canvas_backed = "api_url" in kwargs
     allow_missing_api_url = bool(kwargs.pop("_allow_missing_api_url", False)) or not canvas_backed
+    allow_origin_issues = bool(kwargs.pop("_allow_origin_issues", False))
     config_start = config_start_for(kwargs)
     if "course_id" in kwargs:
         kwargs["course_id"] = resolve_course_id(kwargs.get("course_id"), start=config_start)
@@ -302,13 +298,11 @@ def args_for(**kwargs: Any) -> SimpleNamespace:
     context = resolve_canvas_context(
         explicit_profile=kwargs.get("profile"),
         explicit_api_url=kwargs.get("api_url"),
-        explicit_secret_name=kwargs.get("secret_name"),
-        explicit_secret_provider=kwargs.get("secret_provider"),
-        explicit_op_reference=kwargs.get("op_reference"),
         explicit_api_key_env=kwargs.get("api_key_env"),
         explicit_api_key_file=kwargs.get("api_key_file"),
         start=config_start,
         allow_missing_api_url=allow_missing_api_url,
+        allow_origin_issues=allow_origin_issues,
     )
     kwargs["profile"] = context.profile
     kwargs["profile_timezone"] = context.profile_timezone
@@ -317,10 +311,8 @@ def args_for(**kwargs: Any) -> SimpleNamespace:
     kwargs["origin_binding_source"] = context.origin_binding_source
     kwargs["credential_project_root"] = context.project_root
     kwargs["credential_input"] = context.credential_input
-    kwargs["secret_name"] = context.secret_name
-    kwargs["secret_provider"] = context.secret_provider
-    kwargs["op_reference"] = context.op_reference
-    kwargs["api_key_env"] = context.api_key_env
+    kwargs["origin_binding_status"] = context.origin_binding_status
+    kwargs["origin_binding_error"] = context.origin_binding_error
     return SimpleNamespace(**kwargs)
 
 
@@ -564,10 +556,8 @@ def init_project(
     ] = False,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     validated_timezone = validate_explicit_init_timezone(timezone)
     run_command(
@@ -581,17 +571,15 @@ def init_project(
             require_complete=require_complete,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
 
 @auth_app.command(
     "doctor",
-    help="Check secretpath and optional Canvas API authentication without printing secrets.",
+    help="Check Canvas origin and credential inputs without printing secrets.",
 )
 def auth_doctor(
     check_canvas: Annotated[
@@ -605,23 +593,20 @@ def auth_doctor(
     ] = False,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_auth_doctor,
         args_for(
             _allow_missing_api_url=True,
+            _allow_origin_issues=True,
             check_canvas=check_canvas,
             json=json_output,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -662,10 +647,8 @@ def refresh_project(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_refresh,
@@ -679,10 +662,8 @@ def refresh_project(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -806,10 +787,8 @@ def courses(
     ] = Path("courses.csv"),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_courses,
@@ -817,10 +796,8 @@ def courses(
             output=str(output),
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -841,16 +818,6 @@ def roster(
             ),
         ),
     ] = None,
-    schema: Annotated[
-        RosterSchema,
-        typer.Option(
-            "--schema",
-            help=(
-                "Roster columns: v2 uses LoginID; legacy-v1 retains the deprecated "
-                "Email label through 0.18.x and is removed in 0.19.0."
-            ),
-        ),
-    ] = "v2",
     project_root: Annotated[
         Path, typer.Option("--project-root", help="Course project root containing .danvas.")
     ] = Path("."),
@@ -860,25 +827,20 @@ def roster(
     ] = "StudentEnrollment",
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_roster,
         args_for(
             course_id=course_id,
             output=str(output) if output else None,
-            schema=schema,
             project_root=str(project_root),
             enrollment_type=enrollment_type,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -906,10 +868,8 @@ def assignments_export(
     ] = False,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_assignments_export,
@@ -920,10 +880,8 @@ def assignments_export(
             full=full,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -957,10 +915,8 @@ def assignments_overrides(
     ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_assignments_overrides,
@@ -973,10 +929,8 @@ def assignments_overrides(
             project_root=str(project_root),
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -1018,10 +972,8 @@ def assignments_overrides_sync(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     mutation = mutation_args_from_cli(
         dry_run=dry_run,
@@ -1044,10 +996,8 @@ def assignments_overrides_sync(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -1095,10 +1045,8 @@ def assignments_create(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
@@ -1117,10 +1065,8 @@ def assignments_create(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -1158,10 +1104,8 @@ def assignments_verify(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_assignments_verify,
@@ -1176,10 +1120,8 @@ def assignments_verify(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -1238,10 +1180,8 @@ def assignments_update(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
@@ -1262,10 +1202,8 @@ def assignments_update(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -1329,10 +1267,8 @@ def assignments_upsert(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     mutation = mutation_args_from_cli(
         dry_run=dry_run,
@@ -1359,10 +1295,8 @@ def assignments_upsert(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -1778,10 +1712,8 @@ def quiz_import_qti(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_quiz_import_qti,
@@ -1808,10 +1740,8 @@ def quiz_import_qti(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -1851,10 +1781,8 @@ def submissions_export(
     ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_submissions_export,
@@ -1869,10 +1797,8 @@ def submissions_export(
             project_root=str(project_root),
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -1903,10 +1829,8 @@ def submissions_grades(
     ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_submissions_grades,
@@ -1919,10 +1843,8 @@ def submissions_grades(
             project_root=str(project_root),
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -1955,10 +1877,8 @@ def submissions_media(
     ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_submissions_media,
@@ -1971,10 +1891,8 @@ def submissions_media(
             project_root=str(project_root),
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2027,10 +1945,8 @@ def submissions_feedback(
     ] = 0.5,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_submissions_feedback,
@@ -2047,10 +1963,8 @@ def submissions_feedback(
             sleep_seconds=sleep_seconds,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2115,10 +2029,8 @@ def grades_post(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_grades_post,
@@ -2138,10 +2050,8 @@ def grades_post(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2200,10 +2110,8 @@ def grades_clear(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_grades_clear,
@@ -2222,10 +2130,8 @@ def grades_clear(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2254,10 +2160,8 @@ def grades_comments(
     ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_grades_comments,
@@ -2270,10 +2174,8 @@ def grades_comments(
             project_root=str(project_root),
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2305,10 +2207,8 @@ def grades_verify(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_grades_verify,
@@ -2323,10 +2223,8 @@ def grades_verify(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2360,10 +2258,8 @@ def discussions_export(
     ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_discussions_export,
@@ -2375,10 +2271,8 @@ def discussions_export(
             project_root=str(project_root),
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2416,10 +2310,8 @@ def discussions_create(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
@@ -2436,10 +2328,8 @@ def discussions_create(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2472,10 +2362,8 @@ def discussions_verify(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_discussions_verify,
@@ -2490,10 +2378,8 @@ def discussions_verify(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2535,10 +2421,8 @@ def discussions_update(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
@@ -2556,10 +2440,8 @@ def discussions_update(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2599,10 +2481,8 @@ def discussions_sync_prompts(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     resolved_output_dir = resolve_source_output_dir(
         "discussion", project_root=project_root, explicit=output_dir
@@ -2620,10 +2500,8 @@ def discussions_sync_prompts(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2670,10 +2548,8 @@ def pages_list(
     course_id: CourseId = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_pages_list,
@@ -2681,10 +2557,8 @@ def pages_list(
             course_id=course_id,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2707,10 +2581,8 @@ def pages_export(
     ] = False,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_pages_export,
@@ -2723,10 +2595,8 @@ def pages_export(
             overwrite=overwrite,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2769,10 +2639,8 @@ def pages_sync(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     resolved_output_dir = resolve_source_output_dir(
         "page", project_root=project_root, explicit=output_dir
@@ -2793,10 +2661,8 @@ def pages_sync(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2853,10 +2719,8 @@ def pages_create(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
@@ -2872,10 +2736,8 @@ def pages_create(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2909,10 +2771,8 @@ def pages_update(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
@@ -2929,10 +2789,8 @@ def pages_update(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -2963,10 +2821,8 @@ def pages_verify(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_pages_verify,
@@ -2981,10 +2837,8 @@ def pages_verify(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3005,10 +2859,8 @@ def announcements_create(
     apply: CanvasApply = False,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
@@ -3019,10 +2871,8 @@ def announcements_create(
             **mutation,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3063,10 +2913,8 @@ def announcements_export(
     ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_announcements_export,
@@ -3079,10 +2927,8 @@ def announcements_export(
             project_root=str(project_root),
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3109,10 +2955,8 @@ def announcements_latest(
     ] = "auto",
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_announcements_latest,
@@ -3122,10 +2966,8 @@ def announcements_latest(
             format=output_format,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3165,10 +3007,8 @@ def announcements_sync(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     resolved_output_dir = resolve_source_output_dir(
         "announcement", project_root=project_root, explicit=output_dir
@@ -3186,10 +3026,8 @@ def announcements_sync(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3232,10 +3070,8 @@ def announcements_update(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     mutation = mutation_args_from_cli(dry_run=dry_run, apply=apply)
     run_command(
@@ -3252,10 +3088,8 @@ def announcements_update(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3295,10 +3129,8 @@ def announcements_verify(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_announcements_verify,
@@ -3313,10 +3145,8 @@ def announcements_verify(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3363,10 +3193,8 @@ def files_inventory(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_files_inventory,
@@ -3381,10 +3209,8 @@ def files_inventory(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3409,10 +3235,8 @@ def files_download(
     ] = False,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_files_download,
@@ -3422,10 +3246,8 @@ def files_download(
             overwrite=overwrite,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3460,10 +3282,8 @@ def files_download_one(
     ] = False,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_files_download_one,
@@ -3476,10 +3296,8 @@ def files_download_one(
             overwrite=overwrite,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3534,10 +3352,8 @@ def files_compare(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_files_compare,
@@ -3555,10 +3371,8 @@ def files_compare(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3615,10 +3429,8 @@ def files_upload(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_files_upload,
@@ -3637,10 +3449,8 @@ def files_upload(
             report_slug=report_slug,
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3720,10 +3530,8 @@ def recordings_panopto_captions(
     ] = None,
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_panopto_captions,
@@ -3742,10 +3550,8 @@ def recordings_panopto_captions(
             project_root=str(project_root),
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
@@ -3790,10 +3596,8 @@ def discussions_score(
     ] = Path("."),
     profile: ProfileName = None,
     api_url: ApiUrl = None,
-    secret_name: SecretName = None,
-    secret_provider: SecretProviderOption = None,
-    op_reference: OpReference = None,
     api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
 ) -> None:
     run_command(
         command_discussions_score,
@@ -3809,16 +3613,13 @@ def discussions_score(
             project_root=str(project_root),
             profile=profile,
             api_url=api_url,
-            secret_name=secret_name,
-            secret_provider=secret_provider,
-            op_reference=op_reference,
             api_key_env=api_key_env,
+            api_key_file=api_key_file,
         ),
     )
 
 
 def main() -> None:
-    load_dotenv()
     app()
 
 

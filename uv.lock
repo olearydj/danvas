@@ -6,9 +6,6 @@ requires-python = ">=3.12, <3.15"
 exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P3D"
 
-[options.exclude-newer-package]
-secretpath = "2026-06-25T00:00:00Z"
-
 [[package]]
 name = "annotated-doc"
 version = "0.0.4"
@@ -282,10 +279,8 @@ dependencies = [
     { name = "canvasapi" },
     { name = "markdown" },
     { name = "platformdirs" },
-    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "requests" },
-    { name = "secretpath" },
     { name = "tinycss2" },
     { name = "typer" },
 ]
@@ -305,10 +300,8 @@ requires-dist = [
     { name = "canvasapi", specifier = ">=3.3" },
     { name = "markdown", specifier = ">=3.6" },
     { name = "platformdirs", specifier = ">=4.0" },
-    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.31" },
-    { name = "secretpath", specifier = ">=0.3.0" },
     { name = "tinycss2", specifier = ">=1.4" },
     { name = "typer", specifier = ">=0.19" },
 ]
@@ -616,15 +609,6 @@ wheels = [
 ]
 
 [[package]]
-name = "python-dotenv"
-version = "1.2.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/82/ed/0301aeeac3e5353ef3d94b6ec08bbcabd04a72018415dcb29e588514bba8/python_dotenv-1.2.2.tar.gz", hash = "sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3", size = 50135, upload-time = "2026-03-01T16:00:26.196Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/d7/1959b9648791274998a9c3526f6d0ec8fd2233e4d4acce81bbae76b44b2a/python_dotenv-1.2.2-py3-none-any.whl", hash = "sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a", size = 22101, upload-time = "2026-03-01T16:00:25.09Z" },
-]
-
-[[package]]
 name = "pytz"
 version = "2026.2"
 source = { registry = "https://pypi.org/simple" }
@@ -730,18 +714,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ea/f9/0ae446942c846b8266059ad8a30702a35afae55f5cdc54c5adf8d7afdc27/ruff-0.15.12-py3-none-win32.whl", hash = "sha256:d0185894e038d7043ba8fd6aee7499ece6462dc0ea9f1e260c7451807c714c20", size = 10657277, upload-time = "2026-04-24T18:17:18.591Z" },
     { url = "https://files.pythonhosted.org/packages/33/f1/9614e03e1cdcbf9437570b5400ced8a720b5db22b28d8e0f1bda429f660d/ruff-0.15.12-py3-none-win_amd64.whl", hash = "sha256:c87a162d61ab3adca47c03f7f717c68672edec7d1b5499e652331780fe74950d", size = 11837758, upload-time = "2026-04-24T18:17:00.113Z" },
     { url = "https://files.pythonhosted.org/packages/c0/98/6beb4b351e472e5f4c4613f7c35a5290b8be2497e183825310c4c3a3984b/ruff-0.15.12-py3-none-win_arm64.whl", hash = "sha256:a538f7a82d061cee7be55542aca1d86d1393d55d81d4fcc314370f4340930d4f", size = 11120821, upload-time = "2026-04-24T18:16:57.979Z" },
-]
-
-[[package]]
-name = "secretpath"
-version = "0.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "typer" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/62/e3/9fd2f53420474e774d9ca03b5c0d77e67b5f0f6cf459313fb0d615510030/secretpath-0.3.0.tar.gz", hash = "sha256:38b83ab5828f05f256387989701e9aa6ceaf2332ac7f5b35682d5ff9ec42136c", size = 11848, upload-time = "2026-06-24T21:57:51.288Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/14/966c5623a48ddb5408a57ab6178081bbfb021da5c30c23e38467063fad53/secretpath-0.3.0-py3-none-any.whl", hash = "sha256:c67540df688081c4938d391f9f694582c5c499fb32c39f3362cce5596773f001", size = 14457, upload-time = "2026-06-24T21:57:50.348Z" },
 ]
 
 [[package]]
