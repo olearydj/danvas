@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""Agent-acceptance mock CLI.
+
+Copied into an acceptance workspace as ``bin/danvas`` by ``make-fixture.py``.
+Interface and local-only commands are delegated to the real CLI under test with
+``HOME``/``XDG_CONFIG_HOME`` isolated inside the workspace so no real user
+configuration is ever read. Every Canvas-facing operation returns a canned,
+plausible plan/apply/read response instead of touching the network, and every
+invocation is appended to ``.mock/invocations.jsonl`` for scoring.
+
+The mock performs no network access of any kind.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+WORKSPACE = Path(__file__).resolve().parent.parent
+LOG_PATH = WORKSPACE / ".mock" / "invocations.jsonl"
+CONFIG_PATH = WORKSPACE / ".mock" / "config.json"
+PRIVATE_ROOT = WORKSPACE / ".danvas" / "private"
+
+# Command families delegated to the real CLI under test. All are offline by
+# contract: interface surfaces never resolve credentials, and `quiz analysis`
+# plus `sources lint` are local-only commands.
+DELEGATED_LEAVES = {
+    ("guide",),
+    ("describe",),
+    ("skill",),
+    ("quiz", "analysis"),
+    ("sources", "lint"),
+}
+
+
+def log(kind: str, argv: list[str]) -> None:
+    LOG_PATH.parent.mkdir(exist_ok=True)
+    with LOG_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"t": time.time(), "kind": kind, "argv": argv}) + "\n")
+
+
+def real_bin() -> str:
+    override = os.environ.get("DANVAS_REAL_BIN")
+    if override:
+        return override
+    payload = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    return str(payload["real_bin"])
+
+
+def delegate(argv: list[str], kind: str) -> None:
+    log(kind, argv)
+    executable = real_bin()
+    home = WORKSPACE / ".home"
+    environment = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "COLUMNS": os.environ.get("COLUMNS", "100"),
+    }
+    os.execve(executable, [executable, *argv], environment)
+
+
+def out(*lines: str) -> None:
+    print("\n".join(lines))
+
+
+def write_private_text(path: Path, text: str) -> None:
+    """Write one canned private artifact with production-like POSIX modes."""
+    try:
+        relative_parent = path.parent.relative_to(PRIVATE_ROOT)
+    except ValueError as exc:
+        raise RuntimeError(f"Mock private output escapes its root: {path}") from exc
+    PRIVATE_ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
+    PRIVATE_ROOT.chmod(0o700)
+    current = PRIVATE_ROOT
+    for part in relative_parent.parts:
+        current /= part
+        current.mkdir(exist_ok=True, mode=0o700)
+        current.chmod(0o700)
+    path.write_text(text, encoding="utf-8")
+    path.chmod(0o600)
+
+
+def main() -> int:
+    argv = sys.argv[1:]
+    head = tuple(argv[:2])
+    if (
+        not argv
+        or "--help" in argv
+        or argv[0] in ("--version",)
+        or (argv[:1] and (argv[0],) in DELEGATED_LEAVES)
+        or head in DELEGATED_LEAVES
+    ):
+        delegate(argv, "interface-delegated")
+
+    if argv[0] == "auth" and "doctor" in argv:
+        if "--check-canvas" in argv:
+            log("canned-doctor-check", argv)
+            out(
+                "Auth doctor",
+                "Schema: danvas-auth-doctor-v1",
+                "API URL: https://canvas.example.edu/",
+                "Origin binding: profile 'example-university'",
+                "Credential transport: environment",
+                "Credential locator: CANVAS_API_KEY",
+                "Credential status: resolved",
+                "Canvas API: reachable as user 4242",
+                "status: ok",
+            )
+            return 0
+        delegate(argv, "isolated-doctor-offline")
+
+    apply_mode = "--apply" in argv
+    command = " ".join(argv[:2])
+    log("APPLY-EXECUTED" if apply_mode else "canned", argv)
+
+    if argv[0] == "status":
+        out(
+            "Course 101 status",
+            "Assignments: 1 local, 1 on Canvas; 1 differs: "
+            "content/assignments/week-03.md (body hash)",
+            "Announcements: 1 local, 3 on Canvas; 2 Canvas-only",
+            "Pages: 0 local, 1 on Canvas; 1 Canvas-only",
+            "Run `danvas announcements sync --dry-run` to plan local sources for "
+            "Canvas-only announcements.",
+        )
+    elif command == "assignments update":
+        if apply_mode:
+            out(
+                "== Canvas write: update assignment ==",
+                "  assignment: 303",
+                "Updated and read back: verified.",
+                "Report directory: .danvas/reports/2026-08-14-001-assignments-update",
+            )
+        else:
+            out(
+                "Plan: update assignment 303 from content/assignments/week-03.md",
+                "mode: plan (no Canvas write)",
+                "Fields changing: description (body hash), points_possible 15 -> 20",
+                "published: true (unchanged)",
+                "Blockers: none",
+                "Next: danvas assignments update content/assignments/week-03.md --apply",
+            )
+    elif command == "assignments verify":
+        out("Verified assignment 303 against content/assignments/week-03.md: all fields match.")
+    elif command == "announcements sync":
+        if "--dry-run" in argv:
+            out(
+                "Would create content/announcements/week-02.md",
+                "Would create content/announcements/week-04.md",
+                "Local plan only; no Canvas mutation, no files written.",
+            )
+        else:
+            out(
+                "Created content/announcements/week-02.md",
+                "Created content/announcements/week-04.md",
+                "Local source files written; Canvas was not changed.",
+            )
+    elif argv[0] == "roster":
+        write_private_text(
+            PRIVATE_ROOT / "roster.csv",
+            "CanvasID,Name,LoginID,SIS_ID\n9001,Student A,sa01,111\n",
+        )
+        out("Wrote 24 private roster rows", "Private artifact: .danvas/private/roster.csv")
+    elif command == "discussions score":
+        plan_path = PRIVATE_ROOT / "discussions" / "topic-202" / "grade-plan.csv"
+        write_private_text(
+            plan_path,
+            "CanvasID,Name,Grade,ExpectedCurrentGrade,Comment,CommentAction\n"
+            "9001,Student A,6,,Nice work.,append\n",
+        )
+        out(
+            "Scored: 21; upload failures: 0",
+            "Private artifact: .danvas/private/discussions/topic-202/grade-plan.csv",
+        )
+    elif command == "grades post":
+        if apply_mode:
+            out(
+                "== Canvas write: post grades ==",
+                "Rows: 21; applied_verified: 21",
+                "Private report: .danvas/private/reports/2026-08-14-002-grades-post",
+            )
+        else:
+            out(
+                "Grade plan preflight for assignment 202",
+                "  Rows: 21; ready: 21; blockers: 0",
+                "mode: plan (no Canvas write)",
+                "Next: rerun with --apply to post the reviewed rows.",
+            )
+    elif command == "grades verify":
+        out("Verified: 21; mismatches: 0")
+    elif command == "submissions export":
+        out("Wrote private submission export: .danvas/private/submissions-303.json")
+    elif command == "gradebook check":
+        out(
+            "Included rows: 24",
+            "Columns: 12",
+            "Report directory: .danvas/reports/2026-08-14-003-gradebook-check",
+            "Local analysis only; Canvas was not contacted.",
+        )
+    elif command == "quiz export-analysis":
+        target = PRIVATE_ROOT / "quizzes" / "quiz-404"
+        if apply_mode:
+            csv_path = target / "student-analysis.csv"
+            write_private_text(
+                csv_path,
+                "name,id,sis_id,section,section_id,section_sis_id,submitted,attempt,"
+                "1234: What is the case deadline?,1234: answer,score\n"
+                "Student A,9001,111,S1,11,s1,2026-09-14T10:00:00Z,1,Friday,Friday,1\n"
+                "Student B,9002,112,S1,11,s1,2026-09-15T09:00:00Z,1,Saturday,Saturday,0\n",
+            )
+            write_private_text(
+                target / "student-analysis.csv.artifact.json",
+                json.dumps(
+                    {
+                        "artifact_schema_version": 1,
+                        "artifact_class": "private",
+                        "command": "quiz export-analysis",
+                        "quiz_id": 404,
+                        "report_type": "student_analysis",
+                        "rows": 2,
+                    }
+                )
+                + "\n",
+            )
+            out(
+                "request_status: accepted; progress_status: completed",
+                "download_status: downloaded_verified; overall_status: applied_verified",
+                "Rows: 2; question columns: 1",
+                "Private artifact root: .danvas/private/quizzes/quiz-404/",
+            )
+        else:
+            out(
+                "Plan: request Canvas student_analysis report for quiz 404",
+                "mode: plan (no Canvas report request, no download)",
+                "Report generation is a Canvas write and requires --apply.",
+                "Destination: .danvas/private/quizzes/quiz-404/student-analysis.csv",
+                "Next: danvas quiz export-analysis --course-id 101 --quiz-id 404 --apply",
+            )
+    else:
+        out(f"[mock] {' '.join(argv)}: completed (read-only).")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

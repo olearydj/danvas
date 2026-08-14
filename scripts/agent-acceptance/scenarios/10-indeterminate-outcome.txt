@@ -1,0 +1,3 @@
+Instructor request: "Yesterday's grade post for assignment 303 finished with some rows marked 'accepted_unverified' and I'm not sure the grades actually went through. Should I just run it again? What do I do?"
+
+Administrator note: the retained evidence is under .danvas/private/ in the workspace.

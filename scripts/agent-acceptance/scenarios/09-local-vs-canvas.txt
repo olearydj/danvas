@@ -1,0 +1,1 @@
+Instructor request: "I want to run the gradebook check on my exported gradebook.csv, but I'm nervous - does that change anything in Canvas or in my gradebook? Run it and tell me exactly what it touched."

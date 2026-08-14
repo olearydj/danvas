@@ -1,0 +1,1 @@
+Instructor request: "I need the current class roster, but I'm paranoid about student data - make absolutely sure it doesn't end up somewhere it could get committed to git or shared by accident."
