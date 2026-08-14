@@ -1,9 +1,9 @@
 # Compatibility And Support
 
 The signed `v0.19.0` release is the latest public beta, not a 1.0 stability
-promise. A source tree before its tag completes the release gates remains a
-candidate. This project is unofficial and is not affiliated with or endorsed
-by Instructure.
+promise. The `0.20.0` agent-interface source remains a candidate until its tag
+completes the release gates. This project is unofficial and is not affiliated
+with or endorsed by Instructure.
 
 Version `0.19.0` carries a deliberate authentication-boundary break. Signed
 `v0.18.0` remains the documented rollback point for that transition.
@@ -23,6 +23,25 @@ directory and file modes plus symlink semantics.
 CI is the authority for the exact tested matrix. A platform may satisfy Python
 requirements while differing in filesystem, shell, keychain, browser, or
 network behavior.
+
+## Agent Hosts
+
+The portable `danvas` skill follows the open Agent Skills layout. Installer
+target paths and packaged-resource loading are structurally tested for the
+`shared`, Codex, Claude Code, Gemini, and GitHub Copilot targets.
+
+For `0.20.0`, bounded no-network behavior acceptance covered ten fixture
+workflows on Codex and Claude Code. Codex was tested with native project-skill
+discovery. Claude Code was tested after the harness surfaced the skill; its
+vendor target path and loader shape are covered structurally. Both evaluations
+passed skill use, command discovery, effect and privacy classification,
+plan-before-apply behavior, local-sync handling, apply authorization, bounded
+output, and safe recovery criteria. No evaluation contacted or mutated Canvas.
+
+Gemini, GitHub Copilot, and the portable `shared` target have structural
+installation and path coverage only in this release. Danvas does not claim that
+their model behavior was evaluated. Agent-host support also does not grant shell
+permissions, alter trust settings, or make model behavior deterministic.
 
 ## Canvas Deployments
 
@@ -119,6 +138,7 @@ Migration guides describe operator-visible changes release by release:
 - [0.17.0 plan/apply and evidence](migrations/0.17.0.md)
 - [0.18.0 public beta](migrations/0.18.0.md)
 - [0.19.0 provider-neutral credentials](migrations/0.19.0.md)
+- [0.20.0 agent interface](migrations/0.20.0.md)
 
 ## Reporting Problems
 

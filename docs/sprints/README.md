@@ -353,6 +353,9 @@ to the neutral `0.19.0` surface and removes the completed roster-migration work
 item. Local implementation completed in review-sized commits from `c09c419`
 through `48cd01e`: characterization, typed command guides, progressive help,
 offline guides and description, portable skill packaging, and the bounded
-installer. The assembled `0.20.0` candidate remains unpushed pending independent
-command-truth and adversarial-installer review, bounded external-agent
-acceptance, and exact-commit platform and release gates.
+installer. Independent command-truth and adversarial-installer review accepted
+the assembled candidate. Candidate `44ce9c2` passed the full remote branch
+matrix and anonymous exact-SHA install. Bounded Codex and Claude Code behavior
+acceptance passed all ten scenarios and all seven criteria on 2026-08-14. The
+remaining gates are the documentation closeout, exact-commit CI, signed tag,
+tag CI, exact-tag install, global CLI advance, and release records.

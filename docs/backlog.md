@@ -351,13 +351,15 @@ generic skill source inside the `danvas-cli` distribution. Sprint 21.5 now owns
 the due roster `--schema legacy-v1` removal and provider-neutral authentication
 surface; Sprint 22 consumes that released `0.19.0` interface without otherwise
 changing its accepted scope. The design authorizes no implicit skill
-installation or external agent invocation. Group 3 commit `75ca92a` refreshes the accepted
-design against the neutral `0.19.0` surface and removes the completed roster
-migration work item. Local implementation completed in commits `c09c419`
-through `48cd01e`, after the Group 0 fixture isolation at `cecf735`. The
-assembled `0.20.0` candidate remains unpushed pending independent command-truth
-and installer review, separately authorized bounded external-agent acceptance,
-and the normal exact-commit release gates.
+installation or external agent invocation. Group 3 commit `75ca92a` refreshes
+the accepted design against the neutral `0.19.0` surface and removes the
+completed roster migration work item. Local implementation completed in commits
+`c09c419` through `48cd01e`, after the Group 0 fixture isolation at `cecf735`.
+Independent review accepted the assembled candidate. Candidate `44ce9c2` passed
+the full remote branch matrix and anonymous exact-SHA install. Bounded Codex and
+Claude Code behavior acceptance passed all ten scenarios and all seven criteria
+on 2026-08-14. The remaining work is the documentation closeout and normal
+signed-tag, tag-CI, exact-tag-install, global-advance, and release-record gates.
 
 ## Released 0.19.0 Provider-Neutral Credential Boundary
 

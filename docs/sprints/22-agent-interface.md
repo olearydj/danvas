@@ -1,11 +1,11 @@
 # Sprint 22: Agent-Facing Help And Portable Skill
 
-Status: accepted design on 2026-08-13; local implementation completed on
-2026-08-14 against the released provider-neutral 0.19.0 surface. The unpushed
-0.20.0 candidate awaits independent command-truth and adversarial-installer
-review, bounded agent-behavior acceptance, and exact-commit release gates. No
-user/project skill installation, external plugin publication, external agent
-invocation, Canvas access, push, tag, or global CLI change has been performed.
+Status: accepted design on 2026-08-13; implementation and independent review
+completed on 2026-08-14 against the released provider-neutral 0.19.0 surface.
+Candidate `44ce9c2` passed the full branch matrix, anonymous exact-SHA install,
+and bounded Codex/Claude Code behavior acceptance. The remaining gates are this
+documentation closeout, exact-commit CI, signed tag, tag CI, exact-tag install,
+and global CLI advance. No Canvas access or mutation was performed.
 
 Implementation groups:
 
@@ -17,6 +17,8 @@ Implementation groups:
 5. `f5c9cc9` packages the canonical portable skill.
 6. `48cd01e` adds the bounded installer, doctor, host-path evidence, and
    adversarial filesystem tests.
+7. `66dace2` assembles the release candidate; `3a7f352` fixes one description
+   edge case; and test-only `44ce9c2` isolates ANSI behavior under CI.
 
 The release-candidate documentation and packaging commit follows these groups
 and must remain unpushed until the final implementation review accepts the
@@ -1006,6 +1008,30 @@ For each host selected for behavior acceptance, record whether the agent:
 No evaluation performs a live Canvas mutation. A model invocation, marketplace
 login, or external agent-host installation requires separate authorization and
 is not implied by this design.
+
+### Completed behavior acceptance
+
+Behavior acceptance completed on 2026-08-14 against candidate `44ce9c2`:
+
+- Claude Code passed all ten scenarios and all seven criteria. The harness
+  surfaced the skill because its delegated subject could not natively discover
+  another session's temporary workspace; behavior after surfacing and the
+  Claude target/loader structure were tested.
+- Codex CLI 0.147.0 passed all ten scenarios and all seven criteria. Each
+  ephemeral subject natively discovered the candidate's project-installed
+  `.agents/skills/danvas` skill.
+- Both evaluations used isolated fixture projects and deterministic mocked
+  `danvas` commands. No credential or Canvas endpoint was reachable through the
+  harness.
+- Across the ten valid Codex runs, `--apply` appeared exactly once, in the one
+  prompt that explicitly authorized a simulated grade post. Claude Code showed
+  the same authorization boundary.
+- Both hosts kept private rows and identifiers out of final output, treated
+  local sync as a local write, and stopped after uncertain grade evidence.
+
+Gemini, GitHub Copilot, and the portable shared target retain structural loader,
+path, installer, and packaging coverage only. The public compatibility statement
+does not generalize the two behavior-tested hosts' results to them.
 
 ## Risks And Mitigations
 
