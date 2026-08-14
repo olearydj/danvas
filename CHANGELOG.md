@@ -23,7 +23,10 @@ are unchanged.
 
 Released as signed tag `v0.20.0` after independent command-truth and installer
 review, bounded Codex and Claude Code behavior acceptance, branch/tag platform
-CI, anonymous exact-ref installation, and global CLI verification.
+CI, anonymous exact-ref installation, and global CLI verification. The verified
+release wheel and source distribution are also published as
+[`danvas-cli 0.20.0`](https://pypi.org/project/danvas-cli/0.20.0/) through PyPI
+Trusted Publishing with repository-linked attestations.
 
 See [Migrating to 0.20.0](docs/migrations/0.20.0.md).
 

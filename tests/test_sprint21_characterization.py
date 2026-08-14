@@ -306,6 +306,7 @@ def test_public_documentation_suite_and_anonymous_install_are_declared() -> None
     observed = {path for path in expected if (ROOT / path).is_file()}
 
     assert observed == expected
+    assert "uv tool install danvas-cli" in readme
     assert (
         'danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.20.0'
         in readme

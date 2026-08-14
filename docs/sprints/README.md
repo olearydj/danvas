@@ -359,5 +359,10 @@ matrix and anonymous exact-SHA install. Bounded Codex and Claude Code behavior
 acceptance passed all ten scenarios and all seven criteria on 2026-08-14. The
 release closeout landed at `83c6a43`. Signed tag `v0.20.0`, branch CI run
 `31833468339`, tag CI run `31833795910`, anonymous exact-SHA/tag installs, and
-the global `danvas 0.20.0` verification all passed. No real user/project skill,
-GitHub Release, marketplace entry, or PyPI distribution was published.
+the global `danvas 0.20.0` verification all passed. No real user/project skill
+or marketplace entry was published. A separately authorized GitHub prerelease
+then published the verified wheel, source distribution, and checksum manifest.
+PyPI Trusted Publishing run `31837670795` published those same artifacts as
+[`danvas-cli 0.20.0`](https://pypi.org/project/danvas-cli/0.20.0/) with
+repository-linked attestations; exact hash comparison, cryptographic
+attestation verification, and an isolated PyPI installation all passed.

@@ -37,7 +37,13 @@ permission contract there.
 
 ## Install
 
-Install the exact `0.20.0` tag anonymously over HTTPS:
+Install the current public beta from PyPI:
+
+```bash
+uv tool install danvas-cli
+```
+
+For an exact Git-ref installation directly from the repository instead:
 
 ```bash
 uv tool install \

@@ -22,6 +22,14 @@ Implementation groups:
 Release closeout commit `83c6a43` records agent behavior acceptance and the
 public host-support boundary before the signed tag.
 
+Subsequent separately authorized distribution work published a GitHub
+prerelease with the verified wheel, source distribution, and checksum manifest.
+PyPI Trusted Publishing run `31837670795` published the same artifacts as
+[`danvas-cli 0.20.0`](https://pypi.org/project/danvas-cli/0.20.0/). The published
+hashes match the GitHub Release assets, both PyPI attestations verify against
+this repository and `publish-pypi.yml`, and an isolated PyPI installation
+reported `danvas 0.20.0` with its offline interface checks passing.
+
 ## Outcome
 
 Make the installed `danvas` command the authoritative, self-describing interface

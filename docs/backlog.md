@@ -7,13 +7,11 @@ Released behavior belongs in `CHANGELOG.md`, migration guides, and the accepted
 sprint records under `docs/sprints/`. Rejected directions and completed work are
 kept in those records and in git history rather than repeated here.
 
-There is no accepted Sprint 23 design. After the release-distribution closeout,
-feature priority should follow concrete course-workflow demand.
+There is no accepted Sprint 23 design. Feature priority should follow concrete
+course-workflow demand.
 
 ## Current Priority Order
 
-0. Complete the separately authorized PyPI publication and reconcile the public
-   release records.
 1. Add the Page asset adapter on top of the verified assignment asset
    transaction.
 2. Add group-category, membership-import, verification, and local group-planning
@@ -24,38 +22,6 @@ feature priority should follow concrete course-workflow demand.
 The Page and grouped-case candidates were the named post-readiness priorities.
 Their relative order may change when an actual course deadline makes one more
 valuable.
-
-## Immediate Release Follow-Up
-
-### Publish `danvas-cli` To PyPI
-
-The signed `v0.20.0` GitHub prerelease, wheel, source distribution, and checksum
-manifest are public. Commit `3463344` adds a manually dispatched, full-SHA-pinned
-Trusted Publishing workflow with separate verification and OIDC publication
-jobs. The protected `pypi` environment requires maintainer review and normally
-allows only `v*` tag deployments.
-
-Remaining work:
-
-1. Register the pending PyPI Trusted Publisher:
-
-   - project: `danvas-cli`;
-   - owner: `olearydj`;
-   - repository: `danvas`;
-   - workflow: `publish-pypi.yml`; and
-   - environment: `pypi`.
-
-2. For the first upload only, authorize a bounded way to dispatch the workflow
-   added after the `v0.20.0` tag. If `main` is temporarily admitted to the
-   environment, retain maintainer approval and remove that policy immediately
-   after publication.
-3. Publish the exact GitHub Release wheel and source distribution through the
-   Trusted Publisher.
-4. Verify PyPI metadata, hashes, provenance/attestations, and a clean
-   `uv tool install danvas-cli` reporting `danvas 0.20.0`.
-5. Add the PyPI installation path to the README and GitHub Release notes, remove
-   stale statements that no GitHub Release or PyPI distribution exists, and pass
-   branch CI on the resulting documentation commit.
 
 ## Candidate: Page Asset Deployment
 
