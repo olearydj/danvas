@@ -109,7 +109,6 @@ def command_quiz_export_analysis(args: Any) -> None:
     try:
         result = execute_quiz_analysis_export(
             canvas=canvas,
-            course=course,
             quiz=quiz,
             identity=identity,
             destination=Path(args.output),
@@ -207,7 +206,6 @@ def build_quiz_analysis_export_plan(
 def execute_quiz_analysis_export(
     *,
     canvas: Any,
-    course: Any,
     quiz: Any,
     identity: QuizAnalysisExportIdentity,
     destination: Path,
@@ -307,7 +305,7 @@ def execute_quiz_analysis_export(
         )
     evidence["file_id"] = file_id
     return _download_and_commit(
-        course=course,
+        canvas=canvas,
         identity=identity,
         evidence=evidence,
         destination=destination,
@@ -434,9 +432,7 @@ def _request_and_reconcile(
     api_url: str,
 ) -> Any | None:
     try:
-        report = request_student_analysis_report(
-            quiz, identity, mutation_mode=mutation_mode
-        )
+        report = request_student_analysis_report(quiz, identity, mutation_mode=mutation_mode)
     except Conflict:
         matches = matching_reports(quiz, identity)
         candidates = [
@@ -493,7 +489,7 @@ def _request_and_reconcile(
 
 def _download_and_commit(
     *,
-    course: Any,
+    canvas: Any,
     identity: QuizAnalysisExportIdentity,
     evidence: dict[str, Any],
     destination: Path,
@@ -504,7 +500,7 @@ def _download_and_commit(
 ) -> dict[str, Any]:
     staging = quiz_analysis_staging_path(destination)
     try:
-        file_obj = course.get_file(file_id)
+        file_obj = canvas.get_file(file_id)
         if _positive_int(_value(file_obj, "id")) != file_id:
             raise ValueError("Canvas returned a different file ID than requested.")
         byte_count = _download_canvas_file(
@@ -601,9 +597,7 @@ def _download_canvas_file(
     return total
 
 
-def _print_quiz_analysis_export_result(
-    result: dict[str, Any], *, output_display: str
-) -> None:
+def _print_quiz_analysis_export_result(result: dict[str, Any], *, output_display: str) -> None:
     print(f"Classic Quiz analysis export: {result['mode']}")
     print(f"  Course ID: {result['course_id']}")
     print(f"  Quiz ID: {result['quiz_id']}")
@@ -704,17 +698,13 @@ def _safe_report_record(report: Any) -> dict[str, Any]:
     return {
         "report_id": _positive_int(_value(report, "id")),
         "report_type": str(_value(report, "report_type", "") or ""),
-        "includes_all_versions": bool(
-            _value(report, "includes_all_versions", False)
-        ),
+        "includes_all_versions": bool(_value(report, "includes_all_versions", False)),
         "progress_id": _progress_id_or_none(report, api_url=None),
         "file_id": _report_file_id(report),
     }
 
 
-def _base_evidence(
-    identity: QuizAnalysisExportIdentity, *, destination: Path
-) -> dict[str, Any]:
+def _base_evidence(identity: QuizAnalysisExportIdentity, *, destination: Path) -> dict[str, Any]:
     return {
         "schema_version": EVIDENCE_SCHEMA,
         "course_id": identity.course_id,
@@ -742,9 +732,7 @@ def _settle_unverified(
     return evidence
 
 
-def _no_report_after_exception(
-    evidence: dict[str, Any], error: str
-) -> None:
+def _no_report_after_exception(evidence: dict[str, Any], error: str) -> None:
     _settle_unverified(evidence, error)
     return None
 

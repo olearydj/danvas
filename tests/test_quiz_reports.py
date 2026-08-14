@@ -128,10 +128,18 @@ class FakeQuiz:
 
 
 class FakeCanvas:
-    def __init__(self, states: list[str] | None = None, *, error: Exception | None = None):
+    def __init__(
+        self,
+        states: list[str] | None = None,
+        *,
+        error: Exception | None = None,
+        file_obj: Any | None = None,
+    ):
         self.states = states or []
         self.error = error
+        self.file_obj = file_obj
         self.calls: list[int] = []
+        self.file_calls: list[int] = []
 
     def get_progress(self, progress_id: int) -> Any:
         self.calls.append(progress_id)
@@ -142,14 +150,10 @@ class FakeCanvas:
         state = self.states.pop(0) if len(self.states) > 1 else self.states[0]
         return SimpleNamespace(id=progress_id, workflow_state=state)
 
-
-class FakeCourse:
-    def __init__(self, file_obj: Any):
-        self.file_obj = file_obj
-        self.calls: list[int] = []
-
     def get_file(self, file_id: int) -> Any:
-        self.calls.append(file_id)
+        self.file_calls.append(file_id)
+        if self.file_obj is None:
+            raise AssertionError("No file object configured")
         return self.file_obj
 
 
@@ -234,9 +238,7 @@ def test_identity_and_polling_validation_fail_closed() -> None:
 def test_anonymous_and_ambiguous_surveys_refuse_before_report_listing() -> None:
     requested = identity()
     requester = FakeRequester()
-    anonymous = FakeQuiz(
-        requester, quiz_type="graded_survey", anonymous_submissions=True
-    )
+    anonymous = FakeQuiz(requester, quiz_type="graded_survey", anonymous_submissions=True)
     ambiguous = FakeQuiz(requester, quiz_type="survey", anonymous_submissions=None)
 
     with pytest.raises(ValueError, match="Anonymous Survey"):
@@ -354,9 +356,7 @@ def test_raw_report_request_encodes_nested_fields_and_requires_apply() -> None:
 
 
 def test_progress_url_requires_expected_origin_path_and_numeric_id() -> None:
-    good = report(
-        progress_url="https://canvas.example.edu/api/v1/progress/505?token=PROTECTED"
-    )
+    good = report(progress_url="https://canvas.example.edu/api/v1/progress/505?token=PROTECTED")
     assert progress_id_from_report(good, api_url="https://canvas.example.edu/") == 505
 
     with pytest.raises(ValueError, match="unexpected origin"):
@@ -419,12 +419,10 @@ def test_plan_mode_performs_no_request_progress_or_download(tmp_path: Path) -> N
     requester = FakeRequester(post_payload={})
     quiz = FakeQuiz(requester)
     canvas = FakeCanvas(["completed"])
-    course = FakeCourse(file_object(requester))
     output = tmp_path / "student-analysis.csv"
 
     result = execute_quiz_analysis_export(
         canvas=canvas,
-        course=course,
         quiz=quiz,
         identity=identity(),
         destination=output,
@@ -435,7 +433,6 @@ def test_plan_mode_performs_no_request_progress_or_download(tmp_path: Path) -> N
     assert result["overall_status"] == OverallStatus.PLANNED.value
     assert requester.calls == []
     assert canvas.calls == []
-    assert course.calls == []
     assert not output.exists()
 
 
@@ -453,13 +450,11 @@ def test_apply_polls_downloads_and_commits_verified_private_pair(tmp_path: Path)
     requester = FakeRequester(post_payload=running, download=download)
     readback = report(file_id=404)
     quiz = FakeQuiz(requester, readback=readback)
-    canvas = FakeCanvas(["queued", "completed"])
-    course = FakeCourse(file_object(requester))
+    canvas = FakeCanvas(["queued", "completed"], file_obj=file_object(requester))
     output = tmp_path / "student-analysis.csv"
 
     result = execute_quiz_analysis_export(
         canvas=canvas,
-        course=course,
         quiz=quiz,
         identity=identity(),
         destination=output,
@@ -484,6 +479,7 @@ def test_apply_polls_downloads_and_commits_verified_private_pair(tmp_path: Path)
     assert "PROTECTED" not in retained
     assert "https://" not in retained
     assert json.loads(retained)["canvas_file_id"] == 404
+    assert canvas.file_calls == [404]
 
 
 def test_external_signed_file_download_does_not_send_canvas_bearer(tmp_path: Path) -> None:
@@ -491,16 +487,12 @@ def test_external_signed_file_download_does_not_send_canvas_bearer(tmp_path: Pat
     requester = FakeRequester(post_payload=post, download=FakeResponse(content=CSV_BYTES))
     readback = report(file_id=404)
     quiz = FakeQuiz(requester, readback=readback)
-    course = FakeCourse(
-        file_object(
-            requester,
-            url="https://files.example-cdn.test/download?verifier=PROTECTED",
-        )
+    file_obj = file_object(
+        requester,
+        url="https://files.example-cdn.test/download?verifier=PROTECTED",
     )
-
     result = execute_quiz_analysis_export(
-        canvas=FakeCanvas(),
-        course=course,
+        canvas=FakeCanvas(file_obj=file_obj),
         quiz=quiz,
         identity=identity(),
         destination=tmp_path / "student-analysis.csv",
@@ -514,20 +506,15 @@ def test_external_signed_file_download_does_not_send_canvas_bearer(tmp_path: Pat
 
 
 def test_409_continues_only_with_one_exact_in_progress_report(tmp_path: Path) -> None:
-    in_progress = report(
-        progress_url="https://canvas.example.edu/api/v1/progress/505"
-    )
+    in_progress = report(progress_url="https://canvas.example.edu/api/v1/progress/505")
     requester = FakeRequester(post_error=Conflict("already generating"))
     quiz = FakeQuiz(
         requester,
         reports=[[], [in_progress]],
         readback=report(file_id=404),
     )
-    course = FakeCourse(file_object(requester))
-
     result = execute_quiz_analysis_export(
-        canvas=FakeCanvas(["completed"]),
-        course=course,
+        canvas=FakeCanvas(["completed"], file_obj=file_object(requester)),
         quiz=quiz,
         identity=identity(),
         destination=tmp_path / "student-analysis.csv",
@@ -541,19 +528,12 @@ def test_409_continues_only_with_one_exact_in_progress_report(tmp_path: Path) ->
 
 
 def test_409_with_ambiguous_matches_stops_without_download(tmp_path: Path) -> None:
-    first = report(
-        303, progress_url="https://canvas.example.edu/api/v1/progress/505"
-    )
-    second = report(
-        304, progress_url="https://canvas.example.edu/api/v1/progress/506"
-    )
+    first = report(303, progress_url="https://canvas.example.edu/api/v1/progress/505")
+    second = report(304, progress_url="https://canvas.example.edu/api/v1/progress/506")
     requester = FakeRequester(post_error=Conflict("already generating"))
     quiz = FakeQuiz(requester, reports=[[], [first, second]])
-    course = FakeCourse(file_object(requester))
-
     result = execute_quiz_analysis_export(
-        canvas=FakeCanvas(),
-        course=course,
+        canvas=FakeCanvas(file_obj=file_object(requester)),
         quiz=quiz,
         identity=identity(),
         destination=tmp_path / "student-analysis.csv",
@@ -562,7 +542,6 @@ def test_409_with_ambiguous_matches_stops_without_download(tmp_path: Path) -> No
     )
 
     assert result["overall_status"] == OverallStatus.CONFLICT.value
-    assert course.calls == []
     assert sum(call[0] == "POST" for call in requester.calls) == 1
 
 
@@ -576,8 +555,7 @@ def test_request_exception_binds_only_one_new_report(tmp_path: Path) -> None:
     )
 
     result = execute_quiz_analysis_export(
-        canvas=FakeCanvas(["completed"]),
-        course=FakeCourse(file_object(requester)),
+        canvas=FakeCanvas(["completed"], file_obj=file_object(requester)),
         quiz=quiz,
         identity=identity(),
         destination=tmp_path / "student-analysis.csv",
@@ -597,8 +575,7 @@ def test_unmatched_request_exception_is_accepted_unverified(tmp_path: Path) -> N
     quiz = FakeQuiz(requester, reports=[[], []])
 
     result = execute_quiz_analysis_export(
-        canvas=FakeCanvas(),
-        course=FakeCourse(file_object(requester)),
+        canvas=FakeCanvas(file_obj=file_object(requester)),
         quiz=quiz,
         identity=identity(),
         destination=tmp_path / "student-analysis.csv",
@@ -636,8 +613,7 @@ def test_invalid_oversized_and_failed_downloads_do_not_commit(
     output = tmp_path / "student-analysis.csv"
 
     result = execute_quiz_analysis_export(
-        canvas=FakeCanvas(),
-        course=FakeCourse(file_object(requester)),
+        canvas=FakeCanvas(file_obj=file_object(requester)),
         quiz=quiz,
         identity=identity(),
         destination=output,
@@ -670,8 +646,7 @@ def test_zero_row_and_zero_question_reports_commit_truthful_counts(tmp_path: Pat
         output = tmp_path / name
 
         result = execute_quiz_analysis_export(
-            canvas=FakeCanvas(),
-            course=FakeCourse(file_object(requester)),
+            canvas=FakeCanvas(file_obj=file_object(requester)),
             quiz=quiz,
             identity=identity(),
             destination=output,
@@ -693,7 +668,6 @@ def test_preexisting_staging_refuses_before_canvas_reads(tmp_path: Path) -> None
     with pytest.raises(SystemExit, match="pre-existing private temporary"):
         execute_quiz_analysis_export(
             canvas=FakeCanvas(),
-            course=FakeCourse(file_object(requester)),
             quiz=quiz,
             identity=identity(),
             destination=output,
