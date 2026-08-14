@@ -459,6 +459,143 @@ def test_quiz_import_qti_defines_expected_options() -> None:
     assert report_options <= options
 
 
+def test_quiz_export_analysis_defines_reviewed_options() -> None:
+    options = option_names("quiz", "export-analysis")
+
+    assert {
+        "--quiz-id",
+        "--course-id",
+        "--project-root",
+        "--includes-all-versions",
+        "--output",
+        "--overwrite",
+        "--poll-seconds",
+        "--timeout-seconds",
+        "--dry-run",
+        "--apply",
+        "--no-report",
+        "--report-root",
+        "--report-dir",
+        "--report-slug",
+        "--profile",
+        "--api-url",
+        "--api-key-env",
+        "--api-key-file",
+    } <= options
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        (("--dry-run", "--apply"), "--dry-run and --apply cannot be combined"),
+        (("--poll-seconds", "0"), "--poll-seconds must be a finite positive number"),
+        (
+            ("--poll-seconds", "5", "--timeout-seconds", "2"),
+            "--poll-seconds cannot exceed --timeout-seconds",
+        ),
+    ],
+)
+def test_quiz_export_analysis_validation_fails_before_context_resolution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    extra: tuple[str, ...],
+    message: str,
+) -> None:
+    monkeypatch.setattr(
+        "danvas.cli.args_for",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "quiz",
+            "export-analysis",
+            "--quiz-id",
+            "202",
+            "--output",
+            str(tmp_path / "student-analysis.csv"),
+            *extra,
+        ],
+    )
+
+    assert result.exit_code == 2
+    output = normalized_cli_output(result)
+    assert message in output
+    assert "context resolved" not in output
+
+
+def test_quiz_export_analysis_collision_fails_before_context_resolution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "student-analysis.csv"
+    output.write_text("existing", encoding="utf-8")
+    monkeypatch.setattr(
+        "danvas.cli.args_for",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("context resolved")),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "quiz",
+            "export-analysis",
+            "--quiz-id",
+            "202",
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 2
+    rendered = normalized_cli_output(result)
+    assert "Refusing to overwrite existing private output" in rendered
+    assert "context resolved" not in rendered
+
+
+@pytest.mark.parametrize(("apply", "expected_mode"), [(False, "plan"), (True, "apply")])
+def test_quiz_export_analysis_cli_threads_reviewed_mode_and_destination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    apply: bool,
+    expected_mode: str,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "danvas.cli.args_for", lambda **kwargs: SimpleNamespace(**kwargs)
+    )
+    monkeypatch.setattr(
+        "danvas.cli.command_quiz_export_analysis",
+        lambda args: captured.update(vars(args)),
+    )
+    output = tmp_path / "student-analysis.csv"
+    argv = [
+        "quiz",
+        "export-analysis",
+        "--quiz-id",
+        "202",
+        "--course-id",
+        "101",
+        "--output",
+        str(output),
+        "--includes-all-versions",
+        "--no-report",
+    ]
+    if apply:
+        argv.append("--apply")
+
+    result = runner.invoke(app, argv)
+
+    assert result.exit_code == 0, result.output
+    assert captured["quiz_id"] == 202
+    assert captured["course_id"] == 101
+    assert captured["includes_all_versions"] is True
+    assert captured["output"] == str(output)
+    assert captured["output_display"] == str(output)
+    assert captured["mutation_mode"] == expected_mode
+    assert captured["dry_run"] is (not apply)
+
+
 def test_auth_doctor_cli_options_and_args(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 

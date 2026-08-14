@@ -73,7 +73,7 @@ def write_profile(path: Path, *, name: str, api_url: str, token_env: str) -> Non
     )
 
 
-def test_provider_neutral_authentication_surface_is_exactly_forty_five_commands() -> None:
+def test_provider_neutral_authentication_surface_is_exactly_forty_six_commands() -> None:
     commands = leaf_commands()
     canvas_commands = {
         name for name, policy in ACCESS_POLICIES.items() if policy.canvas_read
@@ -84,8 +84,8 @@ def test_provider_neutral_authentication_surface_is_exactly_forty_five_commands(
         for name, command in commands.items()
     }
 
-    assert len(commands) == 60
-    assert len(canvas_commands) == 45
+    assert len(commands) == 61
+    assert len(canvas_commands) == 46
     assert set(actual) == set(commands)
     assert {name for name, names in actual.items() if names} == canvas_commands
     assert all(actual[name] == CURRENT_AUTH_OPTIONS for name in canvas_commands)

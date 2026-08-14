@@ -25,6 +25,7 @@ from danvas.artifacts import (
 )
 from danvas.mutation import MutationMode, assert_canvas_mutation_allowed
 from danvas.quiz import StudentAnalysisReport
+from danvas.reports import create_report_run, should_write_report_run
 from danvas.sanitize import sanitize_error
 
 EVIDENCE_SCHEMA = "quiz-analysis-export-v1"
@@ -90,6 +91,50 @@ class PollResult:
     status: ProgressStatus
     progress_id: int
     error: str = ""
+
+
+def command_quiz_export_analysis(args: Any) -> None:
+    """Acquire one official Classic Quiz student-analysis CSV."""
+    from danvas.auth import canvas_from_args
+    from danvas.mutation import mutation_mode_from_args
+
+    canvas = canvas_from_args(args)
+    course = canvas.get_course(args.course_id)
+    quiz = course.get_quiz(args.quiz_id)
+    identity = QuizAnalysisExportIdentity(
+        course_id=int(args.course_id),
+        quiz_id=int(args.quiz_id),
+        includes_all_versions=bool(args.includes_all_versions),
+    )
+    try:
+        result = execute_quiz_analysis_export(
+            canvas=canvas,
+            course=course,
+            quiz=quiz,
+            identity=identity,
+            destination=Path(args.output),
+            api_url=str(args.api_url),
+            mutation_mode=mutation_mode_from_args(args),
+            overwrite=bool(args.overwrite),
+            poll_seconds=float(args.poll_seconds),
+            timeout_seconds=float(args.timeout_seconds),
+        )
+    except FileExistsError as exc:
+        raise SystemExit(
+            f"Refusing to overwrite existing private output: {exc.filename or exc}"
+        ) from exc
+    except ValueError as exc:
+        raise SystemExit(sanitize_error(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - sanitize remote failures at the boundary.
+        raise SystemExit(f"Quiz analysis export failed: {_safe_exception(exc)}") from exc
+
+    _print_quiz_analysis_export_result(result, output_display=str(args.output_display))
+    _write_quiz_analysis_export_report(args, result)
+    if result["overall_status"] not in {
+        OverallStatus.PLANNED.value,
+        OverallStatus.APPLIED_VERIFIED.value,
+    }:
+        raise SystemExit(1)
 
 
 def validate_polling(*, poll_seconds: float, timeout_seconds: float) -> None:
@@ -554,6 +599,105 @@ def _download_canvas_file(
                 raise ValueError("Canvas report file exceeds the configured size limit.")
             handle.write(chunk)
     return total
+
+
+def _print_quiz_analysis_export_result(
+    result: dict[str, Any], *, output_display: str
+) -> None:
+    print(f"Classic Quiz analysis export: {result['mode']}")
+    print(f"  Course ID: {result['course_id']}")
+    print(f"  Quiz ID: {result['quiz_id']}")
+    print(f"  Report scope: {'all versions' if result['includes_all_versions'] else 'current'}")
+    print(f"  Status: {result['overall_status']}")
+    print(f"  Request: {result['request_status']}")
+    print(f"  Progress: {result['progress_status']}")
+    print(f"  Download: {result['download_status']}")
+    for label, key in (
+        ("Report ID", "report_id"),
+        ("Progress ID", "progress_id"),
+        ("File ID", "file_id"),
+    ):
+        if result.get(key) is not None:
+            print(f"  {label}: {result[key]}")
+    if result.get("row_count") is not None:
+        print(f"  Rows: {result['row_count']}")
+        print(f"  Question pairs: {result['question_count']}")
+    destination_label = "Private artifact" if result["mode"] == "apply" else "Private destination"
+    print(f"  {destination_label}: {output_display}")
+    if result.get("error"):
+        print(f"  Error: {result['error']}")
+    print(f"  Next: {result['safe_next_action']}")
+
+
+def _write_quiz_analysis_export_report(args: Any, result: dict[str, Any]) -> None:
+    project_root = Path(args.project_root)
+    if not should_write_report_run(
+        no_report=bool(args.no_report),
+        legacy_output=False,
+        report_root=Path(args.report_root) if args.report_root else None,
+        report_dir=Path(args.report_dir) if args.report_dir else None,
+        report_slug=str(args.report_slug) if args.report_slug else None,
+        project_root=project_root,
+    ):
+        return
+    report_run = create_report_run(
+        command="quiz export-analysis",
+        slug=str(args.report_slug or "quiz-analysis-export"),
+        project_root=project_root,
+        report_root=Path(args.report_root) if args.report_root else None,
+        report_dir=Path(args.report_dir) if args.report_dir else None,
+        course_id=int(result["course_id"]),
+        private_data=True,
+    )
+    try:
+        report_run.write_json("quiz-analysis-export.json", result)
+        report_run.write_text(
+            "quiz-analysis-export.md", _render_quiz_analysis_export_markdown(result)
+        )
+        status = (
+            "success"
+            if result["overall_status"]
+            in {OverallStatus.PLANNED.value, OverallStatus.APPLIED_VERIFIED.value}
+            else "failed"
+        )
+        report_run.finish(status)
+        print(f"Private report directory: {report_run.path}")
+    except Exception as exc:
+        report_run.finish("failed", error=_safe_exception(exc))
+        raise
+
+
+def _render_quiz_analysis_export_markdown(result: dict[str, Any]) -> str:
+    lines = [
+        "# Classic Quiz Analysis Export",
+        "",
+        "## Identity",
+        "",
+        f"- Course ID: `{result['course_id']}`",
+        f"- Quiz ID: `{result['quiz_id']}`",
+        f"- Report type: `{result['report_type']}`",
+        f"- Includes all versions: `{str(result['includes_all_versions']).lower()}`",
+        "",
+        "## Result",
+        "",
+        f"- Overall: `{result['overall_status']}`",
+        f"- Request: `{result['request_status']}`",
+        f"- Progress: `{result['progress_status']}`",
+        f"- Download: `{result['download_status']}`",
+    ]
+    for label, key in (
+        ("Report ID", "report_id"),
+        ("Progress ID", "progress_id"),
+        ("Canvas file ID", "file_id"),
+        ("Rows", "row_count"),
+        ("Question pairs", "question_count"),
+    ):
+        if result.get(key) is not None:
+            lines.append(f"- {label}: `{result[key]}`")
+    lines.extend(("", "## Safe Next Action", "", str(result["safe_next_action"])))
+    if result.get("error"):
+        lines.extend(("", "## Error", "", str(result["error"])))
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _safe_report_record(report: Any) -> dict[str, Any]:

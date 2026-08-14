@@ -37,6 +37,7 @@ CURRENT_DRY_RUN_DEFAULTS = {
     "assignments update": False,
     "assignments upsert": False,
     "quiz import-qti": False,
+    "quiz export-analysis": False,
     "submissions feedback": False,
     "grades post": False,
     "grades clear": False,
@@ -99,6 +100,7 @@ CURRENT_APPLY_COMMANDS = {
     "announcements create",
     "announcements update",
     "quiz import-qti",
+    "quiz export-analysis",
     "grades post",
     "grades clear",
     "submissions feedback",
@@ -254,8 +256,8 @@ def canvas_mutation_assertions() -> Counter[tuple[str, str]]:
 def test_access_policy_registry_matches_click_tree_exactly() -> None:
     commands = set(leaf_commands())
 
-    assert len(commands) == 60
-    assert len(ACCESS_POLICIES) == 60
+    assert len(commands) == 61
+    assert len(ACCESS_POLICIES) == 61
     assert set(ACCESS_POLICIES) == commands
 
 
@@ -273,7 +275,7 @@ def test_access_policy_category_counts_match_reviewed_inventory() -> None:
         == 26
     )
     assert sum(policy.dry_run_kind is DryRunKind.LOCAL_WRITE for policy in policies) == 5
-    assert sum(policy.canvas_mutation for policy in policies) == 15
+    assert sum(policy.canvas_mutation for policy in policies) == 16
     assert sum(policy.bare_canvas_mutation for policy in policies) == 0
 
 

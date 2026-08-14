@@ -98,6 +98,7 @@ def _policies() -> tuple[ArtifactPolicy, ...]:
         "gradebook check",
         "gradebook audit",
         "quiz analysis",
+        "quiz export-analysis",
         "submissions export",
         "submissions grades",
         "submissions media",

@@ -8,6 +8,11 @@ retain bounded evidence, and request explicit authorization before applying.
 Credential providers remain outside danvas; agents pass only the neutral
 environment-variable name or credential-file path selected by the operator.
 
+Missing danvas command coverage is not permission to switch to direct Canvas
+API calls, browser automation, or provider-specific tooling. First classify the
+effect and ask the operator. In particular, requesting a Classic Quiz analysis
+report is a Canvas mutation even though it does not change questions or grades.
+
 Inspect the exact packaged public skill before installation:
 
   danvas skill show

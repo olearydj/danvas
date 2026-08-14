@@ -204,6 +204,14 @@ def _policies() -> tuple[CommandAccessPolicy, ...]:
             authoritative_verification=True,
         ),
         _policy(
+            "quiz export-analysis",
+            canvas_read=True,
+            local_write=True,
+            canvas_mutation=True,
+            dry_run_kind=DryRunKind.CANVAS_MUTATION,
+            authoritative_verification=True,
+        ),
+        _policy(
             "submissions feedback",
             canvas_read=True,
             local_write=True,

@@ -67,8 +67,8 @@ def validate_argv(argv: tuple[str, ...], commands: dict[str, click.Command]) -> 
 def test_command_guides_cover_every_released_group_and_leaf_exactly() -> None:
     commands = command_tree()
 
-    assert len(commands) == 75
-    assert len(COMMAND_GUIDES) == 75
+    assert len(commands) == 76
+    assert len(COMMAND_GUIDES) == 76
     assert set(COMMAND_GUIDES) == set(commands)
 
 
@@ -137,6 +137,7 @@ def test_private_and_effect_truth_remain_owned_by_existing_registries() -> None:
         "gradebook check",
         "gradebook audit",
         "quiz analysis",
+        "quiz export-analysis",
         "submissions export",
         "submissions grades",
         "submissions media",

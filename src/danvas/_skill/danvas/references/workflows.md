@@ -25,6 +25,17 @@ Pages, announcements, and discussion prompt sync use `--dry-run` to preview
 missing local sources. Run without `--dry-run` to create missing files. These
 commands do not overwrite authored files and never accept `--apply`.
 
+## Classic Quiz Analysis
+
+Run `danvas quiz export-analysis --quiz-id ID` to plan the official Canvas
+student-analysis report request. Review the stable IDs and private destination,
+then add `--apply` only after authorization. Report creation is a Canvas
+mutation even though it changes no quiz content or grades. After the verified
+private CSV exists, inspect it locally with `danvas quiz analysis PATH`.
+
+Anonymous Surveys and New Quizzes are not supported by the acquisition command.
+Do not replace missing coverage with an unapproved direct API or browser path.
+
 ## Grades And Feedback
 
 Run grade post/clear or submission feedback without `--apply` first. Applied

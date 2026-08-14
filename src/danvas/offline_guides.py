@@ -66,9 +66,9 @@ GUIDE_TOPICS: Final[tuple[GuideTopic, ...]] = (
     ),
     GuideTopic(
         "content",
-        "Work with Pages, announcements, and discussions.",
+        "Work with quizzes, Pages, announcements, and discussions.",
         "content.txt",
-        ("pages", "announcements", "discussions"),
+        ("quiz", "pages", "announcements", "discussions"),
     ),
     GuideTopic(
         "integrations",

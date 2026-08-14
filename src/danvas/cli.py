@@ -82,6 +82,19 @@ from danvas.pages import (
 from danvas.panopto import command_panopto_captions
 from danvas.profiles import resolve_canvas_context
 from danvas.quiz_import import command_quiz_import_qti
+from danvas.quiz_reports import (
+    DEFAULT_POLL_SECONDS as QUIZ_REPORT_DEFAULT_POLL_SECONDS,
+)
+from danvas.quiz_reports import (
+    DEFAULT_TIMEOUT_SECONDS as QUIZ_REPORT_DEFAULT_TIMEOUT_SECONDS,
+)
+from danvas.quiz_reports import (
+    command_quiz_export_analysis,
+    preflight_quiz_analysis_destination,
+)
+from danvas.quiz_reports import (
+    validate_polling as validate_quiz_report_polling,
+)
 from danvas.reports import (
     create_report_run,
     discover_report_runs,
@@ -1664,6 +1677,122 @@ def quiz_analysis(
             payload=payload,
             markdown=render_quiz_analysis_markdown(payload),
         )
+
+
+@quiz_app.command(
+    "export-analysis",
+    help=(
+        "Plan or request the official Classic Quiz student-analysis report, "
+        "then verify and privately download its CSV."
+    ),
+)
+def quiz_export_analysis(
+    quiz_id: Annotated[
+        int, typer.Option("--quiz-id", min=1, help="Classic Quiz or identified Survey ID.")
+    ],
+    course_id: CourseId = None,
+    project_root: Annotated[
+        Path, typer.Option("--project-root", help="Course project root containing .danvas.")
+    ] = Path("."),
+    includes_all_versions: Annotated[
+        bool,
+        typer.Option(
+            "--includes-all-versions",
+            help="Request Canvas's student analysis across all quiz versions.",
+        ),
+    ] = False,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help=(
+                "Private CSV destination. Defaults beneath "
+                ".danvas/private/quizzes/quiz-<id> in a project."
+            ),
+        ),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace an existing valid private CSV/sidecar pair."),
+    ] = False,
+    poll_seconds: Annotated[
+        float,
+        typer.Option("--poll-seconds", help="Delay between report progress checks."),
+    ] = QUIZ_REPORT_DEFAULT_POLL_SECONDS,
+    timeout_seconds: Annotated[
+        float,
+        typer.Option("--timeout-seconds", help="Maximum total report-generation wait."),
+    ] = QUIZ_REPORT_DEFAULT_TIMEOUT_SECONDS,
+    dry_run: CanvasDryRun = False,
+    apply: CanvasApply = False,
+    no_report: Annotated[
+        bool, typer.Option("--no-report", help="Suppress the default private report run.")
+    ] = False,
+    report_root: Annotated[
+        Path | None,
+        typer.Option("--report-root", help="Root for a dated private report run directory."),
+    ] = None,
+    report_dir: Annotated[
+        Path | None,
+        typer.Option("--report-dir", help="Exact private report run directory to create."),
+    ] = None,
+    report_slug: Annotated[
+        str | None, typer.Option("--report-slug", help="Override the report run slug.")
+    ] = None,
+    profile: ProfileName = None,
+    api_url: ApiUrl = None,
+    api_key_env: ApiKeyEnv = None,
+    api_key_file: ApiKeyFile = None,
+) -> None:
+    mode_args = mutation_args_from_cli(dry_run=dry_run, apply=apply)
+    try:
+        validate_quiz_report_polling(
+            poll_seconds=poll_seconds,
+            timeout_seconds=timeout_seconds,
+        )
+        resolved = resolve_private_path(
+            explicit=output,
+            project_root=project_root,
+            default_relative=f"quizzes/quiz-{quiz_id}/student-analysis.csv",
+            option_name="--output",
+        )
+        preflight_quiz_analysis_destination(resolved.path, overwrite=overwrite)
+    except FileExistsError as exc:
+        raise typer.BadParameter(
+            f"Refusing to overwrite existing private output: {exc.filename or exc}"
+        ) from exc
+    except (SystemExit, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    warn_if_external_private_path(resolved)
+    output_display = (
+        f".danvas/private/quizzes/quiz-{quiz_id}/student-analysis.csv"
+        if resolved.used_project_default
+        else str(output)
+    )
+    run_command(
+        command_quiz_export_analysis,
+        args_for(
+            course_id=course_id,
+            quiz_id=quiz_id,
+            project_root=str(project_root),
+            includes_all_versions=includes_all_versions,
+            output=str(resolved.path),
+            output_display=output_display,
+            overwrite=overwrite,
+            poll_seconds=poll_seconds,
+            timeout_seconds=timeout_seconds,
+            no_report=no_report,
+            report_root=str(report_root) if report_root else None,
+            report_dir=str(report_dir) if report_dir else None,
+            report_slug=report_slug,
+            **mode_args,
+            profile=profile,
+            api_url=api_url,
+            api_key_env=api_key_env,
+            api_key_file=str(api_key_file) if api_key_file else None,
+        ),
+    )
 
 
 @quiz_app.command(

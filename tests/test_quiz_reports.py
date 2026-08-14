@@ -20,6 +20,7 @@ from danvas.quiz_reports import (
     QuizAnalysisExportIdentity,
     RequestStatus,
     build_quiz_analysis_export_plan,
+    command_quiz_export_analysis,
     execute_quiz_analysis_export,
     poll_quiz_report_progress,
     preflight_quiz_analysis_destination,
@@ -158,6 +159,28 @@ def identity(*, all_versions: bool = False) -> QuizAnalysisExportIdentity:
         quiz_id=202,
         includes_all_versions=all_versions,
     )
+
+
+def export_result(*, status: OverallStatus = OverallStatus.PLANNED) -> dict[str, Any]:
+    return {
+        "schema_version": "quiz-analysis-export-v1",
+        "mode": "plan" if status is OverallStatus.PLANNED else "apply",
+        "course_id": 101,
+        "quiz_id": 202,
+        "report_type": "student_analysis",
+        "includes_all_versions": False,
+        "overall_status": status.value,
+        "request_status": RequestStatus.NOT_ATTEMPTED.value,
+        "progress_status": ProgressStatus.NOT_CHECKED.value,
+        "download_status": DownloadStatus.NOT_ATTEMPTED.value,
+        "report_id": None,
+        "progress_id": None,
+        "file_id": None,
+        "row_count": None,
+        "question_count": None,
+        "error": "",
+        "safe_next_action": "Review the plan, then add --apply only after authorization.",
+    }
 
 
 def report(
@@ -679,3 +702,114 @@ def test_preexisting_staging_refuses_before_canvas_reads(tmp_path: Path) -> None
         )
     assert quiz.report_calls == 0
     assert requester.calls == []
+
+
+def test_command_adapter_prints_aggregate_and_writes_private_plan_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_dir = tmp_path / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        '[canvas]\ncourse_id = 101\ntimezone = "Etc/UTC"\n',
+        encoding="utf-8",
+    )
+    quiz = object()
+    course = SimpleNamespace(get_quiz=lambda quiz_id: quiz)
+    canvas = SimpleNamespace(get_course=lambda course_id: course)
+    monkeypatch.setattr("danvas.auth.canvas_from_args", lambda args: canvas)
+    observed: dict[str, Any] = {}
+
+    def fake_execute(**kwargs: Any) -> dict[str, Any]:
+        observed.update(kwargs)
+        return export_result()
+
+    monkeypatch.setattr("danvas.quiz_reports.execute_quiz_analysis_export", fake_execute)
+    output = tmp_path / ".danvas" / "private" / "quizzes" / "quiz-202" / "student-analysis.csv"
+    args = SimpleNamespace(
+        course_id=101,
+        quiz_id=202,
+        includes_all_versions=False,
+        output=str(output),
+        output_display=".danvas/private/quizzes/quiz-202/student-analysis.csv",
+        api_url="https://canvas.example.edu/",
+        mutation_mode="plan",
+        dry_run=True,
+        overwrite=False,
+        poll_seconds=2.0,
+        timeout_seconds=120.0,
+        project_root=str(tmp_path),
+        no_report=False,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    command_quiz_export_analysis(args)
+
+    rendered = capsys.readouterr().out
+    assert "Classic Quiz analysis export: plan" in rendered
+    assert "Status: planned" in rendered
+    assert "Course ID: 101" in rendered
+    assert "Quiz ID: 202" in rendered
+    assert ".danvas/private/quizzes/quiz-202/student-analysis.csv" in rendered
+    assert "https://" not in rendered
+    assert "PROTECTED" not in rendered
+    assert observed["mutation_mode"] is MutationMode.PLAN
+    report_dirs = list((config_dir / "private" / "reports").iterdir())
+    assert len(report_dirs) == 1
+    report_dir = report_dirs[0]
+    assert (report_dir / "quiz-analysis-export.json").is_file()
+    assert (report_dir / "quiz-analysis-export.md").is_file()
+    manifest = json.loads((report_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["command"] == "quiz export-analysis"
+    assert manifest["may_contain_private_student_data"] is True
+
+
+def test_command_adapter_exits_nonzero_after_uncertain_acceptance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    quiz = object()
+    course = SimpleNamespace(get_quiz=lambda quiz_id: quiz)
+    canvas = SimpleNamespace(get_course=lambda course_id: course)
+    monkeypatch.setattr("danvas.auth.canvas_from_args", lambda args: canvas)
+    uncertain = export_result(status=OverallStatus.ACCEPTED_UNVERIFIED)
+    uncertain.update(
+        {
+            "request_status": RequestStatus.UNKNOWN_AFTER_EXCEPTION.value,
+            "error": "TimeoutError: connection outcome unavailable",
+            "safe_next_action": "Verify existing reports before any new --apply.",
+        }
+    )
+    monkeypatch.setattr(
+        "danvas.quiz_reports.execute_quiz_analysis_export", lambda **kwargs: uncertain
+    )
+    args = SimpleNamespace(
+        course_id=101,
+        quiz_id=202,
+        includes_all_versions=False,
+        output=str(tmp_path / "student-analysis.csv"),
+        output_display=str(tmp_path / "student-analysis.csv"),
+        api_url="https://canvas.example.edu/",
+        mutation_mode="apply",
+        dry_run=False,
+        overwrite=False,
+        poll_seconds=2.0,
+        timeout_seconds=120.0,
+        project_root=str(tmp_path),
+        no_report=True,
+        report_root=None,
+        report_dir=None,
+        report_slug=None,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        command_quiz_export_analysis(args)
+
+    assert exc_info.value.code == 1
+    rendered = capsys.readouterr().out
+    assert "Status: accepted_unverified" in rendered
+    assert "before any new --apply" in rendered

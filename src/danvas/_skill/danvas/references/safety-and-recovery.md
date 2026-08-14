@@ -10,6 +10,10 @@ omission.
 Local-write commands are distinct. Their `--dry-run` previews local creation;
 they never use `--apply` and retain no authority to change Canvas.
 
+Missing danvas coverage is not authorization to switch to direct Canvas API,
+browser automation, or provider-specific tooling. Classify the endpoint effect
+and ask the operator before leaving the reviewed interface.
+
 ## Evidence
 
 Distinguish at least:

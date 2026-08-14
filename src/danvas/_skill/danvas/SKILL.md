@@ -64,6 +64,12 @@ Never drop `--apply` to make an outdated example work. Never add `--apply` to a
 local sync command. Never infer mutation authorization from a request to inspect,
 compare, prepare, download, export, or explain.
 
+Missing danvas command coverage does not authorize direct Canvas API calls,
+browser automation, or provider-specific fallback. Classify the proposed effect
+and ask the operator before leaving the supported interface. A Classic Quiz
+analysis report request is a Canvas mutation even though it changes no quiz
+content or grades.
+
 ## Preserve Identity And Evidence
 
 Prefer stable Canvas IDs, explicit URLs where required, source front matter, and

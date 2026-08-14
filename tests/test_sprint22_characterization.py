@@ -91,8 +91,8 @@ def test_released_executable_tree_still_matches_complete_fixture() -> None:
     assert actual["help"] != expected["help"]
     records = command_records(actual)
     assert sum(record["kind"] == "group" for record in records) == 15
-    assert sum(record["kind"] == "leaf" for record in records) == 60
-    assert sum(len(record["parameters"]) for record in records) == 623
+    assert sum(record["kind"] == "leaf" for record in records) == 61
+    assert sum(len(record["parameters"]) for record in records) == 641
 
 
 @pytest.mark.parametrize("width", WIDTHS)
@@ -147,8 +147,8 @@ def test_released_help_has_neutral_auth_surface_and_no_removed_spellings() -> No
     canvas_commands = {name for name, policy in ACCESS_POLICIES.items() if policy.canvas_read}
     neutral = {"--api-url", "--profile", "--api-key-env", "--api-key-file"}
 
-    assert len(leaves) == 60
-    assert len(canvas_commands) == 45
+    assert len(leaves) == 61
+    assert len(canvas_commands) == 46
     for name, record in leaves.items():
         options = {option for parameter in record["parameters"] for option in parameter["options"]}
         assert options.intersection(neutral) == (neutral if name in canvas_commands else set())

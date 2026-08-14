@@ -215,14 +215,25 @@ GROUP_GUIDES: tuple[CommandGuide, ...] = (
     ),
     CommandGuide(
         "quiz",
-        "Analyze local Classic Quiz exports or plan and apply QTI imports.",
+        "Acquire and analyze Classic Quiz reports or plan and apply QTI imports.",
         identities=(
             IdentityRule(
                 IdentityKind.LOCAL_PATH,
-                "Analysis uses a local CSV; import uses an explicit QTI package and project course.",
+                "Exports use stable course/quiz/report/file IDs; local analysis uses an "
+                "explicit CSV; import uses an explicit QTI package and project course.",
             ),
         ),
         workflows=(
+            _workflow(
+                "Export then analyze",
+                ("quiz", "export-analysis", "--quiz-id", "123"),
+                ("quiz", "export-analysis", "--quiz-id", "123", "--apply"),
+                (
+                    "quiz",
+                    "analysis",
+                    ".danvas/private/quizzes/quiz-123/student-analysis.csv",
+                ),
+            ),
             _workflow(
                 "Import QTI",
                 ("quiz", "import-qti", "PACKAGE.zip"),
@@ -502,6 +513,10 @@ _LEAF_PURPOSES = {
     "gradebook check": "Check a local gradebook CSV for recognized headings, variants, and missing cells.",
     "gradebook audit": "Audit final-score setup from a local gradebook and optional course evidence.",
     "quiz analysis": "Summarize a local Classic Quiz or Survey student-analysis CSV.",
+    "quiz export-analysis": (
+        "Plan or request Canvas's official identified Classic Quiz student-analysis report, "
+        "then privately download and verify its CSV."
+    ),
     "quiz import-qti": "Plan or apply a Classic Quiz QTI import and verify the created object.",
     "submissions export": "Export private submission metadata without downloading attachments.",
     "submissions grades": "Export private current-grade and submission-comment evidence.",
@@ -566,6 +581,7 @@ _BASE_EXAMPLES: Mapping[str, tuple[str, ...]] = {
     "gradebook check": ("gradebook", "check", "GRADEBOOK.csv"),
     "gradebook audit": ("gradebook", "audit", "GRADEBOOK.csv"),
     "quiz analysis": ("quiz", "analysis", "STUDENT_ANALYSIS.csv"),
+    "quiz export-analysis": ("quiz", "export-analysis", "--quiz-id", "123"),
     "quiz import-qti": ("quiz", "import-qti", "PACKAGE.zip"),
     "submissions export": ("submissions", "export", "--assignment-id", "123"),
     "submissions grades": ("submissions", "grades", "--assignment-id", "123"),
@@ -649,6 +665,7 @@ _NO_IDENTITY_COMMANDS = {
 }
 _CANVAS_ID_COMMANDS = {
     "assignments overrides",
+    "quiz export-analysis",
     "submissions export",
     "submissions grades",
     "submissions media",
@@ -660,7 +677,13 @@ _CANVAS_ID_COMMANDS = {
     "files download-one",
     "files compare",
 }
-_NO_BLIND_RETRY = {"submissions feedback", "grades post", "grades clear", "files upload"}
+_NO_BLIND_RETRY = {
+    "quiz export-analysis",
+    "submissions feedback",
+    "grades post",
+    "grades clear",
+    "files upload",
+}
 _LOCAL_SYNC = {
     "discussions sync-prompts",
     "announcements sync",
@@ -683,6 +706,8 @@ _RELATED: Mapping[str, tuple[str, ...]] = {
     "assignments create": ("assignments verify",),
     "assignments update": ("assignments verify",),
     "assignments upsert": ("assignments verify",),
+    "quiz export-analysis": ("quiz analysis", "reports list"),
+    "quiz analysis": ("quiz export-analysis",),
     "submissions feedback": ("roster", "grades verify"),
     "grades post": ("grades verify",),
     "grades clear": ("grades verify",),
@@ -823,6 +848,11 @@ def _leaf_guides() -> tuple[CommandGuide, ...]:
         guards: tuple[str, ...] = ()
         if policy.canvas_mutation:
             guards = ("Omission plans; --apply alone authorizes Canvas mutation.",)
+            if command == "quiz export-analysis":
+                guards += (
+                    "Anonymous Surveys are refused before report creation.",
+                    "A report request is a Canvas mutation even though quiz content and grades do not change.",
+                )
             if command in _CONFIRM_GUARDS:
                 guards += ("Apply also requires the command-specific --confirm value.",)
         elif command in _LOCAL_SYNC:
@@ -835,6 +865,14 @@ def _leaf_guides() -> tuple[CommandGuide, ...]:
                 purpose=purpose,
                 identities=_identity_for(command),
                 examples=_examples_for(command),
+                outputs=(
+                    (
+                        "Verified private student-analysis CSV plus a SHA-256 artifact sidecar; "
+                        "private plan/result report evidence when enabled."
+                    ),
+                )
+                if command == "quiz export-analysis"
+                else (),
                 guards=guards,
                 exits=(
                     ExitStatus(0, "Completed with the command's documented result."),

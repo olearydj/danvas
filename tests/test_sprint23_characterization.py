@@ -12,8 +12,10 @@ from danvas.access import ACCESS_POLICIES, DryRunKind
 from danvas.artifacts import ARTIFACT_POLICIES, ArtifactClass
 from danvas.cli import app
 from danvas.command_description import describe_payload
-from danvas.command_guides import COMMAND_GUIDES
+from danvas.command_guides import COMMAND_GUIDES, ExampleStage
+from danvas.offline_guides import render_guide
 from danvas.quiz import StudentAnalysisReport, analyze_student_analysis
+from danvas.skill_resources import canonical_skill_files
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "sprint23"
@@ -32,11 +34,21 @@ def quiz_commands() -> dict[str, click.Command]:
     return dict(quiz.commands)
 
 
-def test_released_quiz_surface_has_no_report_acquisition() -> None:
-    assert set(quiz_commands()) == {"analysis", "import-qti"}
-    assert "quiz export-analysis" not in ACCESS_POLICIES
-    assert "quiz export-analysis" not in ARTIFACT_POLICIES
-    assert "quiz export-analysis" not in COMMAND_GUIDES
+def test_quiz_surface_includes_reviewed_report_acquisition() -> None:
+    assert set(quiz_commands()) == {"analysis", "export-analysis", "import-qti"}
+
+    acquisition = ACCESS_POLICIES["quiz export-analysis"]
+    assert acquisition.canvas_read is True
+    assert acquisition.canvas_mutation is True
+    assert acquisition.local_write is True
+    assert acquisition.dry_run_kind is DryRunKind.CANVAS_MUTATION
+    assert acquisition.bare_canvas_mutation is False
+    assert acquisition.authoritative_verification is True
+    assert (
+        ARTIFACT_POLICIES["quiz export-analysis"].artifact_class
+        is ArtifactClass.PRIVATE
+    )
+    assert COMMAND_GUIDES["quiz export-analysis"].guide_topics == ("content", "safety")
 
     analysis = ACCESS_POLICIES["quiz analysis"]
     assert analysis.canvas_read is False
@@ -46,18 +58,22 @@ def test_released_quiz_surface_has_no_report_acquisition() -> None:
     assert ARTIFACT_POLICIES["quiz analysis"].artifact_class is ArtifactClass.PRIVATE
 
 
-def test_released_quiz_help_and_description_freeze_local_analysis_gap() -> None:
+def test_quiz_help_and_description_expose_export_then_analyze_workflow() -> None:
     help_result = runner.invoke(app, ["quiz", "--help"], color=False)
     assert help_result.exit_code == 0
     help_text = click.unstyle(help_result.output)
     assert "analysis" in help_text
     assert "import-qti" in help_text
-    assert "export-analysis" not in help_text
-    assert "Analysis uses a local CSV" in help_text
+    assert "export-analysis" in help_text
+    assert "Export then analyze" in help_text
 
     payload = describe_payload(root_command(), ("quiz",))
     children = {child["command_path"]: child for child in payload["command"]["children"]}
-    assert set(children) == {"quiz analysis", "quiz import-qti"}
+    assert set(children) == {
+        "quiz analysis",
+        "quiz export-analysis",
+        "quiz import-qti",
+    }
     assert children["quiz analysis"]["requirements"] == {
         "canvas": False,
         "network": False,
@@ -70,6 +86,53 @@ def test_released_quiz_help_and_description_freeze_local_analysis_gap() -> None:
         "artifact_class": "private",
         "default_relative": None,
     }
+    exported = children["quiz export-analysis"]
+    assert exported["requirements"] == {
+        "canvas": True,
+        "network": True,
+        "credentials": True,
+        "profile_supported": True,
+        "project_option": True,
+    }
+    assert exported["access"]["canvas_mutation"] is True
+    assert exported["access"]["bare_canvas_mutation"] is False
+    assert exported["access"]["authoritative_verification"] is True
+    assert exported["artifact"] == {
+        "retained": True,
+        "artifact_class": "private",
+        "default_relative": None,
+    }
+
+
+def test_generated_interfaces_require_plan_and_reject_bypass_examples() -> None:
+    guide = COMMAND_GUIDES["quiz export-analysis"]
+    assert [example.stage for example in guide.examples[:2]] == [
+        ExampleStage.PLAN,
+        ExampleStage.APPLY,
+    ]
+    assert "--apply" not in guide.examples[0].argv
+    assert "--apply" in guide.examples[1].argv
+
+    leaf_help = runner.invoke(app, ["quiz", "export-analysis", "--help"], color=False)
+    assert leaf_help.exit_code == 0
+    public_text = "\n".join(
+        [
+            click.unstyle(leaf_help.output),
+            render_guide("content"),
+            render_guide("safety"),
+            *(
+                resource.content.decode("utf-8")
+                for resource in canonical_skill_files()
+            ),
+        ]
+    )
+    lowered = public_text.lower()
+    assert "missing danvas" in lowered
+    assert "direct canvas api" in lowered
+    assert "does not authorize" in lowered
+    assert "canvas mutation" in lowered
+    for raw_interface in ("/api/v1/", "progress_url", '"quiz_report"'):
+        assert raw_interface not in public_text
 
 
 def test_identified_student_analysis_shape_is_characterized() -> None:

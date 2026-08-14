@@ -26,6 +26,13 @@ authentication, or output creation.
 
 No user or project configuration can restore mutation-on-omission.
 
+Missing danvas command coverage does not authorize direct Canvas API calls,
+browser automation, or provider-specific fallback. Classify the proposed effect
+and ask the operator before leaving the supported interface. Endpoint semantics
+govern the classification: a Canvas report request is a mutation when it uses a
+server-side create-or-reuse `POST`, even if it changes no course content or
+grades.
+
 ## Commands Requiring Apply
 
 The current Canvas-mutation surface is:
@@ -34,6 +41,7 @@ The current Canvas-mutation surface is:
 - `assignments create`
 - `assignments update`
 - `assignments upsert`
+- `quiz export-analysis`
 - `quiz import-qti`
 - `submissions feedback`
 - `grades post`
