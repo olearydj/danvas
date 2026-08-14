@@ -104,7 +104,7 @@ def test_tag_install_requires_tag_matching_expected_version(tmp_path: Path) -> N
 
 
 def test_floating_or_mismatched_refs_fail_before_uv(tmp_path: Path) -> None:
-    for ref in ("main", "v0.17.0", "0123456"):
+    for ref in ("main", "v0.17.0", "abc123"):
         case_root = tmp_path / ref.replace("/", "-")
         case_root.mkdir()
         result, log_path = run_smoke(case_root, ref)
