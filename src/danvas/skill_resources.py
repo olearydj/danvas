@@ -50,6 +50,8 @@ def render_skill_show() -> str:
     lines = [
         f"Bundled Agent Skill: {SKILL_NAME}",
         f"Danvas CLI version: {__version__}",
+        "Supported targets: shared, codex, claude-code, gemini, copilot",
+        "Supported scopes: user, project",
         "Files:",
     ]
     lines.extend(f"  {resource.relative_path}  sha256:{resource.sha256}" for resource in resources)

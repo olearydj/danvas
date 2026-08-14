@@ -23,8 +23,13 @@ OUTPUT_OPTIONS = {
     "--save-raw",
 }
 POSITIONAL_OUTPUT_NAMES = {"output", "output_dir", "destination"}
-IMPLICIT_RETAINED_OUTPUT_COMMANDS = {"init"}
-NONRETAINED_INTERFACE_ARTIFACT_COMMANDS = {"guide", "describe", "skill show"}
+IMPLICIT_RETAINED_OUTPUT_COMMANDS = {"init", "skill install"}
+NONRETAINED_INTERFACE_ARTIFACT_COMMANDS = {
+    "guide",
+    "describe",
+    "skill show",
+    "skill doctor",
+}
 
 CURRENT_DRY_RUN_DEFAULTS = {
     "assignments overrides-sync": False,
@@ -47,6 +52,7 @@ CURRENT_DRY_RUN_DEFAULTS = {
     "files upload": False,
     "recordings panopto-captions": False,
     "discussions score": False,
+    "skill install": False,
 }
 PLAN_ONLY_DRY_RUN_COMMANDS = {"discussions score"}
 
@@ -237,22 +243,25 @@ def canvas_mutation_assertions() -> Counter[tuple[str, str]]:
 def test_access_policy_registry_matches_click_tree_exactly() -> None:
     commands = set(leaf_commands())
 
-    assert len(commands) == 58
-    assert len(ACCESS_POLICIES) == 58
+    assert len(commands) == 60
+    assert len(ACCESS_POLICIES) == 60
     assert set(ACCESS_POLICIES) == commands
 
 
 def test_access_policy_category_counts_match_reviewed_inventory() -> None:
     policies = tuple(ACCESS_POLICIES.values())
 
-    assert sum(not policy.canvas_read for policy in policies) == 13
-    assert sum(
-        policy.canvas_read
-        and not policy.canvas_mutation
-        and policy.dry_run_kind is DryRunKind.NONE
-        for policy in policies
-    ) == 26
-    assert sum(policy.dry_run_kind is DryRunKind.LOCAL_WRITE for policy in policies) == 4
+    assert sum(not policy.canvas_read for policy in policies) == 15
+    assert (
+        sum(
+            policy.canvas_read
+            and not policy.canvas_mutation
+            and policy.dry_run_kind is DryRunKind.NONE
+            for policy in policies
+        )
+        == 26
+    )
+    assert sum(policy.dry_run_kind is DryRunKind.LOCAL_WRITE for policy in policies) == 5
     assert sum(policy.canvas_mutation for policy in policies) == 15
     assert sum(policy.bare_canvas_mutation for policy in policies) == 0
 

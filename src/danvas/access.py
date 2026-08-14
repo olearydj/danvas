@@ -71,6 +71,8 @@ def _policies() -> tuple[CommandAccessPolicy, ...]:
         _policy("guide"),
         _policy("describe"),
         _policy("skill show"),
+        _policy("skill doctor"),
+        _policy("skill install", local_write=True, dry_run_kind=DryRunKind.LOCAL_WRITE),
         _policy("status", local_write=True, authoritative_verification=True),
         _policy("reports list", local_write=True),
         _policy("reports latest", local_write=True),

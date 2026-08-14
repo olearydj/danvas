@@ -88,7 +88,18 @@ from danvas.reports import (
     latest_report_run,
     should_write_report_run,
 )
-from danvas.skill_resources import render_skill_show
+from danvas.skill_installer import (
+    AgentTarget,
+    SkillInstallRefused,
+    SkillInstallResult,
+    SkillScope,
+    install_skill,
+    render_doctor,
+    render_install_result,
+    resolve_skill_target,
+    skill_doctor,
+)
+from danvas.skill_resources import canonical_skill_files, render_skill_show
 from danvas.source_layouts import resolve_source_output_dir
 from danvas.source_lint import command_sources_lint
 from danvas.status import command_status
@@ -116,6 +127,8 @@ PageExportFormat = Literal["json", "html", "markdown"]
 PageSyncFormat = Literal["html", "markdown"]
 SourceLayout = Literal["standard-v1", "legacy-v1"]
 DescribeFormat = Literal["text", "json"]
+AgentName = Literal["shared", "codex", "claude-code", "gemini", "copilot"]
+SkillScopeName = Literal["user", "project"]
 
 
 app = typer.Typer(
@@ -3671,6 +3684,81 @@ def describe(
 )
 def skill_show() -> None:
     typer.echo(render_skill_show(), nl=False)
+
+
+@skill_app.command(
+    "install",
+    help="Install or update the bundled skill at one allowlisted agent location.",
+)
+def skill_install(
+    agent: Annotated[
+        AgentName,
+        typer.Option(
+            "--agent",
+            help="Agent location to install: shared, codex, claude-code, gemini, or copilot.",
+        ),
+    ],
+    scope: Annotated[
+        SkillScopeName,
+        typer.Option("--scope", help="Install for the current user or one explicit project."),
+    ] = "user",
+    project_root: Annotated[
+        Path | None,
+        typer.Option(
+            "--project-root",
+            help="Explicit project root; required when --scope project is selected.",
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run", help="Inspect and print the bounded install action without writing."
+        ),
+    ] = False,
+) -> None:
+    resources = canonical_skill_files()
+    try:
+        if scope == "user" and project_root is not None:
+            raise ValueError("--project-root is valid only with --scope project.")
+        target = resolve_skill_target(
+            agent=AgentTarget(agent),
+            scope=SkillScope(scope),
+            project_root=project_root,
+        )
+        result = install_skill(target, dry_run=dry_run, resources=resources)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    except SkillInstallRefused as exc:
+        result = SkillInstallResult(exc.inspection, "refused", False)
+        typer.echo(render_install_result(result, resources), nl=False, err=True)
+        typer.echo(f"Detail: {exc.inspection.reason}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(render_install_result(result, resources), nl=False)
+
+
+@skill_app.command(
+    "doctor",
+    help="Inspect the danvas executable and all allowlisted skill locations without writing.",
+)
+def skill_doctor_command(
+    agent: Annotated[
+        AgentName | None,
+        typer.Option(
+            "--agent", help="Narrow inspection to one agent; the default checks every agent."
+        ),
+    ] = None,
+    project_root: Annotated[
+        Path,
+        typer.Option(
+            "--project-root", help="Project root used for read-only project-scope checks."
+        ),
+    ] = Path("."),
+) -> None:
+    report = skill_doctor(
+        agent=AgentTarget(agent) if agent is not None else None,
+        project_root=project_root,
+    )
+    typer.echo(render_doctor(report), nl=False)
 
 
 install_guided_help(app)

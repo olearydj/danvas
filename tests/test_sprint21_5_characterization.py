@@ -84,7 +84,7 @@ def test_provider_neutral_authentication_surface_is_exactly_forty_five_commands(
         for name, command in commands.items()
     }
 
-    assert len(commands) == 58
+    assert len(commands) == 60
     assert len(canvas_commands) == 45
     assert set(actual) == set(commands)
     assert {name for name, names in actual.items() if names} == canvas_commands

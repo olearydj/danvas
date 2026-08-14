@@ -27,6 +27,9 @@ RESOLVE_NEUTRAL_CREDENTIAL_CALLS = {
 }
 CURRENT_PROVIDER_IMPORTS: Counter[tuple[str, str]] = Counter()
 CURRENT_PROVIDER_CALLS: Counter[tuple[str, str, str]] = Counter()
+CURRENT_PROCESS_SPAWNS = Counter(
+    {("skill_installer.py", "_executable_version", "subprocess.run"): 1}
+)
 PROVIDER_PACKAGES = {
     "azure",
     "boto3",
@@ -263,9 +266,7 @@ def process_aliases(tree: ast.AST) -> tuple[dict[str, str], dict[str, str]]:
             module = node.module.split(".", 1)[0]
             for alias in node.names:
                 if alias.name in PROCESS_CALLS[module]:
-                    callable_aliases[alias.asname or alias.name] = (
-                        f"{module}.{alias.name}"
-                    )
+                    callable_aliases[alias.asname or alias.name] = f"{module}.{alias.name}"
     return module_aliases, callable_aliases
 
 
@@ -277,9 +278,7 @@ def process_call_name(
 ) -> str | None:
     if isinstance(node.func, ast.Name):
         return callable_aliases.get(node.func.id)
-    if not isinstance(node.func, ast.Attribute) or not isinstance(
-        node.func.value, ast.Name
-    ):
+    if not isinstance(node.func, ast.Attribute) or not isinstance(node.func.value, ast.Name):
         return None
     module = module_aliases.get(node.func.value.id)
     if module and node.func.attr in PROCESS_CALLS[module]:
@@ -287,7 +286,7 @@ def process_call_name(
     return None
 
 
-def test_production_process_spawn_call_sites_are_empty() -> None:
+def test_production_process_spawn_call_sites_match_reviewed_baseline() -> None:
     calls: Counter[tuple[str, str, str]] = Counter()
 
     for path in PACKAGE_ROOT.glob("*.py"):
@@ -310,4 +309,4 @@ def test_production_process_spawn_call_sites_are_empty() -> None:
                 if call_name:
                     calls[(path.name, function.name, call_name)] += 1
 
-    assert calls == Counter()
+    assert calls == CURRENT_PROCESS_SPAWNS

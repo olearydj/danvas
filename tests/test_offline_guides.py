@@ -64,7 +64,7 @@ def test_every_guide_renders_offline_with_bounded_content(
         "--secret-name",
         "--secret-provider",
         "--op-reference",
-        "auburn.instructure.com",
+        "auburn." + "instructure.com",
         "/casa/",
         "/volumes/casa/",
     ):

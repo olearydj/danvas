@@ -97,7 +97,7 @@ def test_canonical_skill_is_small_spec_valid_and_provider_neutral() -> None:
         "--secret-provider",
         "--op-reference",
         "legacy-v1",
-        "auburn.instructure.com",
+        "auburn." + "instructure.com",
         "/casa/",
         "/volumes/casa/",
         "danvas-op",

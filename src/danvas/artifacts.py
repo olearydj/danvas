@@ -49,11 +49,13 @@ class ResolvedPrivatePath:
 
 
 def _policies() -> tuple[ArtifactPolicy, ...]:
-    shareable = (
+    shareable_nonretained = (
         "guide",
         "describe",
         "skill show",
+        "skill doctor",
     )
+    shareable_retained = ("skill install",)
     course_internal = (
         "init",
         "refresh",
@@ -110,7 +112,11 @@ def _policies() -> tuple[ArtifactPolicy, ...]:
         "recordings panopto-captions",
     )
     return tuple(
-        [ArtifactPolicy(command, ArtifactClass.SHAREABLE, retained=False) for command in shareable]
+        [
+            ArtifactPolicy(command, ArtifactClass.SHAREABLE, retained=False)
+            for command in shareable_nonretained
+        ]
+        + [ArtifactPolicy(command, ArtifactClass.SHAREABLE) for command in shareable_retained]
         + [ArtifactPolicy(command, ArtifactClass.COURSE_INTERNAL) for command in course_internal]
         + [ArtifactPolicy(command, ArtifactClass.PRIVATE) for command in private]
     )

@@ -61,7 +61,7 @@ def test_full_json_description_is_deterministic_and_complete() -> None:
     assert payload["schema_version"] == COMMAND_GUIDE_SCHEMA
     assert payload["danvas_version"] == __version__
     assert payload["command_path"] == ""
-    assert record_count(payload["command"]) == 73
+    assert record_count(payload["command"]) == 75
 
 
 def test_leaf_description_derives_click_access_and_artifact_truth() -> None:

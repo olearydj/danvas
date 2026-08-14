@@ -463,7 +463,10 @@ GROUP_GUIDES: tuple[CommandGuide, ...] = (
                 "Uses the installed package resource and explicit allowlisted agent targets.",
             ),
         ),
-        workflows=(_workflow("Inspect", ("skill", "show")),),
+        workflows=(
+            _workflow("Inspect bundled content", ("skill", "show")),
+            _workflow("Preview and install", ("skill", "install"), ("skill", "doctor")),
+        ),
         recovery=(RecoveryCategory.CORRECT_INPUT,),
         related_commands=("guide", "describe"),
         guide_topics=("agents",),
@@ -475,6 +478,8 @@ _LEAF_PURPOSES = {
     "guide": "Render a packaged offline task guide or list every available topic.",
     "describe": "Describe the public command tree as deterministic text or versioned JSON.",
     "skill show": "Show the bundled danvas Agent Skill and deterministic file hashes.",
+    "skill install": "Install or update the bundled skill at one allowlisted agent location.",
+    "skill doctor": "Inspect the executable and allowlisted user and project skill locations offline.",
     "init": "Create project configuration and an initial Canvas course snapshot.",
     "refresh": "Refresh the project course snapshot with explicit partial-evidence handling.",
     "status": "Compare the saved Canvas snapshot with configured local authored sources.",
@@ -537,6 +542,8 @@ _BASE_EXAMPLES: Mapping[str, tuple[str, ...]] = {
     "guide": ("guide", "list"),
     "describe": ("describe", "assignments", "create", "--format", "json"),
     "skill show": ("skill", "show"),
+    "skill install": ("skill", "install", "--agent", "shared", "--dry-run"),
+    "skill doctor": ("skill", "doctor"),
     "init": ("init", "12345", "--profile", "example"),
     "refresh": ("refresh", "--diff"),
     "status": ("status",),
@@ -630,7 +637,13 @@ _LOCAL_PATH_COMMANDS = {
     "sources lint",
 }
 _CANVAS_URL_COMMANDS = {"discussions export", "discussions score"}
-_NO_IDENTITY_COMMANDS = {"guide", "describe", "skill show"}
+_NO_IDENTITY_COMMANDS = {
+    "guide",
+    "describe",
+    "skill show",
+    "skill install",
+    "skill doctor",
+}
 _CANVAS_ID_COMMANDS = {
     "assignments overrides",
     "submissions export",
@@ -659,6 +672,8 @@ _RELATED: Mapping[str, tuple[str, ...]] = {
     "guide": ("describe",),
     "describe": ("guide",),
     "skill show": ("guide", "describe"),
+    "skill install": ("skill doctor", "skill show"),
+    "skill doctor": ("skill install", "skill show"),
     "refresh": ("status",),
     "status": ("refresh", "sources lint"),
     "roster": ("submissions feedback", "grades post"),
