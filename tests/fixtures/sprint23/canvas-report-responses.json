@@ -1,0 +1,100 @@
+{
+  "identified_quiz": {
+    "anonymous_submissions": false,
+    "course_id": 101,
+    "id": 202,
+    "quiz_type": "assignment",
+    "title": "Synthetic Classic Quiz"
+  },
+  "identified_survey": {
+    "anonymous_submissions": false,
+    "course_id": 101,
+    "id": 203,
+    "quiz_type": "survey",
+    "title": "Synthetic Identified Survey"
+  },
+  "anonymous_survey": {
+    "anonymous_submissions": true,
+    "course_id": 101,
+    "id": 204,
+    "quiz_type": "graded_survey",
+    "title": "Synthetic Anonymous Survey"
+  },
+  "completed_report": {
+    "anonymous": false,
+    "created_at": "2026-08-14T12:00:00Z",
+    "file": {
+      "content-type": "text/csv",
+      "display_name": "student_analysis.csv",
+      "filename": "student_analysis.csv",
+      "id": 404,
+      "size": 321,
+      "url": "https://canvas.example.edu/files/404/download?download_frd=1&verifier=PROTECTED"
+    },
+    "generatable": true,
+    "id": 303,
+    "includes_all_versions": false,
+    "progress": 100,
+    "readable_type": "Student Analysis",
+    "report_type": "student_analysis",
+    "updated_at": "2026-08-14T12:00:05Z",
+    "url": "https://canvas.example.edu/courses/101/quizzes/202/reports/303"
+  },
+  "running_report": {
+    "anonymous": false,
+    "created_at": "2026-08-14T12:00:00Z",
+    "generatable": true,
+    "id": 304,
+    "includes_all_versions": true,
+    "progress_url": "https://canvas.example.edu/api/v1/progress/505?token=PROTECTED",
+    "readable_type": "Student Analysis",
+    "report_type": "student_analysis",
+    "updated_at": "2026-08-14T12:00:01Z"
+  },
+  "queued_progress": {
+    "completion": 0,
+    "context_id": 101,
+    "context_type": "Course",
+    "id": 505,
+    "message": null,
+    "tag": "quiz_report",
+    "workflow_state": "queued"
+  },
+  "running_progress": {
+    "completion": 50,
+    "context_id": 101,
+    "context_type": "Course",
+    "id": 505,
+    "message": "Generating report",
+    "tag": "quiz_report",
+    "workflow_state": "running"
+  },
+  "completed_progress": {
+    "completion": 100,
+    "context_id": 101,
+    "context_type": "Course",
+    "id": 505,
+    "message": null,
+    "tag": "quiz_report",
+    "workflow_state": "completed"
+  },
+  "failed_progress": {
+    "completion": 50,
+    "context_id": 101,
+    "context_type": "Course",
+    "id": 505,
+    "message": "Report generation failed",
+    "tag": "quiz_report",
+    "workflow_state": "failed"
+  },
+  "malformed_report": {
+    "file": {
+      "id": "not-an-integer",
+      "url": "https://attacker.example/download?verifier=PROTECTED"
+    },
+    "id": 306,
+    "includes_all_versions": false,
+    "progress_url": "https://attacker.example/api/v1/progress/999?token=PROTECTED",
+    "report_type": "item_analysis"
+  }
+}

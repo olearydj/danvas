@@ -1,0 +1,38 @@
+{
+  "download_status": [
+    "not_attempted",
+    "downloaded_verified",
+    "failed",
+    "accepted_unverified"
+  ],
+  "overall_status": [
+    "planned",
+    "applied_verified",
+    "accepted_unverified",
+    "conflict",
+    "failed"
+  ],
+  "progress_status": [
+    "not_checked",
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    "timed_out",
+    "unavailable"
+  ],
+  "request_status": [
+    "not_attempted",
+    "accepted",
+    "reused",
+    "unknown_after_exception",
+    "conflict"
+  ],
+  "required_identity_fields": [
+    "course_id",
+    "quiz_id",
+    "report_type",
+    "includes_all_versions"
+  ],
+  "schema_version": "quiz-analysis-export-v1"
+}
