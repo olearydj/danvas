@@ -331,9 +331,10 @@ Group 1's neutral resolver and origin trust gate at `c50d170` with no findings.
 Group 2's provider-specific option, profile, dotenv, dependency, doctor-schema,
 and roster-compatibility removals at `8efbfa5` are accepted after focused review
 with no findings. Group 3's public migration matrix, neutral guide rewrite,
-candidate version, and Sprint 22 refresh are complete at `75ca92a` and await
-focused review. No external secret-provider or personal-skill change is
-authorized by this index entry.
+candidate version, and Sprint 22 refresh at `75ca92a` are accepted after
+focused review with no findings. Group 4 final security review and exact
+candidate release gates remain. No external secret-provider or personal-skill
+change is authorized by this index entry.
 
 ## Accepted 0.20.0 Agent Interface Follow-On Design
 

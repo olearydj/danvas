@@ -376,7 +376,8 @@ with no findings. Group 2's provider-specific option, profile, dotenv,
 dependency, doctor-schema, and roster-compatibility removals at `8efbfa5` are
 accepted after focused review with no findings. Group 3's public migration
 matrix, neutral guide rewrite, candidate version, and Sprint 22 refresh are
-complete at `75ca92a` and await focused review.
+complete at `75ca92a` and accepted after focused review with no findings. Group
+4 final security review and exact candidate release gates remain.
 
 Named post-beta maintenance: when Python 3.15 is released, revisit the
 `<3.15` upper bound. Expand support only with an explicit compatibility review

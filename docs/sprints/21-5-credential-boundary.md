@@ -6,9 +6,10 @@ characterization is complete at `1145791` with no production change. Group 1's
 neutral resolver and trust gate are complete at `c50d170` and accepted after
 focused review. Group 2's provider-ownership removal at `8efbfa5` is accepted
 after focused review. Group 3's public migration and downstream-interface work
-is complete at `75ca92a` and awaits focused review; Group 4 has not started.
-This sprint authorizes no secret migration, external secret-manager
-installation, Canvas access, release, or modification outside this repository.
+at `75ca92a` is accepted after focused review. Group 4 release review and exact
+candidate gates remain. This sprint authorizes no secret migration, external
+secret-manager installation, Canvas access, release, or modification outside
+this repository.
 
 This design targets `0.19.0` for the credential-boundary release, absorbs the
 already scheduled `0.19.0` roster legacy-schema removal, and moves the
@@ -780,6 +781,12 @@ dependency audit, current-tree secret scan, and isolated editable/sdist/wheel
 smoke. Primary provider examples were checked against their official command
 references. No Canvas, Panopto, external provider, personal-skill, global-tool,
 or out-of-repository operation was performed.
+
+Focused review accepted Group 3 on 2026-08-13 with no findings. The reviewer
+independently verified every required migration workflow and external-provider
+recipe against primary sources, exercised the documentation regression tests,
+confirmed the candidate metadata and package gates, and accepted Sprint 22's
+coherent `0.20.0` retarget against the neutral released-surface contract.
 
 ### Group 4: review and release
 
