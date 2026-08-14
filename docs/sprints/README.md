@@ -324,8 +324,10 @@ credential-to-Canvas-origin binding. The design targets `0.19.0`, absorbs the
 already scheduled roster legacy-schema removal, and retargets the remaining
 accepted Sprint 22 agent-interface design to `0.20.0`. Independent review
 accepted the threat model, release sequence, and design on 2026-08-13 after the
-required contract edits. Implementation begins only after `v0.18.0` ships; no
-external secret-provider change is authorized by this index entry.
+required contract edits. Group 0 characterization is complete at `1145791` with
+exact authentication-surface, current-risk, provider-call, and zero production
+process-spawn baselines; no production behavior changed. Group 1 is the next
+gate. No external secret-provider change is authorized by this index entry.
 
 ## Accepted 0.20.0 Agent Interface Follow-On Design
 

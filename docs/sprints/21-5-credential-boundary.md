@@ -1,10 +1,11 @@
 # Sprint 21.5: Provider-Neutral Credential Boundary
 
 Status: design accepted on 2026-08-13 after independent review and the required
-contract edits. This sprint begins only after `v0.18.0` has shipped and passed
-the Sprint 21 public-beta gates. It authorizes no early runtime change, secret
-migration, external secret-manager installation, Canvas access, release, or
-modification outside this repository.
+contract edits. Sprint 21 shipped as verified public-beta tag `v0.18.0`; Group 0
+characterization is complete at `1145791` with no production change. Group 1 is
+the next implementation gate. This sprint authorizes no secret migration,
+external secret-manager installation, Canvas access, release, or modification
+outside this repository.
 
 This design targets `0.19.0` for the credential-boundary release, absorbs the
 already scheduled `0.19.0` roster legacy-schema removal, and moves the
@@ -634,18 +635,31 @@ is accepted; the Sprint 21 runtime and dependency set remain unchanged.
 
 ### Group 0: characterization and accepted sequencing
 
-1. Resolve the release/deprecation and Sprint 22 retargeting questions.
-2. Freeze the exact forty-five-command authentication option surface.
-3. Characterize SecretPath resolution, provider output, auth-doctor text/JSON,
+1. [x] Resolve the release/deprecation and Sprint 22 retargeting questions.
+2. [x] Freeze the exact forty-five-command authentication option surface.
+3. [x] Characterize SecretPath resolution, provider output, auth-doctor text/JSON,
    Panopto authentication, and missing-URL-before-secret ordering.
-4. Add an executable counterexample proving a local `.env` currently changes
+4. [x] Add an executable counterexample proving a local `.env` currently changes
    both `CANVAS_API_KEY` and `CANVAS_API_URL` process inputs at startup.
-5. Characterize project/profile origin mismatch and project-only authenticated
+5. [x] Characterize project/profile origin mismatch and project-only authenticated
    operation.
-6. Inventory all process-spawn and provider-package call sites with exact
+6. [x] Inventory all process-spawn and provider-package call sites with exact
    architecture baselines.
 
 No runtime behavior changes in Group 0.
+
+Implementation record: `1145791` adds an executable transition gate covering
+all 45 Canvas-backed leaves and their six current authentication options,
+SecretPath wrapper arguments and provider attribution, exact auth-doctor text
+and JSON shapes, missing-URL ordering, debugger-mode dotenv population of both
+the credential and endpoint, the warning-only profile mismatch, and successful
+project-only authentication. The existing Panopto profile-secret regression
+remains the exact direct-authentication check. Architecture tests now pin the
+two provider-package imports, four direct provider/dotenv calls, two bounded
+`resolve_api_key()` entry points, and zero production process-spawn calls. The
+full released-tree gate passes 843 tests at 85.05% branch-aware coverage, the
+authored-assets module floor at 88.87%, Ruff, ty, frozen-lock validation, and
+the dependency audit.
 
 ### Group 1: neutral resolver and trust gate
 
