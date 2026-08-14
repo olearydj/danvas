@@ -371,9 +371,11 @@ release, and moves the remaining accepted Sprint 22 agent-interface work to
 `0.20.0`. Independent review accepted the threat model, release sequence, and
 design on 2026-08-13 after the required contract edits. Group 0 characterization
 is complete at `1145791` with no production behavior change. Group 1's neutral
-resolver and origin trust gate are complete at `c50d170`, with the legacy option,
-auth-doctor, dotenv, and dependency surface deliberately retained for Group 2;
-focused Group 1 review is next.
+resolver and origin trust gate at `c50d170` was accepted after focused review
+with no findings. Group 2's provider-specific option, profile, dotenv,
+dependency, doctor-schema, and roster-compatibility removals are complete at
+`8efbfa5` and await focused review. Group 3 public migration documentation
+follows that gate.
 
 Named post-beta maintenance: when Python 3.15 is released, revisit the
 `<3.15` upper bound. Expand support only with an explicit compatibility review

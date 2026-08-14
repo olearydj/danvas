@@ -3,10 +3,11 @@
 Status: design accepted on 2026-08-13 after independent review and the required
 contract edits. Sprint 21 shipped as verified public-beta tag `v0.18.0`; Group 0
 characterization is complete at `1145791` with no production change. Group 1's
-neutral resolver and trust gate are complete at `c50d170` and await focused
-review; Group 2 has not started. This sprint authorizes no secret migration,
-external secret-manager installation, Canvas access, release, or modification
-outside this repository.
+neutral resolver and trust gate are complete at `c50d170` and accepted after
+focused review. Group 2's provider-ownership removal is complete at `8efbfa5`
+and awaits focused review; Group 3 has not started. This sprint authorizes no
+secret migration, external secret-manager installation, Canvas access, release,
+or modification outside this repository.
 
 This design targets `0.19.0` for the credential-boundary release, absorbs the
 already scheduled `0.19.0` roster legacy-schema removal, and moves the
@@ -701,17 +702,43 @@ credential module at 94%, and the authored-assets module floor at 88.87%, plus
 Ruff, ty, frozen-lock validation, and the dependency audit. No Canvas, Panopto,
 external provider, or out-of-repository operation was performed.
 
+Focused review accepted Group 1 on 2026-08-13 with no findings. The reviewer
+confirmed the single-open file boundary, origin binding, strict selector
+precedence, environment removal, redacting representations, and shared
+Canvas/Panopto path.
+
 ### Group 2: remove provider ownership
 
-1. Replace the forty-five repeated auth bundles with the two neutral selectors.
-2. Remove provider-specific profile keys and compatibility environment controls.
-3. Remove implicit dotenv loading.
-4. Remove SecretPath and python-dotenv runtime dependencies and lock entries.
-5. Replace auth doctor with the versioned neutral report.
-6. Add actionable failures for every retired spelling.
-7. Remove roster `--schema legacy-v1` on its already announced `0.19.0`
+1. [x] Replace the forty-five repeated auth bundles with the two neutral selectors.
+2. [x] Remove provider-specific profile keys and compatibility environment controls.
+3. [x] Remove implicit dotenv loading.
+4. [x] Remove SecretPath and python-dotenv runtime dependencies and lock entries.
+5. [x] Replace auth doctor with the versioned neutral report.
+6. [x] Add actionable failures for every retired spelling.
+7. [x] Remove roster `--schema legacy-v1` on its already announced `0.19.0`
    schedule and retain only `LoginID`.
-8. Flip Group 0 characterization tests deliberately rather than deleting them.
+8. [x] Flip Group 0 characterization tests deliberately rather than deleting them.
+
+Implementation record: `8efbfa5` replaces all 45 Canvas-backed command bundles
+with `--api-key-env` and `--api-key-file`, removes provider-specific runtime and
+profile plumbing, rejects retired profile keys and process controls with
+migration guidance, and removes implicit dotenv loading. The shared boundary
+now returns the redacting neutral result directly. Auth doctor emits the clean
+`danvas-auth-doctor-v1` origin/credential/Canvas schema, diagnoses bounded file
+and environment failures without provider attribution, redacts file locators,
+and never reads a credential when the origin is unconfigured, conflicting, or
+unbound. Roster output is `LoginID`-only.
+
+SecretPath and python-dotenv are absent from project metadata, the frozen lock,
+the synchronized environment, and isolated editable/wheel installs. The
+distribution checker enforces the removal in both wheel and sdist metadata.
+Architecture tests pin zero provider imports, zero provider calls, zero process
+spawns, and the two reviewed neutral-reader entry points. Every retired CLI
+spelling is exercised across all 45 former surfaces as an unknown option. The
+full Group 2 gate passes 917 tests at 85.19% branch-aware coverage, the
+authored-assets module floor at 88.87%, Ruff, ty, frozen-lock validation, the
+dependency audit, and isolated editable/sdist/wheel smoke. No Canvas, Panopto,
+external provider, or out-of-repository operation was performed.
 
 ### Group 3: public migration and downstream interface
 

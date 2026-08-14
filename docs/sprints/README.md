@@ -326,11 +326,12 @@ accepted Sprint 22 agent-interface design to `0.20.0`. Independent review
 accepted the threat model, release sequence, and design on 2026-08-13 after the
 required contract edits. Group 0 characterization is complete at `1145791` with
 exact authentication-surface, current-risk, provider-call, and zero production
-process-spawn baselines; no production behavior changed. Group 1's neutral
-resolver and origin trust gate are complete at `c50d170` with the legacy option
-and dependency surface intentionally retained for Group 2; focused review is
-the next gate. No external secret-provider change is authorized by this index
-entry.
+process-spawn baselines; no production behavior changed. Focused review accepted
+Group 1's neutral resolver and origin trust gate at `c50d170` with no findings.
+Group 2's provider-specific option, profile, dotenv, dependency, doctor-schema,
+and roster-compatibility removals are complete at `8efbfa5` and await focused
+review. Group 3 public migration documentation is the next implementation group.
+No external secret-provider change is authorized by this index entry.
 
 ## Accepted 0.20.0 Agent Interface Follow-On Design
 
