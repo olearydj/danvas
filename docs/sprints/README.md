@@ -367,7 +367,7 @@ PyPI Trusted Publishing run `31837670795` published those same artifacts as
 repository-linked attestations; exact hash comparison, cryptographic
 attestation verification, and an isolated PyPI installation all passed.
 
-## Accepted 0.21.0 Classic Quiz Student-Analysis Export
+## 0.21.0 Classic Quiz Student-Analysis Export Release
 
 The accepted next field-driven slice is:
 
@@ -386,12 +386,17 @@ does not change questions or grades. Independent review accepted the design on
 2026-08-14 after clarifying anonymous-Survey exclusion and keeping GitHub/PyPI
 publication outside the feature-completion gate. Groups 0-2 completed in
 `62db183`, `99a04af`, and `fa04445`; reusable acceptance tooling landed
-separately as `f27d113`. The local `0.21.0` candidate is assembled. The
-local candidate gate passes 1,046 tests, coverage, lint/type/docs, isolated
+separately as `f27d113`. The assembled candidate gate passed 1,046 tests,
+coverage, lint/type/docs, isolated
 editable/wheel installation, dependency audit, lock validation, and redacted
 secret scans. Bounded Canvas field acceptance passed on 2026-08-14 after a
 first-attempt `404` exposed the global-versus-course report-file lookup defect;
 `25f8ae4` corrected it, and the recovery reused and verified the same stable
 report ID. Claude Code scenario-11 acceptance then passed all applicable
-criteria with one authorized apply and no bypass attempt. Exact-candidate
-review, push, and release gates remain open.
+criteria with one authorized apply and no bypass attempt. Independent final
+review accepted exact candidate `6640ae6`; the scored agent record and final
+candidate documentation landed at `0953757`. Signed tag `v0.21.0` resolves to
+`0953757`. Branch CI run `31851275738`, tag CI run `31851556017`, anonymous
+exact-SHA and exact-tag installs, and global `danvas 0.21.0` verification all
+passed. GitHub Release and PyPI publication remain separately authorized
+post-tag actions.

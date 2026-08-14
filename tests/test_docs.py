@@ -140,9 +140,8 @@ def test_classic_quiz_docs_teach_plan_apply_private_analysis_boundary() -> None:
 def test_security_policy_tracks_latest_signed_release_not_candidate() -> None:
     policy = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
 
-    assert "latest signed `0.20.x`" in policy
-    assert "`0.19.x` and earlier" in policy
-    assert "latest signed `0.21.x`" not in policy
+    assert "latest signed `0.21.x`" in policy
+    assert "`0.20.x` and earlier" in policy
 
 
 def test_sprint22_baseline_is_provider_neutral_020_surface() -> None:

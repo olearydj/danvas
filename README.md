@@ -5,14 +5,9 @@ operations. It helps instructors inspect courses, manage authored content,
 download submissions, reconcile grades, and retain evidence for consequential
 changes.
 
-Status: signed release `v0.20.0` is the latest public beta, not a 1.0 stability
+Status: signed release `v0.21.0` is the latest public beta, not a 1.0 stability
 promise. This is an unofficial project.
 It is not affiliated with or endorsed by Instructure.
-
-The source tree currently contains the reviewed `0.21.0` Classic Quiz analysis
-export candidate. Canvas field acceptance has passed; it is not released until
-its independent-review and exact-ref gates pass. The bounded agent scenario has
-also passed.
 
 ## What It Does
 
@@ -44,17 +39,18 @@ permission contract there.
 
 ## Install
 
-Install the current public beta from PyPI:
-
-```bash
-uv tool install danvas-cli
-```
-
-For an exact Git-ref installation directly from the repository instead:
+Install the current public beta from its exact signed Git tag:
 
 ```bash
 uv tool install \
-  "danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.20.0"
+  "danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.21.0"
+```
+
+PyPI currently carries `0.20.0`; its separately published wheel can be installed
+with:
+
+```bash
+uv tool install danvas-cli==0.20.0
 ```
 
 The Python distribution is named `danvas-cli`; the installed command and import

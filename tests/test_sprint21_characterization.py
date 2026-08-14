@@ -309,11 +309,11 @@ def test_public_documentation_suite_and_anonymous_install_are_declared() -> None
     assert observed == expected
     assert "uv tool install danvas-cli" in readme
     assert (
-        'danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.20.0'
+        'danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.21.0'
         in readme
     )
     assert "git+ssh" not in readme
-    assert "signed release `v0.20.0` is the latest public beta" in readme
+    assert "signed release `v0.21.0` is the latest public beta" in readme
     assert "must not be represented as released" not in readme
     assert "not affiliated with or endorsed by Instructure" in readme
     public_text = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in expected)

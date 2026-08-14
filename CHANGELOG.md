@@ -20,11 +20,16 @@ Sprint 23 closes the supported acquisition gap for Classic Quiz analysis:
 - teaches the human and agent interfaces that missing command coverage does not
   authorize direct API, browser, or provider-specific fallback.
 
-Existing QTI import and local analysis behavior are unchanged. Bounded Canvas
-field acceptance passed after correcting the report attachment lookup to use
-Canvas's global file endpoint. Bounded agent acceptance also passed. Release
-remains gated on independent exact-candidate review and the established
-branch/tag installation gates.
+Existing QTI import and local analysis behavior are unchanged. Released as
+signed tag `v0.21.0` after bounded Canvas field acceptance corrected and
+verified the report attachment lookup through Canvas's global file endpoint,
+bounded agent acceptance passed, independent exact-candidate review accepted
+the implementation, branch and tag CI passed, anonymous exact-SHA and exact-tag
+installs passed, and the global CLI reported `danvas 0.21.0`.
+
+GitHub Release and PyPI publication remain separately authorized post-tag
+actions. PyPI continues to carry `danvas-cli 0.20.0` until that publication is
+performed.
 
 See [Migrating to 0.21.0](docs/migrations/0.21.0.md).
 

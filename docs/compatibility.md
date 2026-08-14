@@ -1,12 +1,11 @@
 # Compatibility And Support
 
-The signed `v0.20.0` release is the latest public beta, not a 1.0 stability
+The signed `v0.21.0` release is the latest public beta, not a 1.0 stability
 promise. This project is unofficial and is not affiliated with or endorsed by
 Instructure.
 
-The source tree's `0.21.0` candidate adds Classic Quiz analysis-report
-acquisition. The signed `v0.20.0` release remains the rollback and public
-installation point until the candidate completes its release gates.
+Version `0.21.0` adds Classic Quiz analysis-report acquisition. Signed
+`v0.20.0` remains the documented rollback point for that feature transition.
 
 Version `0.19.0` carries a deliberate authentication-boundary break. Signed
 `v0.18.0` remains the documented rollback point for that transition.

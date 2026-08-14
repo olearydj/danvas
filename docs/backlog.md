@@ -7,32 +7,19 @@ Released behavior belongs in `CHANGELOG.md`, migration guides, and the accepted
 sprint records under `docs/sprints/`. Rejected directions and completed work are
 kept in those records and in git history rather than repeated here.
 
-Sprint 23 implementation is assembled locally and is the current release gate.
 Feature priority follows concrete course-workflow demand.
 
 ## Current Priority Order
 
-1. Complete Sprint 23's exact-candidate review and release gates.
-2. Add the Page asset adapter on top of the verified assignment asset
+1. Add the Page asset adapter on top of the verified assignment asset
    transaction.
-3. Add group-category, membership-import, verification, and local group-planning
+2. Add group-category, membership-import, verification, and local group-planning
    workflows for grouped cases.
-4. Add section-aware roster data and report-first exam reconciliation.
-5. Pull a smaller candidate forward only when field use justifies it.
+3. Add section-aware roster data and report-first exam reconciliation.
+4. Pull a smaller candidate forward only when field use justifies it.
 
-The recurring Classic Quiz acquisition gap now outranks the larger Page and
-grouped-case candidates. Their relative order may still change when an actual
-course deadline makes one more valuable.
-
-## Current Release Gate: Sprint 23
-
-[Sprint 23](sprints/23-classic-quiz-analysis-export.md) now contains the complete
-local implementation and its reviewed transaction/interface contracts. The
-bounded Canvas field request passed after exposing and correcting a report-file
-lookup defect, and scenario-11 agent acceptance passed all applicable criteria.
-Remaining work is independent exact-candidate review and the established
-exact-ref release sequence. GitHub Release and PyPI publication remain optional,
-separately authorized post-tag actions.
+Their relative order may still change when an actual course deadline makes one
+more valuable.
 
 ## Candidate: Page Asset Deployment
 

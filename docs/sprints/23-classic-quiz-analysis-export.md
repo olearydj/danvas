@@ -1,17 +1,21 @@
 # Sprint 23: Classic Quiz Student-Analysis Export
 
-Status: accepted for `0.21.0` after independent design review on 2026-08-14.
+Status: released as signed tag `v0.21.0` on 2026-08-14 from `0953757` after
+independent design, focused implementation, field, agent-behavior, and final
+exact-candidate review.
 Groups 0-2 are implemented in `62db183`, `99a04af`, and `fa04445`; the reusable
 agent-acceptance rig was reviewed and committed separately as `f27d113`.
-Group 3 assembled the local `0.21.0` candidate with public workflow/migration
-documentation. The local gate passes 1,046 tests at 85.57% branch-aware
+Group 3 assembled the `0.21.0` candidate with public workflow/migration
+documentation. The local gate passed 1,046 tests at 85.57% branch-aware
 coverage, Ruff, ty, Markdown/docs checks, isolated editable/wheel installation,
 dependency audit, lock validation, and redacted current-tree/all-history secret
 scans. Bounded Canvas field acceptance passed on 2026-08-14 after its first
 download attempt exposed and corrected a global-versus-course file-lookup
 defect in `25f8ae4`. Claude Code scenario-11 agent acceptance also passed on
-2026-08-14. Remote CI, exact-candidate review, tag, and release gates remain
-open. No release claim is made.
+2026-08-14. Independent final review accepted exact candidate `6640ae6`; the
+scored agent record landed at `0953757`. Branch CI run `31851275738`, signed-tag
+CI run `31851556017`, anonymous exact-SHA/tag installs, and global verification
+as `danvas 0.21.0` all passed.
 
 ## Outcome
 
@@ -654,11 +658,11 @@ Independent review should challenge:
 - [x] No protected URL, raw payload, or student row leaks.
 - [x] Existing local analysis consumes the acquired CSV.
 - [x] Help, guides, description, and skill teach the safe two-step workflow.
-- [ ] Automated, platform, packaging, and release gates pass.
+- [x] Automated, platform, packaging, and release gates pass.
 - [x] Separately authorized Canvas field acceptance passes.
 - [x] Separately authorized agent acceptance passes.
-- [ ] Independent final review accepts the exact candidate.
-- [ ] Signed `v0.21.0`, tag CI, tagged install, global verification, and release
+- [x] Independent final review accepts the exact candidate.
+- [x] Signed `v0.21.0`, tag CI, tagged install, global verification, and release
       records complete.
 
 ## Release Contract
