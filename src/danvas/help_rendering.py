@@ -60,10 +60,16 @@ def _effect_text(policy: CommandAccessPolicy) -> str:
             "--dry-run produces a plan."
         )
     elif policy.dry_run_kind is DryRunKind.LOCAL_WRITE:
-        text = (
-            "Reads Canvas and may create local files. --dry-run previews local "
-            "writes; this command never mutates Canvas."
-        )
+        if policy.canvas_read:
+            text = (
+                "Reads Canvas and may create local files. --dry-run previews local "
+                "writes; this command never mutates Canvas."
+            )
+        else:
+            text = (
+                "Runs locally and may create local files. --dry-run previews local "
+                "writes; this command never accesses or mutates Canvas."
+            )
     elif policy.canvas_read and policy.local_write:
         text = "Reads Canvas and may retain local output; it does not mutate Canvas."
     elif policy.canvas_read:
@@ -154,7 +160,7 @@ def _group_safety(prefix: str) -> str:
         )
     if any(policy.dry_run_kind is DryRunKind.LOCAL_WRITE for policy in policies):
         statements.append(
-            "Local sync/download subcommands use --dry-run for local-write previews and never use --apply."
+            "Local-writing subcommands use --dry-run for local-write previews and never use --apply."
         )
     if not statements:
         statements.append("Subcommands do not mutate Canvas.")

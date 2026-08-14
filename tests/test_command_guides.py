@@ -13,6 +13,7 @@ from danvas.command_guides import (
     COMMAND_GUIDES,
     CommandGuide,
     ExampleStage,
+    IdentityKind,
     command_guide,
 )
 
@@ -104,6 +105,20 @@ def test_mutation_guides_have_plan_then_apply_without_retyping_effects() -> None
             assert "--apply" in apply.argv
         else:
             assert ExampleStage.APPLY not in stages, command
+
+
+def test_skill_install_guide_models_bounded_local_preview_and_write() -> None:
+    install = COMMAND_GUIDES["skill install"]
+    doctor = COMMAND_GUIDES["skill doctor"]
+
+    assert [example.stage for example in install.examples] == [
+        ExampleStage.INSPECT,
+        ExampleStage.LOCAL_WRITE,
+    ]
+    assert install.identities[0].kind is IdentityKind.LOCAL_PATH
+    assert doctor.identities[0].kind is IdentityKind.LOCAL_PATH
+    assert "--dry-run" in install.examples[0].argv
+    assert "--dry-run" not in install.examples[1].argv
 
 
 def test_private_and_effect_truth_remain_owned_by_existing_registries() -> None:

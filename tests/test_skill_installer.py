@@ -402,6 +402,9 @@ def test_installer_surface_has_no_force_update_or_apply_escape_hatch() -> None:
     assert "--scope" in result.output
     assert "--project-root" in result.output
     assert "--dry-run" in result.output
+    assert "Runs locally" in result.output
+    assert "never accesses or mutates Canvas" in result.output
+    assert "Reads Canvas" not in result.output
     assert "--force" not in result.output
     assert "--update" not in result.output
     assert "--apply" not in result.output

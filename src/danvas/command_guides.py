@@ -465,7 +465,12 @@ GROUP_GUIDES: tuple[CommandGuide, ...] = (
         ),
         workflows=(
             _workflow("Inspect bundled content", ("skill", "show")),
-            _workflow("Preview and install", ("skill", "install"), ("skill", "doctor")),
+            _workflow(
+                "Preview and install",
+                ("skill", "install", "--agent", "shared", "--dry-run"),
+                ("skill", "install", "--agent", "shared"),
+                ("skill", "doctor"),
+            ),
         ),
         recovery=(RecoveryCategory.CORRECT_INPUT,),
         related_commands=("guide", "describe"),
@@ -641,8 +646,6 @@ _NO_IDENTITY_COMMANDS = {
     "guide",
     "describe",
     "skill show",
-    "skill install",
-    "skill doctor",
 }
 _CANVAS_ID_COMMANDS = {
     "assignments overrides",
@@ -692,6 +695,22 @@ _RELATED: Mapping[str, tuple[str, ...]] = {
 
 
 def _identity_for(command: str) -> tuple[IdentityRule, ...]:
+    if command == "skill install":
+        return (
+            IdentityRule(
+                IdentityKind.LOCAL_PATH,
+                "Resolves one explicit agent and scope to an allowlisted skill directory; "
+                "project scope also requires an explicit project root.",
+            ),
+        )
+    if command == "skill doctor":
+        return (
+            IdentityRule(
+                IdentityKind.LOCAL_PATH,
+                "Inspects only allowlisted user and explicit project skill locations for the "
+                "selected agent set.",
+            ),
+        )
     if command in _NO_IDENTITY_COMMANDS:
         return (
             IdentityRule(
@@ -759,6 +778,16 @@ def _identity_for(command: str) -> tuple[IdentityRule, ...]:
 def _examples_for(command: str) -> tuple[CommandExample, ...]:
     policy = ACCESS_POLICIES[command]
     base = ("danvas", *_BASE_EXAMPLES[command])
+    if command == "skill install":
+        install = ("danvas", "skill", "install", "--agent", "shared")
+        return (
+            CommandExample(
+                "Preview the bounded local write",
+                (*install, "--dry-run"),
+                ExampleStage.INSPECT,
+            ),
+            CommandExample("Install the reviewed skill", install, ExampleStage.LOCAL_WRITE),
+        )
     if policy.canvas_mutation:
         apply = (*base, "--apply", *_CONFIRM_GUARDS.get(command, ()))
         return (
