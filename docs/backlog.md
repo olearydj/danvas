@@ -351,9 +351,9 @@ generic skill source inside the `danvas-cli` distribution. Sprint 21.5 now owns
 the due roster `--schema legacy-v1` removal and provider-neutral authentication
 surface; Sprint 22 consumes that released `0.19.0` interface without otherwise
 changing its accepted scope. The design authorizes no early skill installation
-or external agent invocation. Its existing `0.19.0` and roster-removal wording
-is intentionally revised during Sprint 21.5 Group 3, once the neutral released
-surface exists.
+or external agent invocation. Group 3 commit `75ca92a` refreshes the accepted
+design against the neutral `0.19.0` candidate and removes the completed roster
+migration work item; implementation still waits for the exact release gates.
 
 ## Accepted 0.19.0 Provider-Neutral Credential Boundary
 
@@ -373,9 +373,10 @@ design on 2026-08-13 after the required contract edits. Group 0 characterization
 is complete at `1145791` with no production behavior change. Group 1's neutral
 resolver and origin trust gate at `c50d170` was accepted after focused review
 with no findings. Group 2's provider-specific option, profile, dotenv,
-dependency, doctor-schema, and roster-compatibility removals are complete at
-`8efbfa5` and await focused review. Group 3 public migration documentation
-follows that gate.
+dependency, doctor-schema, and roster-compatibility removals at `8efbfa5` are
+accepted after focused review with no findings. Group 3's public migration
+matrix, neutral guide rewrite, candidate version, and Sprint 22 refresh are
+complete at `75ca92a` and await focused review.
 
 Named post-beta maintenance: when Python 3.15 is released, revisit the
 `<3.15` upper bound. Expand support only with an explicit compatibility review

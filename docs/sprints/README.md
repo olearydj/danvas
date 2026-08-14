@@ -329,9 +329,11 @@ exact authentication-surface, current-risk, provider-call, and zero production
 process-spawn baselines; no production behavior changed. Focused review accepted
 Group 1's neutral resolver and origin trust gate at `c50d170` with no findings.
 Group 2's provider-specific option, profile, dotenv, dependency, doctor-schema,
-and roster-compatibility removals are complete at `8efbfa5` and await focused
-review. Group 3 public migration documentation is the next implementation group.
-No external secret-provider change is authorized by this index entry.
+and roster-compatibility removals at `8efbfa5` are accepted after focused review
+with no findings. Group 3's public migration matrix, neutral guide rewrite,
+candidate version, and Sprint 22 refresh are complete at `75ca92a` and await
+focused review. No external secret-provider or personal-skill change is
+authorized by this index entry.
 
 ## Accepted 0.20.0 Agent Interface Follow-On Design
 
@@ -347,6 +349,6 @@ explicit no-clobber installer. It adds no Canvas feature or MCP server.
 Independent review accepted the design on 2026-08-13; Sprint 21.5's accepted
 sequencing moves the unchanged remaining interface scope to `0.20.0`. It does
 not authorize skill installation, marketplace publication, external agent
-invocation, or Canvas mutation. Sprint 22's existing `0.19.0` and roster-removal
-wording is intentionally revised during Sprint 21.5 Group 3, once the neutral
-released surface exists.
+invocation, or Canvas mutation. Group 3 commit `75ca92a` refreshes its baseline
+to the neutral `0.19.0` candidate and removes the completed roster-migration
+work item; implementation still waits for the exact `0.19.0` release gates.

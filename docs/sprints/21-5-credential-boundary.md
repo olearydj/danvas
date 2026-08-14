@@ -4,10 +4,11 @@ Status: design accepted on 2026-08-13 after independent review and the required
 contract edits. Sprint 21 shipped as verified public-beta tag `v0.18.0`; Group 0
 characterization is complete at `1145791` with no production change. Group 1's
 neutral resolver and trust gate are complete at `c50d170` and accepted after
-focused review. Group 2's provider-ownership removal is complete at `8efbfa5`
-and awaits focused review; Group 3 has not started. This sprint authorizes no
-secret migration, external secret-manager installation, Canvas access, release,
-or modification outside this repository.
+focused review. Group 2's provider-ownership removal at `8efbfa5` is accepted
+after focused review. Group 3's public migration and downstream-interface work
+is complete at `75ca92a` and awaits focused review; Group 4 has not started.
+This sprint authorizes no secret migration, external secret-manager
+installation, Canvas access, release, or modification outside this repository.
 
 This design targets `0.19.0` for the credential-boundary release, absorbs the
 already scheduled `0.19.0` roster legacy-schema removal, and moves the
@@ -740,19 +741,45 @@ authored-assets module floor at 88.87%, Ruff, ty, frozen-lock validation, the
 dependency audit, and isolated editable/sdist/wheel smoke. No Canvas, Panopto,
 external provider, or out-of-repository operation was performed.
 
+Focused review accepted Group 2 on 2026-08-13 with no findings. The reviewer
+independently enumerated all 45 Canvas-backed option surfaces, the complete
+dependency and provider excision, every retired-spelling failure, the neutral
+doctor schema, environment-removal ordering, and the `LoginID`-only roster
+surface. A separate full-suite run passed all 917 tests.
+
 ### Group 3: public migration and downstream interface
 
-1. Publish `docs/migrations/0.19.0.md` with the required workflow matrix.
-2. Rewrite authentication, configuration, privacy, compatibility, README, and
+1. [x] Publish `docs/migrations/0.19.0.md` with the required workflow matrix.
+2. [x] Rewrite authentication, configuration, privacy, compatibility, README, and
    contribution examples around provider-neutral delivery.
-3. Add optional, primary-source-verified SecretSpec and 1Password recipes.
-4. Update Sprint 22's accepted baseline to the released neutral option and
+3. [x] Add optional, primary-source-verified SecretSpec and 1Password recipes.
+4. [x] Update Sprint 22's accepted baseline to the released neutral option and
    `LoginID`-only roster surface, remove its completed roster-removal work item,
    and retarget it to `0.20.0` without otherwise changing its agent-interface
    scope.
-5. Update the external personal teaching skill only through a separately
+5. [x] Keep the external personal teaching skill behind a separately
    authorized post-tag change; it is not part of this repository sprint and
    must precede replacement of the maintainer's global CLI.
+
+Implementation record: `75ca92a` publishes the complete `0.19.0` migration
+matrix, leads with the expected existing-project origin-binding failure and its
+three exact fixes, and documents environment, credential-file, SecretSpec,
+1Password, multiple-instance, doctor-schema, roster, rollback, and exposure
+transitions. Current authentication, configuration, privacy, compatibility,
+README, changelog, and contributor guidance now describe only the neutral
+credential boundary. Executable documentation guards prevent current guides
+from reviving retired provider controls or the removed roster schema.
+
+The candidate version and lock metadata advance to `0.19.0`; the public
+documentation checker now covers 13 files. Sprint 22 is refreshed against the
+neutral `0.19.0` candidate, removes completed compatibility work, and remains
+otherwise unchanged as the accepted `0.20.0` design. The full Group 3 gate
+passes 920 tests at 85.19% branch-aware coverage, the authored-assets module
+floor at 88.87%, Ruff, ty, frozen-lock validation, Markdown and link checks,
+dependency audit, current-tree secret scan, and isolated editable/sdist/wheel
+smoke. Primary provider examples were checked against their official command
+references. No Canvas, Panopto, external provider, personal-skill, global-tool,
+or out-of-repository operation was performed.
 
 ### Group 4: review and release
 
