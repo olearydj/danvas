@@ -4,11 +4,11 @@ Status: design accepted on 2026-08-13 after independent review. Sprints 18
 through 20 are released as `v0.15.x`, `v0.16.0`, and `v0.17.0`. This sprint is
 the final generalization and packaging slice of the accepted public-readiness
 program and targets `0.18.0`. Group 0 characterization is complete at
-`ded6b2e`; Groups 1 and 2 have passed focused review; and Group 3 packaging and
-public documentation work is implementation-complete and awaiting focused
-review. The sprint does not authorize external publication, tagging, global
-installation, or live Canvas use. A separately authorized repository-setting
-change enabled GitHub private vulnerability reporting on 2026-08-13.
+`ded6b2e`; Groups 1 through 3 have passed focused review; and Group 4 CI and
+security hardening is implementation-complete and awaiting focused review. The
+sprint does not authorize external publication, tagging, global installation,
+or live Canvas use. A separately authorized repository-setting change enabled
+GitHub private vulnerability reporting on 2026-08-13.
 
 The reviewed Python distribution name is `danvas-cli`. The Python import
 package and installed command remain `danvas`.
@@ -807,15 +807,38 @@ dependency audit, all 12 public-document Markdown/link checks, distribution
 archive inspection, and isolated editable/wheel installation smoke. The
 anonymous installer is structurally tested against exact SHA/tag and legacy
 shadowing cases; the real exact-candidate and tag runs remain Group 5 release
-gates after those refs exist remotely. Group 4 remains gated on focused review
-of this group.
+gates after those refs exist remotely. Independent review accepted Group 3 on
+2026-08-13 and cleared Group 4 to proceed.
 
 ### Group 4: CI and security
 
-1. Add Python 3.13 and the macOS lane.
-2. Set minimal workflow permissions and pin every action to a verified full SHA.
-3. Add the pinned current-tree/history secret-scan script and CI job.
-4. Run all existing quality, build, audit, and installation gates.
+1. [x] Add Python 3.13 and the macOS lane.
+2. [x] Set minimal workflow permissions and pin every action to a verified full
+   SHA.
+3. [x] Add the pinned current-tree/history secret-scan script and CI job.
+4. [x] Run all existing quality, build, audit, and installation gates.
+
+Group 4 is implementation-complete in `6b92ddd`. The workflow now runs the
+frozen full gate on Linux Python 3.12, 3.13, and 3.14; runs the full suite,
+focused POSIX privacy/recovery checks, dependency audit, build, and isolated
+installation smoke on macOS Python 3.13; and makes both platform families
+prerequisites of the final install-smoke job. Workflow permissions are
+explicitly `contents: read`, pull-request CI uses no repository secret or
+privileged event, and all external actions use reviewed immutable references:
+`actions/checkout` `v7.0.1` at
+`3d3c42e5aac5ba805825da76410c181273ba90b1` and `astral-sh/setup-uv` `v9.0.0`
+at `c771a70e6277c0a99b617c7a806ffedaca235ff9`.
+
+The repository-owned secret-scan script downloads Gitleaks `8.30.1` from its
+official release, verifies the platform archive against the reviewed published
+SHA-256, emits fully redacted terminal output, retains no report, and scans
+both the working tree and all reachable history through `--log-opts=--all`.
+The real pinned tool found no leak in either scope on 2026-08-13. The local
+quality gate passed 831 tests at 84.99% branch-aware coverage, the
+authored-assets module floor at 88.87%, Ruff, ty, frozen-lock validation, the
+dependency audit, the 12-document offline checker, the focused 95-test POSIX
+privacy/recovery matrix, and isolated sdist/wheel installation smoke. Focused
+review and exact-commit remote CI remain open before Group 5 may begin.
 
 ### Group 5: beta audit and release
 
