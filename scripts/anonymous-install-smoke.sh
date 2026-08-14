@@ -74,6 +74,9 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
+SCRIPT_DIR=$(CDPATH='' cd -P "$(dirname "$0")" && pwd)
+PROJECT_ROOT=$(CDPATH='' cd -P "$SCRIPT_DIR/.." && pwd)
+
 TEMP_BASE=${TMPDIR:-/tmp}
 SMOKE_ROOT=$(mktemp -d "$TEMP_BASE/danvas-anonymous-smoke.XXXXXX")
 case "$SMOKE_ROOT" in
@@ -85,6 +88,8 @@ case "$SMOKE_ROOT" in
 esac
 
 cleanup() {
+    cleanup_code=$?
+    trap - 0
     case "${SMOKE_ROOT:-}" in
         "$TEMP_BASE"/danvas-anonymous-smoke.*)
             if [ -d "$SMOKE_ROOT" ]; then
@@ -92,6 +97,7 @@ cleanup() {
             fi
             ;;
     esac
+    exit "$cleanup_code"
 }
 trap cleanup 0
 trap 'exit 1' 1 2 15
@@ -99,7 +105,9 @@ trap 'exit 1' 1 2 15
 TOOL_DIR="$SMOKE_ROOT/tools"
 BIN_DIR="$SMOKE_ROOT/bin"
 XDG_CONFIG="$SMOKE_ROOT/xdg"
-mkdir -p "$TOOL_DIR" "$BIN_DIR" "$XDG_CONFIG"
+CLEAN_HOME="$SMOKE_ROOT/home"
+QUICKSTART_WORKSPACE="$SMOKE_ROOT/quickstart"
+mkdir -p "$TOOL_DIR" "$BIN_DIR" "$XDG_CONFIG" "$CLEAN_HOME"
 
 INSTALL_SPEC="danvas-cli @ git+https://github.com/olearydj/danvas.git@$REF"
 echo "anonymous install smoke: installing danvas-cli from exact ref $REF"
@@ -118,6 +126,18 @@ if [ ! -x "$EXECUTABLE" ]; then
     exit 1
 fi
 
+run_clean() {
+    (
+        cd "$SMOKE_ROOT"
+        env -i \
+            PATH="$BIN_DIR:$PATH" \
+            HOME="$CLEAN_HOME" \
+            XDG_CONFIG_HOME="$XDG_CONFIG" \
+            PYTHONPATH= \
+            "$@"
+    )
+}
+
 TOOL_LIST=$(
     UV_TOOL_DIR="$TOOL_DIR" \
     UV_TOOL_BIN_DIR="$BIN_DIR" \
@@ -132,18 +152,34 @@ if printf '%s\n' "$TOOL_LIST" | grep -Eq '^danvas v'; then
     exit 1
 fi
 
-ACTUAL=$(PYTHONPATH= "$EXECUTABLE" --version)
+ACTUAL=$(run_clean "$EXECUTABLE" --version)
 if [ "$ACTUAL" != "danvas $EXPECTED_VERSION" ]; then
     echo "anonymous install smoke: command reported '$ACTUAL'" >&2
     exit 1
 fi
 
-PYTHONPATH= "$EXECUTABLE" --help >/dev/null
-PYTHONPATH= \
-XDG_CONFIG_HOME="$XDG_CONFIG" \
-DANVAS_ANONYMOUS_SMOKE_TOKEN="not-a-real-canvas-token" \
-    "$EXECUTABLE" auth doctor \
-        --secret-provider env \
-        --api-key-env DANVAS_ANONYMOUS_SMOKE_TOKEN >/dev/null
+run_clean "$EXECUTABLE" --help >/dev/null
+run_clean "$EXECUTABLE" sources lint --help >/dev/null
+(
+    cd "$SMOKE_ROOT"
+    env -i \
+        PATH="$BIN_DIR:$PATH" \
+        HOME="$CLEAN_HOME" \
+        XDG_CONFIG_HOME="$XDG_CONFIG" \
+        PYTHONPATH= \
+        DANVAS_ANONYMOUS_SMOKE_TOKEN="not-a-real-canvas-token" \
+        "$EXECUTABLE" auth doctor \
+            --secret-provider env \
+            --api-key-env DANVAS_ANONYMOUS_SMOKE_TOKEN >/dev/null
+)
+
+TOOL_PYTHON="$TOOL_DIR/danvas-cli/bin/python"
+QUICKSTART_CHECK="$PROJECT_ROOT/scripts/check-public-beta-quickstart.py"
+if [ ! -x "$TOOL_PYTHON" ]; then
+    echo "anonymous install smoke: isolated tool Python is missing" >&2
+    exit 1
+fi
+run_clean "$TOOL_PYTHON" "$QUICKSTART_CHECK" \
+    --workspace "$QUICKSTART_WORKSPACE" >/dev/null
 
 echo "anonymous install smoke: danvas-cli $EXPECTED_VERSION passed from $REF"

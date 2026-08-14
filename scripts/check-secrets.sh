@@ -94,6 +94,8 @@ case "$SCAN_ROOT" in
 esac
 
 cleanup() {
+    cleanup_code=$?
+    trap - 0
     case "${SCAN_ROOT:-}" in
         "$TEMP_BASE"/danvas-gitleaks.*)
             if [ -d "$SCAN_ROOT" ]; then
@@ -101,6 +103,7 @@ cleanup() {
             fi
             ;;
     esac
+    exit "$cleanup_code"
 }
 trap cleanup 0
 trap 'exit 1' 1 2 15

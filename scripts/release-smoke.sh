@@ -38,8 +38,8 @@ while [ "$#" -gt 0 ]; do
     shift
 done
 
-SCRIPT_DIR=$(CDPATH= cd -P "$(dirname "$0")" && pwd)
-PROJECT_ROOT=$(CDPATH= cd -P "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -P "$(dirname "$0")" && pwd)
+PROJECT_ROOT=$(CDPATH='' cd -P "$SCRIPT_DIR/.." && pwd)
 PYPROJECT="$PROJECT_ROOT/pyproject.toml"
 DIST_CHECK="$PROJECT_ROOT/scripts/check-distributions.py"
 
@@ -116,6 +116,8 @@ case "$SMOKE_ROOT" in
 esac
 
 cleanup() {
+    cleanup_code=$?
+    trap - 0
     case "${SMOKE_ROOT:-}" in
         "$TEMP_BASE"/danvas-release-smoke.*)
             if [ -d "$SMOKE_ROOT" ]; then
@@ -123,6 +125,7 @@ cleanup() {
             fi
             ;;
     esac
+    exit "$cleanup_code"
 }
 trap cleanup 0
 trap 'exit 1' 1 2 15
@@ -159,14 +162,11 @@ if [ "$WHEEL_COUNT" -ne 1 ]; then
     exit 1
 fi
 
+SDIST_PATH="$DIST_DIR/danvas_cli-$PROJECT_VERSION.tar.gz"
 SDIST_COUNT=0
-SDIST_PATH=""
-for candidate in "$DIST_DIR"/danvas_cli-"$PROJECT_VERSION".tar.gz; do
-    if [ -f "$candidate" ]; then
-        SDIST_PATH=$candidate
-        SDIST_COUNT=$((SDIST_COUNT + 1))
-    fi
-done
+if [ -f "$SDIST_PATH" ]; then
+    SDIST_COUNT=1
+fi
 if [ "$SDIST_COUNT" -ne 1 ]; then
     echo "release smoke: expected one source distribution for $PROJECT_VERSION, found $SDIST_COUNT" >&2
     exit 1
@@ -200,26 +200,46 @@ check_install() {
     bin_dir=$2
     executable="$bin_dir/danvas"
     xdg_config="$SMOKE_ROOT/$label-xdg"
+    clean_home="$SMOKE_ROOT/$label-home"
 
     if [ ! -x "$executable" ]; then
         echo "release smoke: $label executable is missing: $executable" >&2
         exit 1
     fi
 
-    actual=$(PYTHONPATH= "$executable" --version)
+    mkdir -p "$xdg_config" "$clean_home"
+    actual=$(
+        cd "$SMOKE_ROOT"
+        env -i \
+            PATH="$bin_dir:$PATH" \
+            HOME="$clean_home" \
+            XDG_CONFIG_HOME="$xdg_config" \
+            PYTHONPATH= \
+            "$executable" --version
+    )
     if [ "$actual" != "danvas $PROJECT_VERSION" ]; then
         echo "release smoke: $label reported '$actual', expected 'danvas $PROJECT_VERSION'" >&2
         exit 1
     fi
 
-    PYTHONPATH= "$executable" --help >/dev/null
-    mkdir -p "$xdg_config"
-    PYTHONPATH= \
-    XDG_CONFIG_HOME="$xdg_config" \
-    DANVAS_RELEASE_SMOKE_TOKEN="not-a-real-canvas-token" \
-        "$executable" auth doctor \
-            --secret-provider env \
-            --api-key-env DANVAS_RELEASE_SMOKE_TOKEN >/dev/null
+    (
+        cd "$SMOKE_ROOT"
+        env -i \
+            PATH="$bin_dir:$PATH" \
+            HOME="$clean_home" \
+            XDG_CONFIG_HOME="$xdg_config" \
+            PYTHONPATH= \
+            "$executable" --help >/dev/null
+        env -i \
+            PATH="$bin_dir:$PATH" \
+            HOME="$clean_home" \
+            XDG_CONFIG_HOME="$xdg_config" \
+            PYTHONPATH= \
+            DANVAS_RELEASE_SMOKE_TOKEN="not-a-real-canvas-token" \
+            "$executable" auth doctor \
+                --secret-provider env \
+                --api-key-env DANVAS_RELEASE_SMOKE_TOKEN >/dev/null
+    )
     echo "release smoke: $label install passed version, help, and auth doctor"
 }
 

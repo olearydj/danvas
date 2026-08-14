@@ -12,7 +12,10 @@ COMMIT_SHA = "0123456789abcdef0123456789abcdef01234567"
 
 
 def fake_uv_environment(
-    tmp_path: Path, *, legacy_distribution: bool = False
+    tmp_path: Path,
+    *,
+    legacy_distribution: bool = False,
+    quickstart_exit: int = 0,
 ) -> tuple[dict[str, str], Path]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -24,6 +27,7 @@ set -eu
 printf '%s\\n' "$*" >> "$DANVAS_TEST_UV_LOG"
 if [ "$1 $2" = "tool install" ]; then
     mkdir -p "$UV_TOOL_BIN_DIR"
+    mkdir -p "$UV_TOOL_DIR/danvas-cli/bin"
     cat > "$UV_TOOL_BIN_DIR/danvas" <<'EOF'
 #!/bin/sh
 if [ "${1:-}" = "--version" ]; then
@@ -32,6 +36,11 @@ fi
 exit 0
 EOF
     chmod 755 "$UV_TOOL_BIN_DIR/danvas"
+    cat > "$UV_TOOL_DIR/danvas-cli/bin/python" <<EOF
+#!/bin/sh
+exit "${DANVAS_TEST_QUICKSTART_EXIT:-0}"
+EOF
+    chmod 755 "$UV_TOOL_DIR/danvas-cli/bin/python"
 elif [ "$1 $2" = "tool list" ]; then
     echo "danvas-cli v0.18.0"
     echo "- danvas"
@@ -54,13 +63,22 @@ fi
     env["DANVAS_TEST_UV_LOG"] = str(log_path)
     if legacy_distribution:
         env["DANVAS_TEST_LEGACY"] = "1"
+    env["DANVAS_TEST_QUICKSTART_EXIT"] = str(quickstart_exit)
     return env, log_path
 
 
 def run_smoke(
-    tmp_path: Path, ref: str, *, legacy_distribution: bool = False
+    tmp_path: Path,
+    ref: str,
+    *,
+    legacy_distribution: bool = False,
+    quickstart_exit: int = 0,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
-    env, log_path = fake_uv_environment(tmp_path, legacy_distribution=legacy_distribution)
+    env, log_path = fake_uv_environment(
+        tmp_path,
+        legacy_distribution=legacy_distribution,
+        quickstart_exit=quickstart_exit,
+    )
     result = subprocess.run(
         [str(SCRIPT), "--ref", ref, "--expected-version", VERSION],
         cwd=tmp_path,
@@ -134,3 +152,10 @@ def test_smoke_rejects_non_release_version_before_uv(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert "invalid expected version" in result.stderr
     assert not log_path.exists()
+
+
+def test_smoke_preserves_failure_status_while_cleaning_temp_root(tmp_path: Path) -> None:
+    result, _log_path = run_smoke(tmp_path, COMMIT_SHA, quickstart_exit=9)
+
+    assert result.returncode == 9
+    assert list((tmp_path / "tmp").glob("danvas-anonymous-smoke.*")) == []
