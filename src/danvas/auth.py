@@ -3,12 +3,30 @@
 from __future__ import annotations
 
 import json
+import os
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from canvasapi import Canvas
 from secretpath import SecretMiss, SecretPathError, doctor_report, resolve_named_secret
 
+from danvas.credentials import CredentialKind, resolve_credential
 from danvas.sanitize import sanitize_error
+
+
+@dataclass(frozen=True, repr=False)
+class CanvasCredential:
+    """Transitional shared authentication result with a redacting representation."""
+
+    value: str
+    transport_notice: str | None
+
+    def __repr__(self) -> str:
+        return (
+            "CanvasCredential(value=[redacted], "
+            f"transport_notice={self.transport_notice!r})"
+        )
 
 
 def resolve_api_key(
@@ -38,14 +56,51 @@ def canvas_from_args(args: Any) -> Canvas:
             "initialize the course project, select a configured --profile, or set "
             "CANVAS_API_URL."
         )
+    credential = resolve_canvas_credential(args)
+    announce_canvas_credential(credential)
+    return Canvas(api_url, credential.value)
+
+
+def resolve_canvas_credential(args: Any) -> CanvasCredential:
+    """Resolve the shared Canvas/Panopto credential boundary."""
+    if not getattr(args, "api_url", None):
+        raise SystemExit(
+            "Canvas API URL required before resolving credentials. Pass --api-url, "
+            "initialize the course project, select a configured --profile, or set "
+            "CANVAS_API_URL."
+        )
+    credential_input = getattr(args, "credential_input", None)
+    if credential_input is not None:
+        resolved = resolve_credential(
+            credential_input,
+            project_root=_optional_path(getattr(args, "credential_project_root", None)),
+        )
+        return CanvasCredential(
+            value=resolved.value,
+            transport_notice=(
+                "environment"
+                if resolved.source_kind is CredentialKind.ENVIRONMENT
+                else "credential file"
+            ),
+        )
+
     api_key, provider_name = resolve_api_key(
         provider=args.secret_provider,
         op_reference=args.op_reference,
         env_var=args.api_key_env,
         secret_name=args.secret_name,
     )
-    print(f"Using API key from: {provider_name}")
-    return Canvas(api_url, api_key)
+    transport_notice = None
+    if provider_name.startswith("env"):
+        os.environ.pop(args.api_key_env, None)
+        transport_notice = "environment"
+    return CanvasCredential(value=api_key, transport_notice=transport_notice)
+
+
+def announce_canvas_credential(credential: CanvasCredential) -> None:
+    """Report only the transport danvas directly observed."""
+    if credential.transport_notice:
+        print(f"Using Canvas credential from: {credential.transport_notice}")
 
 
 def command_auth_doctor(args: Any) -> None:
@@ -186,3 +241,11 @@ def print_auth_doctor_report(payload: dict[str, Any]) -> None:
 def safe_auth_error(error: Exception) -> str:
     """Compatibility export for the shared public error sanitizer."""
     return sanitize_error(error)
+
+
+def _optional_path(value: object) -> Path | None:
+    if value is None:
+        return None
+    if isinstance(value, (str, Path)):
+        return Path(value)
+    raise TypeError("credential project root must be path-like")

@@ -1095,6 +1095,7 @@ course_id = 101
     source = project / "assignment.md"
     source.write_text("---\ntitle: Test\n---\n", encoding="utf-8")
     monkeypatch.chdir(other)
+    monkeypatch.setenv("CANVAS_API_URL", "https://canvas.example/")
 
     args = args_for(course_id=None, source=str(source), api_url=None)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +11,8 @@ import pytest
 import requests
 
 from danvas.artifacts import write_private_pair
+from danvas.auth import CanvasCredential
+from danvas.credentials import CredentialInput, CredentialKind, SelectionSource
 from danvas.panopto import (
     caption_filename_from_response,
     collect_lti_sessions,
@@ -83,17 +86,26 @@ class FakePanoptoSession:
         return FakeResponse(content=self.caption_content, headers=self.caption_headers)
 
 
-def test_command_uses_profile_secret_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_command_uses_shared_canvas_credential_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     captured: dict[str, str] = {}
 
-    def fake_resolve_api_key(**kwargs: str) -> tuple[str, str]:
-        captured.update(kwargs)
-        return "token", "test"
+    def fake_resolve_canvas_credential(args: Any) -> CanvasCredential:
+        captured.update(
+            secret_provider=args.secret_provider,
+            op_reference=args.op_reference,
+            api_key_env=args.api_key_env,
+            secret_name=args.secret_name,
+        )
+        return CanvasCredential(value="token", transport_notice=None)
 
     def stop_after_auth(*args: Any, **kwargs: Any) -> dict[str, Any]:
         raise RuntimeError("stop after authentication")
 
-    monkeypatch.setattr("danvas.panopto.resolve_api_key", fake_resolve_api_key)
+    monkeypatch.setattr(
+        "danvas.panopto.resolve_canvas_credential", fake_resolve_canvas_credential
+    )
     monkeypatch.setattr("danvas.panopto.discover_panopto_tool", stop_after_auth)
 
     with pytest.raises(RuntimeError, match="stop after authentication"):
@@ -112,10 +124,48 @@ def test_command_uses_profile_secret_name(tmp_path: Path, monkeypatch: pytest.Mo
         )
 
     assert captured == {
-        "provider": "env",
+        "secret_provider": "env",
         "op_reference": "",
-        "env_var": "INSTITUTION_TOKEN",
+        "api_key_env": "INSTITUTION_TOKEN",
         "secret_name": "canvas-institution",
+    }
+
+
+def test_panopto_neutral_environment_is_removed_before_http_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    variable = "DANVAS_TEST_PANOPTO_TOKEN"
+    token = "panopto-credential-sentinel"
+    monkeypatch.setenv(variable, token)
+    observed: dict[str, Any] = {}
+
+    def stop_after_auth(session: requests.Session, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        observed["authorization"] = session.headers.get("Authorization")
+        observed["variable_absent"] = variable not in os.environ
+        raise RuntimeError("stop after authentication")
+
+    monkeypatch.setattr("danvas.panopto.discover_panopto_tool", stop_after_auth)
+
+    with pytest.raises(RuntimeError, match="stop after authentication"):
+        command_panopto_captions(
+            SimpleNamespace(
+                credential_input=CredentialInput(
+                    CredentialKind.ENVIRONMENT,
+                    variable,
+                    SelectionSource.CLI,
+                ),
+                credential_project_root=None,
+                api_url="https://canvas.example/",
+                course_id=101,
+                output_dir=str(tmp_path / "captions"),
+                project_root=None,
+                overwrite=False,
+            )
+        )
+
+    assert observed == {
+        "authorization": f"Bearer {token}",
+        "variable_absent": True,
     }
 
 
@@ -451,8 +501,8 @@ def test_invalid_panopto_config_fails_before_secret_resolution(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "danvas.panopto.resolve_api_key",
-        lambda **kwargs: pytest.fail("secret resolution must not run"),
+        "danvas.panopto.resolve_canvas_credential",
+        lambda args: pytest.fail("credential resolution must not run"),
     )
 
     with pytest.raises(SystemExit, match=message):
@@ -632,10 +682,10 @@ def test_cross_session_filename_collision_blocks_without_suffix_or_manifest(
 def test_panopto_requires_private_destination_before_auth(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def fail(**kwargs: str) -> tuple[str, str]:
+    def fail(args: Any) -> CanvasCredential:
         raise AssertionError("credentials must not resolve before private path")
 
-    monkeypatch.setattr("danvas.panopto.resolve_api_key", fail)
+    monkeypatch.setattr("danvas.panopto.resolve_canvas_credential", fail)
 
     with pytest.raises(SystemExit, match="Pass --output-dir"):
         command_panopto_captions(

@@ -306,6 +306,7 @@ def args_for(**kwargs: Any) -> SimpleNamespace:
         explicit_secret_provider=kwargs.get("secret_provider"),
         explicit_op_reference=kwargs.get("op_reference"),
         explicit_api_key_env=kwargs.get("api_key_env"),
+        explicit_api_key_file=kwargs.get("api_key_file"),
         start=config_start,
         allow_missing_api_url=allow_missing_api_url,
     )
@@ -313,6 +314,9 @@ def args_for(**kwargs: Any) -> SimpleNamespace:
     kwargs["profile_timezone"] = context.profile_timezone
     kwargs["api_url"] = context.api_url
     kwargs["api_url_source"] = context.api_url_source
+    kwargs["origin_binding_source"] = context.origin_binding_source
+    kwargs["credential_project_root"] = context.project_root
+    kwargs["credential_input"] = context.credential_input
     kwargs["secret_name"] = context.secret_name
     kwargs["secret_provider"] = context.secret_provider
     kwargs["op_reference"] = context.op_reference

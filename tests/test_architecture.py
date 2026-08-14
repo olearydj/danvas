@@ -18,8 +18,14 @@ LEGACY_COMPLEXITY_EXCEPTIONS = {
     ("status.py", "compare_pages"),
 }
 RESOLVE_API_KEY_CALLS = {
+    ("auth.py", "resolve_canvas_credential"),
+}
+RESOLVE_CANVAS_CREDENTIAL_CALLS = {
     ("auth.py", "canvas_from_args"),
     ("panopto.py", "command_panopto_captions"),
+}
+RESOLVE_NEUTRAL_CREDENTIAL_CALLS = {
+    ("auth.py", "resolve_canvas_credential"),
 }
 CURRENT_PROVIDER_IMPORTS = Counter(
     {
@@ -180,7 +186,7 @@ def test_only_documented_legacy_functions_suppress_complexity() -> None:
     assert exceptions == LEGACY_COMPLEXITY_EXCEPTIONS
 
 
-def test_resolve_api_key_call_sites_are_bounded_and_pass_secret_name() -> None:
+def test_legacy_resolve_api_key_call_site_is_bounded_and_passes_secret_name() -> None:
     found: set[tuple[str, str]] = set()
     missing_secret_name: set[tuple[str, str]] = set()
     for path in PACKAGE_ROOT.glob("*.py"):
@@ -202,6 +208,46 @@ def test_resolve_api_key_call_sites_are_bounded_and_pass_secret_name() -> None:
 
     assert found == RESOLVE_API_KEY_CALLS
     assert missing_secret_name == set()
+
+
+def test_canvas_and_panopto_share_one_credential_boundary() -> None:
+    found: set[tuple[str, str]] = set()
+    for path in PACKAGE_ROOT.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for function in (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ):
+            if any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "resolve_canvas_credential"
+                for node in ast.walk(function)
+            ):
+                found.add((path.name, function.name))
+
+    assert found == RESOLVE_CANVAS_CREDENTIAL_CALLS
+
+
+def test_neutral_credential_reader_has_one_reviewed_entry_point() -> None:
+    found: set[tuple[str, str]] = set()
+    for path in PACKAGE_ROOT.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for function in (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ):
+            if any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "resolve_credential"
+                for node in ast.walk(function)
+            ):
+                found.add((path.name, function.name))
+
+    assert found == RESOLVE_NEUTRAL_CREDENTIAL_CALLS
 
 
 def test_current_provider_imports_and_calls_match_reviewed_baseline() -> None:

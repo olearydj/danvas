@@ -7,6 +7,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
+from danvas.auth import canvas_from_args
 from danvas.cli import app, run_command
 from tests.fixtures import write_assignment_fixture, write_gradebook_fixture, write_quiz_fixture
 
@@ -507,6 +508,39 @@ def test_canvas_command_without_instance_fails_before_dispatch(
     assert result.exit_code == 1
     assert "Canvas API URL required" in result.output
     assert dispatched is False
+
+
+def test_process_credential_file_reaches_canvas_through_cli_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    token = "cli-file-credential-sentinel"
+    credential = tmp_path / "canvas-token"
+    credential.write_text(f"{token}\n", encoding="utf-8")
+    credential.chmod(0o600)
+    monkeypatch.setenv("CANVAS_API_KEY_FILE", str(credential))
+    monkeypatch.delenv("CANVAS_API_KEY_ENV", raising=False)
+    monkeypatch.delenv("CANVAS_SECRET_PROVIDER", raising=False)
+    monkeypatch.delenv("CANVAS_API_KEY_OP_REFERENCE", raising=False)
+    monkeypatch.setattr("danvas.profiles.user_config_path", lambda: tmp_path / "missing.toml")
+    observed: dict[str, str] = {}
+
+    class FakeCanvas:
+        def __init__(self, api_url: str, api_key: str) -> None:
+            observed.update(api_url=api_url, api_key=api_key)
+
+    monkeypatch.setattr("danvas.auth.Canvas", FakeCanvas)
+    monkeypatch.setattr("danvas.cli.command_courses", canvas_from_args)
+
+    result = runner.invoke(
+        app,
+        ["courses", "--api-url", "https://canvas.example/"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert observed == {"api_url": "https://canvas.example/", "api_key": token}
+    assert "Using Canvas credential from: credential file" in result.output
+    assert token not in result.output
 
 
 def test_local_args_do_not_load_canvas_profiles(

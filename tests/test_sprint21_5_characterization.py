@@ -111,7 +111,7 @@ def test_current_authentication_option_surface_is_exactly_forty_five_commands() 
         assert tuple(provider.type.choices) == ("auto", "1password", "env")
 
 
-def test_current_secretpath_wrapper_and_provider_notice_are_characterized(
+def test_group_1_retains_secretpath_wrapper_without_provider_attribution(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -169,7 +169,7 @@ def test_current_secretpath_wrapper_and_provider_notice_are_characterized(
         "api_url": "https://canvas.example.edu/",
         "api_key": "credential-sentinel",
     }
-    assert capsys.readouterr().out == "Using API key from: 1password\n"
+    assert capsys.readouterr().out == ""
 
 
 def test_current_auth_doctor_text_and_json_shapes_are_characterized(
@@ -295,10 +295,9 @@ def test_main_currently_loads_local_dotenv_inputs_in_debugger_mode(
     assert context.api_url_source == "CANVAS_API_URL"
 
 
-def test_current_explicit_profile_mismatch_warns_but_authenticates(
+def test_group_1_explicit_profile_mismatch_fails_before_authentication(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     profiles_path = tmp_path / "user-config.toml"
     write_profile(
@@ -313,43 +312,22 @@ def test_current_explicit_profile_mismatch_warns_but_authenticates(
         '[canvas]\napi_url = "https://project.canvas.example.edu/"\ncourse_id = 101\n',
         encoding="utf-8",
     )
-    context = resolve_canvas_context(
-        explicit_profile="other",
-        start=project,
-        profiles_path=profiles_path,
-        environ={},
+    monkeypatch.setattr(
+        auth_module,
+        "resolve_api_key",
+        lambda **kwargs: pytest.fail("credential resolution must not run"),
     )
-    warning = capsys.readouterr().err
-    resolution: dict[str, Any] = {}
-    canvas_init: dict[str, str] = {}
 
-    def fake_resolve_api_key(**kwargs: Any) -> tuple[str, str]:
-        resolution.update(kwargs)
-        return "other-credential-sentinel", "env:OTHER_CANVAS_TOKEN"
-
-    class FakeCanvas:
-        def __init__(self, api_url: str, api_key: str) -> None:
-            canvas_init.update(api_url=api_url, api_key=api_key)
-
-    monkeypatch.setattr(auth_module, "resolve_api_key", fake_resolve_api_key)
-    monkeypatch.setattr(auth_module, "Canvas", FakeCanvas)
-    canvas_from_args(auth_args(context))
-
-    assert "explicitly selected profile 'other'" in warning
-    assert "project URL keeps precedence" in warning
-    assert resolution == {
-        "provider": "env",
-        "op_reference": "",
-        "env_var": "OTHER_CANVAS_TOKEN",
-        "secret_name": "canvas",
-    }
-    assert canvas_init == {
-        "api_url": "https://project.canvas.example.edu/",
-        "api_key": "other-credential-sentinel",
-    }
+    with pytest.raises(SystemExit, match="Canvas origin conflict"):
+        resolve_canvas_context(
+            explicit_profile="other",
+            start=project,
+            profiles_path=profiles_path,
+            environ={},
+        )
 
 
-def test_current_project_only_origin_authenticates_without_user_binding(
+def test_group_1_project_only_origin_fails_before_authentication(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -359,30 +337,15 @@ def test_current_project_only_origin_authenticates_without_user_binding(
         '[canvas]\napi_url = "https://project.canvas.example.edu/"\ncourse_id = 101\n',
         encoding="utf-8",
     )
-    context = resolve_canvas_context(
-        start=project,
-        profiles_path=tmp_path / "missing-user-config.toml",
-        environ={"CANVAS_API_KEY": "default-credential-sentinel"},
-    )
-    canvas_init: dict[str, str] = {}
-
-    class FakeCanvas:
-        def __init__(self, api_url: str, api_key: str) -> None:
-            canvas_init.update(api_url=api_url, api_key=api_key)
-
     monkeypatch.setattr(
         auth_module,
         "resolve_api_key",
-        lambda **kwargs: ("default-credential-sentinel", "env:CANVAS_API_KEY"),
+        lambda **kwargs: pytest.fail("credential resolution must not run"),
     )
-    monkeypatch.setattr(auth_module, "Canvas", FakeCanvas)
-    canvas_from_args(auth_args(context))
 
-    assert context.profile is None
-    assert context.api_url_source == ".danvas/config.toml"
-    assert context.secret_provider == "auto"
-    assert context.api_key_env == "CANVAS_API_KEY"
-    assert canvas_init == {
-        "api_url": "https://project.canvas.example.edu/",
-        "api_key": "default-credential-sentinel",
-    }
+    with pytest.raises(SystemExit, match="not bound to user intent"):
+        resolve_canvas_context(
+            start=project,
+            profiles_path=tmp_path / "missing-user-config.toml",
+            environ={"CANVAS_API_KEY": "default-credential-sentinel"},
+        )

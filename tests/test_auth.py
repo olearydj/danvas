@@ -1,19 +1,24 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Generator
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from secretpath import SecretMiss, clear_cache
 
 from danvas.auth import (
+    CanvasCredential,
     build_auth_doctor_report,
     canvas_from_args,
     command_auth_doctor,
     resolve_api_key,
+    resolve_canvas_credential,
     safe_auth_error,
 )
+from danvas.credentials import CredentialInput, CredentialKind, SelectionSource
 
 
 @pytest.fixture(autouse=True)
@@ -51,6 +56,74 @@ def test_canvas_requires_instance_before_secret_resolution(
                 api_key_env="CANVAS_API_KEY",
             )
         )
+
+
+def test_neutral_environment_is_removed_before_canvas_construction(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    variable = "DANVAS_TEST_CANVAS_TOKEN"
+    token = "canvas-construction-credential-sentinel"
+    monkeypatch.setenv(variable, token)
+    observed: dict[str, str | bool] = {}
+
+    class FakeCanvas:
+        def __init__(self, api_url: str, api_key: str) -> None:
+            observed.update(
+                api_url=api_url,
+                api_key=api_key,
+                variable_absent=variable not in os.environ,
+            )
+
+    monkeypatch.setattr("danvas.auth.Canvas", FakeCanvas)
+    result = canvas_from_args(
+        SimpleNamespace(
+            api_url="https://canvas.example/",
+            credential_input=CredentialInput(
+                CredentialKind.ENVIRONMENT,
+                variable,
+                SelectionSource.CLI,
+            ),
+            credential_project_root=None,
+        )
+    )
+
+    assert isinstance(result, FakeCanvas)
+    assert observed == {
+        "api_url": "https://canvas.example/",
+        "api_key": token,
+        "variable_absent": True,
+    }
+    output = capsys.readouterr().out
+    assert output == "Using Canvas credential from: environment\n"
+    assert token not in output
+
+
+def test_neutral_file_uses_shared_canvas_credential_resolver(tmp_path: Path) -> None:
+    path = tmp_path / "canvas-token"
+    path.write_text("file-credential-sentinel\n", encoding="utf-8")
+
+    resolved = resolve_canvas_credential(
+        SimpleNamespace(
+            api_url="https://canvas.example/",
+            credential_input=CredentialInput(
+                CredentialKind.FILE,
+                str(path),
+                SelectionSource.USER_PROFILE,
+            ),
+            credential_project_root=None,
+        )
+    )
+
+    assert resolved.value == "file-credential-sentinel"
+    assert resolved.transport_notice == "credential file"
+    assert resolved.value not in repr(resolved)
+
+
+def test_canvas_credential_repr_is_redacted() -> None:
+    token = "canvas-wrapper-credential-sentinel"
+    resolved = CanvasCredential(token, "environment")
+
+    assert token not in repr(resolved)
 
 
 def test_resolve_api_key_auto_prefers_1password(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -25,7 +25,7 @@ from danvas.artifacts import (
     write_private_pair,
     write_private_text,
 )
-from danvas.auth import resolve_api_key
+from danvas.auth import announce_canvas_credential, resolve_canvas_credential
 from danvas.project_config import load_project_config
 
 
@@ -108,15 +108,10 @@ def command_panopto_captions(args: Any) -> None:
     warn_if_external_private_path(resolved)
     preflight_caption_bundle(resolved.path, overwrite=bool(getattr(args, "overwrite", False)))
     settings = resolve_panopto_settings(args)
-    api_key, provider_name = resolve_api_key(
-        provider=args.secret_provider,
-        op_reference=args.op_reference,
-        env_var=args.api_key_env,
-        secret_name=args.secret_name,
-    )
-    print(f"Using API key from: {provider_name}")
+    credential = resolve_canvas_credential(args)
+    announce_canvas_credential(credential)
     canvas_session = requests.Session()
-    canvas_session.headers.update({"Authorization": f"Bearer {api_key}"})
+    canvas_session.headers.update({"Authorization": f"Bearer {credential.value}"})
     panopto_tool = discover_panopto_tool(
         canvas_session,
         args.api_url,
