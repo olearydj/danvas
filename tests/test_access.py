@@ -81,6 +81,7 @@ CURRENT_MUTATION_CALLS = Counter(
         ("quiz_import.py", "command_quiz_import_qti", "edit"): 1,
         ("quiz_import.py", "start_qti_migration", "create_content_migration"): 1,
         ("quiz_import.py", "start_qti_migration", "requests.post"): 1,
+        ("quiz_reports.py", "request_student_analysis_report", "_requester.request"): 1,
         ("submissions.py", "upload_feedback_comment", "attachment_uploader.start"): 1,
         ("submissions.py", "upload_feedback_comment", "edit"): 1,
     }
@@ -130,6 +131,7 @@ CURRENT_MUTATION_ASSERTIONS = Counter(
         ("grades.py", "delete_submission_comment"): 1,
         ("quiz_import.py", "command_quiz_import_qti"): 2,
         ("quiz_import.py", "start_qti_migration"): 2,
+        ("quiz_reports.py", "request_student_analysis_report"): 1,
         ("submissions.py", "command_submissions_feedback"): 1,
         ("submissions.py", "upload_feedback_comment"): 2,
         ("files.py", "command_files_upload"): 1,
@@ -203,7 +205,16 @@ def mutation_call_name(node: ast.Call) -> str | None:
     if function.attr == "update" and isinstance(function.value, ast.Name):
         return "topic.update" if function.value.id == "topic" else None
     if function.attr == "request" and isinstance(function.value, ast.Attribute):
-        return "_requester.request" if function.value.attr == "_requester" else None
+        if function.value.attr != "_requester" or not node.args:
+            return None
+        method = node.args[0]
+        if not isinstance(method, ast.Constant) or not isinstance(method.value, str):
+            return "_requester.request"
+        return (
+            "_requester.request"
+            if method.value.upper() in {"POST", "PUT", "PATCH", "DELETE"}
+            else None
+        )
     if function.attr in {"post", "put"}:
         return f"{ast.unparse(function.value)}.{function.attr}"
     if function.attr in {"delete", "publish", "submit"}:

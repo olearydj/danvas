@@ -329,6 +329,22 @@ def write_private_pair(
     )
 
 
+def preflight_private_pair(
+    path: Path,
+    *,
+    overwrite: bool = False,
+    sidecar_path: Path | None = None,
+) -> tuple[Path, Path]:
+    """Validate a private data/sidecar destination without creating anything."""
+    require_private_platform()
+    sidecar = sidecar_path or path.with_name(f"{path.name}.artifact.json")
+    if path.absolute().parent != sidecar.absolute().parent:
+        raise ValueError("Private data and sidecar must share a directory.")
+    _preflight_target(path, overwrite=overwrite)
+    _preflight_target(sidecar, overwrite=overwrite)
+    return path, sidecar
+
+
 def commit_private_staged_pair(
     staged: Path,
     path: Path,

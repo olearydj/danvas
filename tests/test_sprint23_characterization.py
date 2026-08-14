@@ -101,7 +101,7 @@ def test_parser_accepts_bom_zero_row_zero_question_and_partial_rows(tmp_path: Pa
 
     partial = tmp_path / "partial.csv"
     partial.write_text("id,submitted,123: Q,1,score\n10,2026-01-01,A\n", encoding="utf-8")
-    row = next(StudentAnalysisReport(partial).iter_rows())
+    row = next(iter(StudentAnalysisReport(partial).iter_rows()))
     assert row == ["10", "2026-01-01", "A", "", ""]
 
 
@@ -110,7 +110,7 @@ def test_local_parser_remains_permissive_for_anonymous_and_malformed_shapes() ->
     malformed = StudentAnalysisReport(FIXTURES / "malformed-student-analysis.csv")
 
     assert "id" not in anonymous.header_index
-    assert anonymous.answer_for(next(anonymous.iter_rows()), ["which version"]) == "Python"
+    assert anonymous.answer_for(next(iter(anonymous.iter_rows())), ["which version"]) == "Python"
     assert "id" not in malformed.header_index
     assert "submitted" not in malformed.header_index
 
@@ -192,7 +192,7 @@ def test_quiz_export_evidence_schema_v1_is_pinned() -> None:
     }
 
 
-def test_released_source_has_no_quiz_report_request_or_download_boundary() -> None:
+def test_group_1_adds_raw_report_boundary_without_canvasapi_convenience_call() -> None:
     package = ROOT / "src" / "danvas"
     source_parts = [path.read_text(encoding="utf-8") for path in sorted(package.glob("*.py"))]
     calls = {
@@ -204,5 +204,5 @@ def test_released_source_has_no_quiz_report_request_or_download_boundary() -> No
     source = "\n".join(source_parts)
 
     assert "create_report" not in calls
-    assert "quiz-analysis-export-v1" not in source
-    assert "quiz export-analysis" not in source
+    assert "quiz-analysis-export-v1" in source
+    assert "quiz export-analysis" in source
