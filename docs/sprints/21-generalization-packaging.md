@@ -5,10 +5,12 @@ through 20 are released as `v0.15.x`, `v0.16.0`, and `v0.17.0`. This sprint is
 the final generalization and packaging slice of the accepted public-readiness
 program and targets `0.18.0`. Group 0 characterization is complete at
 `ded6b2e`; Groups 1 through 3 have passed focused review; and Group 4 CI and
-security hardening has passed focused review and awaits exact-commit remote CI.
-The sprint does not authorize external publication, tagging, global
-installation, or live Canvas use. A separately authorized repository-setting
-change enabled GitHub private vulnerability reporting on 2026-08-13.
+security hardening has passed focused review and exact-commit remote CI. Group 5
+has assembled the cross-release beta audit and awaits independent
+public-boundary review. The sprint does not authorize external publication,
+tagging, global installation, or live Canvas use. A separately authorized
+repository-setting change enabled GitHub private vulnerability reporting on
+2026-08-13.
 
 The reviewed Python distribution name is `danvas-cli`. The Python import
 package and installed command remain `danvas`.
@@ -840,16 +842,39 @@ dependency audit, the 12-document offline checker, the focused 95-test POSIX
 privacy/recovery matrix, and isolated sdist/wheel installation smoke. Focused
 review accepted Group 4 on 2026-08-13 after independently resolving both action
 SHAs and all four Gitleaks archive checksums against their authoritative
-upstreams. Exact-commit remote CI remains open before Group 5 may begin.
+upstreams. The first remote run exposed two ANSI-sensitive test assertions;
+`c95cae8` normalized them through the existing portable helper, and exact
+[CI run 31760904461](https://github.com/olearydj/danvas/actions/runs/31760904461)
+then passed Linux 3.12/3.13/3.14, macOS 3.13, the secret scan, and final install
+smoke. Group 4 is closed.
 
 ### Group 5: beta audit and release
 
-1. Run the clean-machine quickstart and cross-release beta matrix.
+1. [x] Run the clean-machine quickstart and cross-release beta matrix.
 2. Obtain an independent public-boundary review and close every finding.
 3. Push the exact candidate and require branch CI on that SHA.
 4. Tag `v0.18.0` only after review and branch gates pass.
 5. Require signed-tag CI and anonymous exact-tag install before the global CLI
    advances or public docs call the release complete.
+
+The [public-beta audit](21-public-beta-audit.md) maps all seven threshold items
+to runtime code, independent tests, public documentation, historical signed-tag
+CI, and current candidate evidence. The clean-machine run installed exact
+public commit `c95cae8` anonymously over HTTPS, executed from a temporary cwd
+under an empty environment and isolated home/config root, rendered a new
+`standard-v1` project through the installed package, preserved an existing
+source-less `legacy-v1` project, and exercised the real `danvas` to
+`danvas-cli` distribution migration without touching the global CLI.
+
+That audit found and closed two additional release-gate defects in `5f5f8dc`:
+the isolated installers had still invoked checks from the repository cwd, and
+successful EXIT cleanup could mask an earlier shell failure on macOS. The local
+candidate now passes 834 tests at 84.99% branch-aware coverage, the 88.87%
+authored-assets module floor, Ruff, ty, ShellCheck, package inspection,
+editable/wheel smoke outside the checkout, documentation validation, and real
+zero-finding current-tree/all-history scans. Independent public-boundary review
+is the next gate; final exact-candidate CI and anonymous installation must be
+repeated after every accepted correction.
 
 Each group lands in logical commits. Groups 1 through 3 receive focused review
 before CI/security hardening and the beta-claim audit build on their contracts.

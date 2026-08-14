@@ -331,9 +331,10 @@ suite, POSIX/macOS and Python support, workflow hardening, secret scanning, and
 the cross-release beta audit. Independent review selected `danvas-cli` as the
 distribution while preserving the `danvas` import package and executable. The
 Sprint 22 design review and Sprint 21 Group 0 characterization are complete.
-Groups 1 through 4 have passed focused review. Group 4 awaits exact-commit
-remote CI before the beta audit begins; the real anonymous exact-candidate/tag
-installs remain release gates after those refs exist remotely.
+Groups 1 through 4 have passed focused review and exact-commit Group 4 CI is
+green at `c95cae8`. Group 5 has assembled the clean-machine and cross-release
+[public-beta audit](sprints/21-public-beta-audit.md) and awaits independent
+public-boundary review; final exact-candidate/tag installs remain release gates.
 
 ## Accepted 0.20.0 Agent Interface Follow-On Design
 

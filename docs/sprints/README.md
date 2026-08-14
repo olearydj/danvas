@@ -302,8 +302,10 @@ in 0.18.0; completes anonymous packaging and public documentation; and adds the
 declared macOS/Python/security matrix. Independent review selected `danvas-cli`
 as the distribution while preserving the `danvas` import and command. Sprint 22
 design review and Sprint 21 Group 0 characterization are complete. Groups 1
-through 4 have passed focused review. Group 4 awaits exact-commit remote CI
-before the beta audit begins.
+through 4 have passed focused review and exact-commit Group 4 CI is green at
+`c95cae8`. Group 5's
+[public-beta audit](21-public-beta-audit.md) is assembled and awaits independent
+review of the cross-release beta claim.
 
 ## Accepted 0.19.0 Sprint 21.5 Credential Boundary
 
