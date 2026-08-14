@@ -63,6 +63,7 @@ from danvas.grades import (
     command_grades_post,
     command_grades_verify,
 )
+from danvas.help_rendering import install_guided_help
 from danvas.mutation import APPLY_HELP, DRY_RUN_HELP, MutationMode, resolve_mutation_mode
 from danvas.override_sync import command_assignments_overrides_sync
 from danvas.pages import (
@@ -271,9 +272,7 @@ def mutation_args_from_cli(
     if normalized_confirm and mode is MutationMode.PLAN:
         raise typer.BadParameter("--confirm requires --apply.")
     if mode is MutationMode.APPLY and required_confirm is not None:
-        allowed = (
-            {required_confirm} if isinstance(required_confirm, str) else required_confirm
-        )
+        allowed = {required_confirm} if isinstance(required_confirm, str) else required_confirm
         if normalized_confirm not in allowed:
             expected = " or ".join(f"--confirm {value}" for value in sorted(allowed))
             raise typer.BadParameter(f"--apply requires {expected}.")
@@ -1641,9 +1640,7 @@ def quiz_analysis(
 
 @quiz_app.command(
     "import-qti",
-    help=(
-        "Plan a QTI Classic Quiz import, or apply it with --apply and verify the result."
-    ),
+    help=("Plan a QTI Classic Quiz import, or apply it with --apply and verify the result."),
 )
 def quiz_import_qti(
     package: Annotated[Path, typer.Argument(help="QTI zip produced by text2qti/make-qti.")],
@@ -3617,6 +3614,9 @@ def discussions_score(
             api_key_file=api_key_file,
         ),
     )
+
+
+install_guided_help(app)
 
 
 def main() -> None:

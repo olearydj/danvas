@@ -1,0 +1,47 @@
+                                                                                                                        
+ Usage: danvas assignments [OPTIONS] COMMAND [ARGS]...                                                                  
+                                                                                                                        
+ Create assignments from Markdown sources or export assignment metadata for review.                                     
+                                                                                                                        
+ Inspect, create, update, verify, and audit assignments from stable Markdown sources.                                   
+                                                                                                                        
+ Common workflows:                                                                                                      
+                                                                                                                        
+   Create:                                                                                                              
+     danvas sources lint SOURCE                                                                                         
+     danvas assignments create SOURCE                                                                                   
+     danvas assignments create SOURCE --apply                                                                           
+     danvas assignments verify SOURCE                                                                                   
+                                                                                                                        
+   Update:                                                                                                              
+     danvas assignments update SOURCE                                                                                   
+     danvas assignments update SOURCE --apply                                                                           
+     danvas assignments verify SOURCE                                                                                   
+                                                                                                                        
+ Identity:                                                                                                              
+   Uses explicit IDs, source front matter, or project provenance; update and verify do not silently title-match.        
+                                                                                                                        
+ Privacy and safety:                                                                                                    
+   Some retained outputs in this family are private and default beneath .danvas/private/ in an initialized project.     
+   Canvas-changing subcommands plan on omission; --apply authorizes the write.                                          
+                                                                                                                        
+ Related:                                                                                                               
+   danvas sources lint                                                                                                  
+   danvas files upload                                                                                                  
+   danvas status                                                                                                        
+                                                                                                                        
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ export          Export sanitized assignment evidence as JSON, CSV, or Markdown.                                      │
+│ overrides       Export one assignment's override windows and private membership.                                     │
+│ overrides-sync  Plan override reconciliation; use --apply --confirm apply to write Canvas.                           │
+│ create          Plan one assignment from Markdown; use --apply to create it in Canvas.                               │
+│ verify          Verify declared assignment fields and exact current-course Canvas file targets.                      │
+│ update          Plan one assignment update from Markdown; use --apply to write Canvas.                               │
+│ upsert          Plan whether one assignment source would update an existing assignment or create a new one.          │
+│ audit           Compare a saved assignments export to course policy weights and basic setup expectations.            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+

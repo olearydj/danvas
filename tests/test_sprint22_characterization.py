@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import click
 import pytest
@@ -36,6 +37,16 @@ def root_command() -> click.Command:
     return typer.main.get_command(app)
 
 
+def without_long_help(record: dict[str, Any]) -> dict[str, Any]:
+    normalized = {key: value for key, value in record.items() if key != "help"}
+    children = normalized.get("children")
+    if isinstance(children, list):
+        normalized["children"] = [
+            without_long_help(child) for child in children if isinstance(child, dict)
+        ]
+    return normalized
+
+
 def render_help(path: tuple[str, ...], *, width: int, color: bool) -> str:
     env = {
         "COLUMNS": str(width),
@@ -53,11 +64,12 @@ def render_help(path: tuple[str, ...], *, width: int, color: bool) -> str:
     return result.output
 
 
-def test_released_command_tree_matches_complete_fixture() -> None:
+def test_released_executable_tree_still_matches_complete_fixture() -> None:
     expected = json.loads((FIXTURES / "command-tree-v0.19.json").read_text(encoding="utf-8"))
     actual = command_tree_record(root_command())
 
-    assert actual == expected
+    assert without_long_help(actual) == without_long_help(expected)
+    assert actual["help"] != expected["help"]
     records = command_records(actual)
     assert sum(record["kind"] == "group" for record in records) == 14
     assert sum(record["kind"] == "leaf" for record in records) == 55
@@ -71,7 +83,8 @@ def test_representative_help_matches_width_and_color_baseline(
     path: tuple[str, ...],
     width: int,
 ) -> None:
-    expected = (FIXTURES / f"{fixture_name}-{width}.txt").read_text(encoding="utf-8")
+    released = (FIXTURES / f"{fixture_name}-{width}.txt").read_text(encoding="utf-8")
+    expected = (FIXTURES / f"guided-{fixture_name}-{width}.txt").read_text(encoding="utf-8")
     plain = render_help(path, width=width, color=False)
     colored = render_help(path, width=width, color=True)
 
@@ -80,6 +93,7 @@ def test_representative_help_matches_width_and_color_baseline(
     assert "\x1b[" not in plain
     assert "\x1b[" in colored
     assert max(map(len, expected.splitlines())) <= width
+    assert expected != released
 
 
 def test_every_help_screen_is_offline_and_side_effect_free(
@@ -111,19 +125,13 @@ def test_released_help_has_neutral_auth_surface_and_no_removed_spellings() -> No
         for record in command_records(command_tree_record(root_command()))
         if record["kind"] == "leaf"
     }
-    canvas_commands = {
-        name for name, policy in ACCESS_POLICIES.items() if policy.canvas_read
-    }
+    canvas_commands = {name for name, policy in ACCESS_POLICIES.items() if policy.canvas_read}
     neutral = {"--api-url", "--profile", "--api-key-env", "--api-key-file"}
 
     assert len(leaves) == 55
     assert len(canvas_commands) == 45
     for name, record in leaves.items():
-        options = {
-            option
-            for parameter in record["parameters"]
-            for option in parameter["options"]
-        }
+        options = {option for parameter in record["parameters"] for option in parameter["options"]}
         assert options.intersection(neutral) == (neutral if name in canvas_commands else set())
 
     all_help = "\n".join(
@@ -131,7 +139,43 @@ def test_released_help_has_neutral_auth_surface_and_no_removed_spellings() -> No
     )
     for spelling in REMOVED_SPELLINGS:
         assert spelling not in all_help
+    lowered = all_help.lower()
+    assert "auburn.instructure.com" not in lowered
+    assert "/casa/" not in lowered
+    assert "/volumes/casa/" not in lowered
 
     roster_help = render_help(("roster",), width=120, color=False)
     assert "--schema" not in roster_help
-    assert "LoginID" not in roster_help
+    assert "LoginID" in roster_help
+
+
+def test_progressive_help_states_global_and_command_specific_safety() -> None:
+    root = render_help((), width=120, color=False)
+    family = render_help(("assignments",), width=120, color=False)
+    mutation = render_help(("assignments", "update"), width=120, color=False)
+    local_sync = render_help(("pages", "sync"), width=120, color=False)
+    private = render_help(("submissions", "feedback"), width=120, color=False)
+
+    assert all(
+        fragment in root
+        for fragment in ("Start here:", "Effects:", "Privacy:", "--apply authorizes Canvas writes")
+    )
+    assert all(
+        heading in family
+        for heading in ("Common workflows:", "Identity:", "Privacy and safety:", "Related:")
+    )
+    assert all(
+        heading in mutation
+        for heading in (
+            "Effect:",
+            "Privacy:",
+            "Resolution:",
+            "Typical sequence:",
+            "Verification:",
+            "Failure boundary:",
+        )
+    )
+    assert "--apply" in mutation
+    assert "never mutates Canvas" in local_sync
+    assert "--apply" not in local_sync
+    assert ".danvas/private/" in private
