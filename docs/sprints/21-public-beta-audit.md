@@ -1,8 +1,9 @@
 # Sprint 21 Public Beta Audit
 
-Status: candidate evidence assembled on 2026-08-13. The audit-driven gate
-corrections are implementation-complete through `5f5f8dc`; the commit containing
-this record is the independent-review candidate. No `v0.18.0` tag, global CLI
+Status: independent public-boundary review accepted the public-beta claim for
+exact candidate `fcc83bb` on 2026-08-13. Its only requested pre-tag correction
+was a non-behavioral `0.19.0` credential-migration notice, now present in the
+public authentication and compatibility guides. No `v0.18.0` tag, global CLI
 replacement, GitHub Release, or PyPI publication has been authorized or
 performed.
 
@@ -155,6 +156,10 @@ substitute for checking the cross-release product.
 - Security route: [SECURITY.md](../../SECURITY.md) names GitHub private
   vulnerability reporting as primary. The repository setting was re-read on
   2026-08-13 and returned `{"enabled": true}`.
+- Forward compatibility: the [authentication](../authentication.md) and
+  [compatibility](../compatibility.md) guides state that the provider-specific
+  `0.18.0` credential surface has an accepted post-beta replacement design and
+  requires migration in `0.19.0`.
 - Distribution identity: PyPI's JSON API returned HTTP 200 for occupied
   `danvas` and HTTP 404 for `danvas-cli` on 2026-08-13. This is point-in-time
   naming evidence, not a claim that a package has been reserved or published.
@@ -184,8 +189,11 @@ substitute for checking the cross-release product.
    sprint documents pass Markdown lint.
 9. Secret scans: pinned Gitleaks 8.30.1 reported no finding in the current tree
    or all 186 reachable commits. No allowlist exists and no report was retained.
-10. Independent public-boundary review: open. The reviewer must explicitly
-    approve or reject the public-beta claim on the exact candidate.
+10. Independent public-boundary review: passed. On 2026-08-13, review of exact
+    candidate `fcc83bb` returned `ACCEPT PUBLIC BETA`, re-executed all 834 tests,
+    independently enumerated the command and artifact registries, and accepted
+    all seven threshold assessments. Its sole pre-tag finding was the
+    non-behavioral credential-migration notice now recorded in the public docs.
 
 ## Audit-Driven Corrections
 
@@ -226,13 +234,11 @@ behavior:
 
 The candidate is not yet a release. These steps remain ordered:
 
-1. independent review explicitly accepts the cross-release beta claim and
-   closes every finding;
-2. the resulting exact candidate is pushed and passes the complete remote CI
+1. the resulting exact candidate is pushed and passes the complete remote CI
    matrix;
-3. anonymous exact-candidate installation is repeated from that SHA;
-4. an authorized signed `v0.18.0` tag is created only then;
-5. tag CI and anonymous exact-tag installation pass; and
-6. only afterward may the global CLI and release records advance.
+2. anonymous exact-candidate installation is repeated from that SHA;
+3. an authorized signed `v0.18.0` tag is created only then;
+4. tag CI and anonymous exact-tag installation pass; and
+5. only afterward may the global CLI and release records advance.
 
 No live Canvas or Panopto operation is required or authorized for this audit.

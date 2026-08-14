@@ -333,8 +333,10 @@ distribution while preserving the `danvas` import package and executable. The
 Sprint 22 design review and Sprint 21 Group 0 characterization are complete.
 Groups 1 through 4 have passed focused review and exact-commit Group 4 CI is
 green at `c95cae8`. Group 5 has assembled the clean-machine and cross-release
-[public-beta audit](sprints/21-public-beta-audit.md) and awaits independent
-public-boundary review; final exact-candidate/tag installs remain release gates.
+[public-beta audit](sprints/21-public-beta-audit.md), and independent review
+returned `ACCEPT PUBLIC BETA` for exact candidate `fcc83bb`. Its sole
+non-behavioral documentation finding is closed; final exact-candidate, tag, and
+installation gates remain open.
 
 ## Accepted 0.20.0 Agent Interface Follow-On Design
 

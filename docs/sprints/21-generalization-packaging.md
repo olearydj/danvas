@@ -6,11 +6,12 @@ the final generalization and packaging slice of the accepted public-readiness
 program and targets `0.18.0`. Group 0 characterization is complete at
 `ded6b2e`; Groups 1 through 3 have passed focused review; and Group 4 CI and
 security hardening has passed focused review and exact-commit remote CI. Group 5
-has assembled the cross-release beta audit and awaits independent
-public-boundary review. The sprint does not authorize external publication,
-tagging, global installation, or live Canvas use. A separately authorized
-repository-setting change enabled GitHub private vulnerability reporting on
-2026-08-13.
+has assembled the cross-release beta audit, and independent public-boundary
+review accepted the public-beta claim for exact candidate `fcc83bb`. Final
+exact-candidate, tag, and installation gates remain open. The sprint does not
+authorize external publication, tagging, global installation, or live Canvas
+use. A separately authorized repository-setting change enabled GitHub private
+vulnerability reporting on 2026-08-13.
 
 The reviewed Python distribution name is `danvas-cli`. The Python import
 package and installed command remain `danvas`.
@@ -851,7 +852,7 @@ smoke. Group 4 is closed.
 ### Group 5: beta audit and release
 
 1. [x] Run the clean-machine quickstart and cross-release beta matrix.
-2. Obtain an independent public-boundary review and close every finding.
+2. [x] Obtain an independent public-boundary review and close every finding.
 3. Push the exact candidate and require branch CI on that SHA.
 4. Tag `v0.18.0` only after review and branch gates pass.
 5. Require signed-tag CI and anonymous exact-tag install before the global CLI
@@ -873,8 +874,11 @@ candidate now passes 834 tests at 84.99% branch-aware coverage, the 88.87%
 authored-assets module floor, Ruff, ty, ShellCheck, package inspection,
 editable/wheel smoke outside the checkout, documentation validation, and real
 zero-finding current-tree/all-history scans. Independent public-boundary review
-is the next gate; final exact-candidate CI and anonymous installation must be
-repeated after every accepted correction.
+accepted the public-beta claim for exact candidate `fcc83bb` on 2026-08-13. Its
+sole pre-tag finding was a non-behavioral `0.19.0` credential-migration notice,
+now present in the public authentication and compatibility guides. Final
+exact-candidate CI and anonymous installation must be repeated after this
+accepted correction.
 
 Each group lands in logical commits. Groups 1 through 3 receive focused review
 before CI/security hardening and the beta-claim audit build on their contracts.

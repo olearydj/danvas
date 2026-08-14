@@ -96,6 +96,10 @@ The following transition is active in `0.18.0`:
 
 - `roster --schema legacy-v1` remains available, warns, and is removed in
   `0.19.0`; use the default `LoginID` schema now.
+- The provider-specific authentication surface remains supported as documented
+  for `0.18.0`. An accepted post-beta design replaces it with provider-neutral
+  credential delivery in `0.19.0`; follow that release's migration guide before
+  upgrading authentication configuration or automation.
 
 These due aliases were removed in `0.18.0` and fail as unknown options:
 

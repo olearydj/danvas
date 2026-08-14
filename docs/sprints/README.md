@@ -304,8 +304,10 @@ as the distribution while preserving the `danvas` import and command. Sprint 22
 design review and Sprint 21 Group 0 characterization are complete. Groups 1
 through 4 have passed focused review and exact-commit Group 4 CI is green at
 `c95cae8`. Group 5's
-[public-beta audit](21-public-beta-audit.md) is assembled and awaits independent
-review of the cross-release beta claim.
+[public-beta audit](21-public-beta-audit.md) received an independent `ACCEPT
+PUBLIC BETA` verdict for exact candidate `fcc83bb`. The one requested
+non-behavioral credential-migration notice is closed; final exact-candidate,
+tag, and installation gates remain open.
 
 ## Accepted 0.19.0 Sprint 21.5 Credential Boundary
 

@@ -38,6 +38,16 @@ danvas auth doctor --profile example-university --check-canvas
 Do not commit shell files, `.env` files, password-manager output, or copied
 diagnostic transcripts containing credentials.
 
+## Planned Credential Boundary Change
+
+The provider-specific credential surface documented above remains the `0.18.0`
+contract. An accepted post-beta design replaces direct SecretPath integration,
+provider-specific options, and implicit dotenv loading with provider-neutral
+environment-variable and single-purpose credential-file delivery in `0.19.0`.
+Existing users should expect an authentication migration when upgrading and
+should follow the eventual `0.19.0` migration guide. No such behavior change is
+part of `0.18.0`.
+
 ## Credential Reference Precedence
 
 Credential references resolve independently from the Canvas URL:
