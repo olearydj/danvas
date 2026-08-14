@@ -5,10 +5,9 @@ operations. It helps instructors inspect courses, manage authored content,
 download submissions, reconcile grades, and retain evidence for consequential
 changes.
 
-Status: the signed `v0.18.0` release is the planned public beta, not a 1.0
-stability promise. Before that tag passes the release gates, this tree is a
-candidate and must not be represented as released. This is an unofficial
-project and is not affiliated with or endorsed by Instructure.
+Status: signed release `v0.18.0` is the first public beta, not a 1.0 stability
+promise. This is an unofficial project.
+It is not affiliated with or endorsed by Instructure.
 
 ## What It Does
 

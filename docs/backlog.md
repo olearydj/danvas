@@ -318,7 +318,7 @@ commit without findings. Branch and signed-tag CI passed on
 3.14, dependency audit, coverage, and isolated installation smoke. The global
 CLI is installed from the verified tag and reports `danvas 0.17.0`.
 
-## Accepted 0.18.0 Generalization And Public Beta Design
+## 0.18.0 Generalization And Public Beta Release
 
 Sprint 21 is the accepted final design slice of the public-readiness program:
 
@@ -334,9 +334,10 @@ Sprint 22 design review and Sprint 21 Group 0 characterization are complete.
 Groups 1 through 4 have passed focused review and exact-commit Group 4 CI is
 green at `c95cae8`. Group 5 has assembled the clean-machine and cross-release
 [public-beta audit](sprints/21-public-beta-audit.md), and independent review
-returned `ACCEPT PUBLIC BETA` for exact candidate `fcc83bb`. Its sole
-non-behavioral documentation finding is closed; final exact-candidate, tag, and
-installation gates remain open.
+returned `ACCEPT PUBLIC BETA`. Corrected release commit `c12baef` passed exact
+branch and signed-tag CI plus anonymous SHA/tag installations. The verified tag
+is installed globally as `danvas-cli 0.18.0`; no GitHub Release or PyPI
+publication was performed.
 
 ## Accepted 0.20.0 Agent Interface Follow-On Design
 

@@ -3,7 +3,7 @@
 This file records operator-visible release changes. Detailed transition steps
 live in the linked migration guides.
 
-## 0.18.0 - Public Beta Candidate
+## 0.18.0 - Public Beta
 
 Sprint 21 completes the public-readiness program:
 

@@ -296,7 +296,8 @@ file-upload plus comment-edit sequence, followed by exact readback and cleanup.
 Supplemental review accepted exact commit `f34d32f`; branch and signed-tag CI
 passed on that commit, and the verified tag is installed globally.
 
-Sprint 21 is accepted as the `0.18.0` public-beta design. It generalizes source,
+Sprint 21 is released as signed tag `v0.18.0`, the first public beta. It
+generalizes source,
 inventory, gradebook, and Panopto conventions; removes compatibility flags due
 in 0.18.0; completes anonymous packaging and public documentation; and adds the
 declared macOS/Python/security matrix. Independent review selected `danvas-cli`
@@ -305,9 +306,10 @@ design review and Sprint 21 Group 0 characterization are complete. Groups 1
 through 4 have passed focused review and exact-commit Group 4 CI is green at
 `c95cae8`. Group 5's
 [public-beta audit](21-public-beta-audit.md) received an independent `ACCEPT
-PUBLIC BETA` verdict for exact candidate `fcc83bb`. The one requested
-non-behavioral credential-migration notice is closed; final exact-candidate,
-tag, and installation gates remain open.
+PUBLIC BETA` verdict. Corrected release commit `c12baef` passed exact branch and
+tag CI plus anonymous SHA/tag installations; the verified tag is installed
+globally as `danvas-cli 0.18.0`. No GitHub Release or PyPI publication was
+performed.
 
 ## Accepted 0.19.0 Sprint 21.5 Credential Boundary
 

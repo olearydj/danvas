@@ -1,17 +1,12 @@
 # Sprint 21: Generalization, Packaging, And Public Beta
 
-Status: design accepted on 2026-08-13 after independent review. Sprints 18
-through 20 are released as `v0.15.x`, `v0.16.0`, and `v0.17.0`. This sprint is
-the final generalization and packaging slice of the accepted public-readiness
-program and targets `0.18.0`. Group 0 characterization is complete at
-`ded6b2e`; Groups 1 through 3 have passed focused review; and Group 4 CI and
-security hardening has passed focused review and exact-commit remote CI. Group 5
-has assembled the cross-release beta audit, and independent public-boundary
-review accepted the public-beta claim for exact candidate `fcc83bb`. Final
-exact-candidate, tag, and installation gates remain open. The sprint does not
-authorize external publication, tagging, global installation, or live Canvas
-use. A separately authorized repository-setting change enabled GitHub private
-vulnerability reporting on 2026-08-13.
+Status: released as the first public beta in signed tag `v0.18.0` on 2026-08-13.
+Independent public-boundary review accepted the cross-release beta claim; exact
+release commit `c12baef7de61e31333bc976c0bee4dba967b715b` passed branch and tag
+CI plus anonymous SHA/tag installation, and the verified tag is installed
+globally. No GitHub Release, PyPI publication, or live Canvas operation was
+authorized or performed. A separately authorized repository-setting change
+enabled GitHub private vulnerability reporting on 2026-08-13.
 
 The reviewed Python distribution name is `danvas-cli`. The Python import
 package and installed command remain `danvas`.
@@ -853,9 +848,9 @@ smoke. Group 4 is closed.
 
 1. [x] Run the clean-machine quickstart and cross-release beta matrix.
 2. [x] Obtain an independent public-boundary review and close every finding.
-3. Push the exact candidate and require branch CI on that SHA.
-4. Tag `v0.18.0` only after review and branch gates pass.
-5. Require signed-tag CI and anonymous exact-tag install before the global CLI
+3. [x] Push the exact candidate and require branch CI on that SHA.
+4. [x] Tag `v0.18.0` only after review and branch gates pass.
+5. [x] Require signed-tag CI and anonymous exact-tag install before the global CLI
    advances or public docs call the release complete.
 
 The [public-beta audit](21-public-beta-audit.md) maps all seven threshold items
@@ -876,9 +871,13 @@ editable/wheel smoke outside the checkout, documentation validation, and real
 zero-finding current-tree/all-history scans. Independent public-boundary review
 accepted the public-beta claim for exact candidate `fcc83bb` on 2026-08-13. Its
 sole pre-tag finding was a non-behavioral `0.19.0` credential-migration notice,
-now present in the public authentication and compatibility guides. Final
-exact-candidate CI and anonymous installation must be repeated after this
-accepted correction.
+now present in the public authentication and compatibility guides. Corrected
+release commit `c12baef7de61e31333bc976c0bee4dba967b715b` passed branch
+[CI run 31761997926](https://github.com/olearydj/danvas/actions/runs/31761997926)
+and tag
+[CI run 31762121891](https://github.com/olearydj/danvas/actions/runs/31762121891).
+Anonymous installations passed for both the exact SHA and `v0.18.0`; the global
+CLI now reports `danvas 0.18.0` from `danvas-cli`.
 
 Each group lands in logical commits. Groups 1 through 3 receive focused review
 before CI/security hardening and the beta-claim audit build on their contracts.

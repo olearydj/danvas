@@ -1,11 +1,11 @@
 # Sprint 21 Public Beta Audit
 
-Status: independent public-boundary review accepted the public-beta claim for
-exact candidate `fcc83bb` on 2026-08-13. Its only requested pre-tag correction
-was a non-behavioral `0.19.0` credential-migration notice, now present in the
-public authentication and compatibility guides. No `v0.18.0` tag, global CLI
-replacement, GitHub Release, or PyPI publication has been authorized or
-performed.
+Status: complete. Independent public-boundary review accepted the public-beta
+claim for exact candidate `fcc83bb` on 2026-08-13. Its only requested pre-tag
+correction was a non-behavioral `0.19.0` credential-migration notice. Corrected
+release commit `c12baef7de61e31333bc976c0bee4dba967b715b` passed exact branch
+and signed-tag CI, anonymous candidate/tag installation, and global replacement
+as `v0.18.0`. No GitHub Release or PyPI publication was authorized or performed.
 
 ## Audit Question
 
@@ -14,9 +14,9 @@ Does the exact candidate satisfy the seven-part public-beta threshold from
 beyond the beta, platform, authentication, and experimental-integration limits
 stated in the public documentation?
 
-This audit covers the released `0.15.x`, `0.16.0`, and `0.17.0` boundaries plus
-the complete `0.18.0` candidate. It does not treat a green Sprint 21 diff as a
-substitute for checking the cross-release product.
+This audit covers the released `0.15.x`, `0.16.0`, `0.17.0`, and `0.18.0`
+boundaries. It does not treat a green Sprint 21 diff as a substitute for
+checking the cross-release product.
 
 ## Cross-Release Threshold Matrix
 
@@ -121,13 +121,13 @@ substitute for checking the cross-release product.
   [configuration guide](../configuration.md), and
   [0.18.0 migration guide](../migrations/0.18.0.md) use only anonymous HTTPS,
   placeholder institutions/IDs, and public paths.
-- Candidate evidence: exact public commit `c95cae8` passed the real anonymous
-  install, version, root help, local-only help, offline doctor, standard-layout,
-  and legacy-layout fixture under an isolated home/config root. A real isolated
-  `v0.17.0` `danvas` uninstall followed by exact-candidate `danvas-cli` install
-  also produced one `danvas 0.18.0` executable and no legacy distribution.
-- Assessment: met provisionally; repeat against the final pushed candidate and
-  exact tag remains mandatory.
+- Release evidence: exact commit
+  `c12baef7de61e31333bc976c0bee4dba967b715b` and tag `v0.18.0` each passed the
+  real anonymous install, version, root help, local-only help, offline doctor,
+  standard-layout, and legacy-layout fixture under an isolated home/config
+  root. Global replacement removed the `danvas 0.17.0` distribution, installed
+  `danvas-cli 0.18.0` from the tag, and left one `danvas 0.18.0` executable.
+- Assessment: met.
 
 ### 6. Declared platform and Python support matches CI
 
@@ -138,11 +138,13 @@ substitute for checking the cross-release product.
   and isolated install smoke on macOS 3.13.
 - Public contract: [compatibility](../compatibility.md) names that exact support
   range and explains why Windows is outside the private-file contract.
-- Candidate evidence: exact commit `c95cae87f35d2a502f290cabf844b37710813c75`
-  passed every job in
-  [CI run 31760904461](https://github.com/olearydj/danvas/actions/runs/31760904461),
+- Release evidence: exact release commit
+  `c12baef7de61e31333bc976c0bee4dba967b715b` passed every job in branch
+  [CI run 31761997926](https://github.com/olearydj/danvas/actions/runs/31761997926)
+  and tag
+  [CI run 31762121891](https://github.com/olearydj/danvas/actions/runs/31762121891),
   including the pinned current-tree/history secret scan and final install smoke.
-- Assessment: met; repeat on the final review candidate remains mandatory.
+- Assessment: met.
 
 ### 7. Self-contained public documentation
 
@@ -171,8 +173,8 @@ substitute for checking the cross-release product.
    commands, 15 mutation-capable commands, zero bare mutators, 33
    course-internal artifact policies, and 18 private policies. Architecture and
    bidirectional CLI tests pass.
-2. Anonymous exact-candidate install: passed provisionally at `c95cae8`; final
-   candidate and tag repetitions remain open.
+2. Anonymous exact-candidate install: passed at exact release commit `c12baef`;
+   the independent exact-tag repetition also passed for `v0.18.0`.
 3. Version/help/offline checks outside checkout: passed under an empty
    environment and isolated home for `danvas --version`, root help,
    `sources lint --help`, and offline `auth doctor`.
@@ -181,8 +183,10 @@ substitute for checking the cross-release product.
 5. Existing-project legacy fixture: passed through the exact installed package;
    a source-less project retained the assignment case pattern and quiz chapter
    pattern.
-6. Linux/macOS private-artifact evidence: passed in exact
-   [CI run 31760904461](https://github.com/olearydj/danvas/actions/runs/31760904461).
+6. Linux/macOS private-artifact evidence: passed in exact branch
+   [CI run 31761997926](https://github.com/olearydj/danvas/actions/runs/31761997926)
+   and tag
+   [CI run 31762121891](https://github.com/olearydj/danvas/actions/runs/31762121891).
 7. Package and wheel inspection: passed for sdist and wheel metadata, `LICENSE`,
    import package, single executable, editable install, and wheel install.
 8. Public-document validation: 12 files passed the offline checker; changed
@@ -223,22 +227,22 @@ behavior:
 - Documentation gate: all 12 public files passed the offline link/anchor check.
 - Security gate: current-tree and all-history scans passed with zero finding;
   private vulnerability reporting is enabled.
-- Remote platform gate: `c95cae8` passed exact
-  [CI run 31760904461](https://github.com/olearydj/danvas/actions/runs/31760904461).
+- Remote platform gate: exact release commit `c12baef` passed branch
+  [CI run 31761997926](https://github.com/olearydj/danvas/actions/runs/31761997926)
+  and signed-tag
+  [CI run 31762121891](https://github.com/olearydj/danvas/actions/runs/31762121891).
 - Historical release gates: signed-tag CI passed for
   [`v0.15.1`](https://github.com/olearydj/danvas/actions/runs/31714116836),
   [`v0.16.0`](https://github.com/olearydj/danvas/actions/runs/31736147017), and
   [`v0.17.0`](https://github.com/olearydj/danvas/actions/runs/31749638335).
 
-## Gates Still Open
+## Release Result
 
-The candidate is not yet a release. These steps remain ordered:
-
-1. the resulting exact candidate is pushed and passes the complete remote CI
-   matrix;
-2. anonymous exact-candidate installation is repeated from that SHA;
-3. an authorized signed `v0.18.0` tag is created only then;
-4. tag CI and anonymous exact-tag installation pass; and
-5. only afterward may the global CLI and release records advance.
+All ordered release gates passed. Signed tag `v0.18.0` resolves to exact commit
+`c12baef7de61e31333bc976c0bee4dba967b715b`; branch and tag CI passed on that
+commit; independent anonymous installations passed for the SHA and tag; and the
+global CLI now reports `danvas 0.18.0` from the `danvas-cli` distribution. This
+release may use the public-beta label. GitHub Release creation and PyPI
+publication remain separately authorized actions and were not performed.
 
 No live Canvas or Panopto operation is required or authorized for this audit.

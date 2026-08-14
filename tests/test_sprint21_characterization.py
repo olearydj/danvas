@@ -315,8 +315,8 @@ def test_public_documentation_suite_and_anonymous_install_are_declared() -> None
         in readme
     )
     assert "git+ssh" not in readme
-    assert "signed `v0.18.0` release is the planned public beta" in readme
-    assert "must not be represented as released" in readme
+    assert "signed release `v0.18.0` is the first public beta" in readme
+    assert "must not be represented as released" not in readme
     assert "not affiliated with or endorsed by Instructure" in readme
     public_text = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in expected)
     assert "/Users/" not in public_text
