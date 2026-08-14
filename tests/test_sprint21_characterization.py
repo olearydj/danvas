@@ -325,22 +325,33 @@ def test_public_documentation_suite_and_anonymous_install_are_declared() -> None
     assert "git+ssh" not in public_text
 
 
-def test_ci_and_secret_scan_gaps_are_frozen() -> None:
+def test_ci_and_secret_scan_contract_is_enforced() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    uses = Counter(re.findall(r"^\s*- uses:\s+(\S+)$", workflow, flags=re.MULTILINE))
+    uses = Counter(re.findall(r"^\s*- uses:\s+(\S+)", workflow, flags=re.MULTILINE))
 
-    assert 'python-version: ["3.12", "3.14"]' in workflow
-    assert workflow.count("runs-on: ubuntu-latest") == 2
-    assert "macos-latest" not in workflow
-    assert "permissions:" not in workflow
+    assert 'python-version: ["3.12", "3.13", "3.14"]' in workflow
+    assert workflow.count("runs-on: ubuntu-latest") == 3
+    assert workflow.count("runs-on: macos-latest") == 1
+    assert "permissions:\n  contents: read" in workflow
+    assert "pull_request_target" not in workflow
+    assert "${{ secrets." not in workflow
     assert uses == Counter(
         {
-            "actions/checkout@v7.0.1": 2,
-            "astral-sh/setup-uv@v9.0.0": 2,
+            "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 4,
+            "astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9": 3,
         }
     )
-    assert "gitleaks" not in workflow.lower()
-    assert not any("gitleaks" in path.name.lower() for path in (ROOT / "scripts").iterdir())
+    assert "# v7.0.1" in workflow
+    assert "# v9.0.0" in workflow
+    assert "fetch-depth: 0" in workflow
+    assert "scripts/check-secrets.sh" in workflow
+    assert "tests/test_artifacts.py" in workflow
+    assert "scripts/release-smoke.sh" in workflow
+
+    script = (ROOT / "scripts/check-secrets.sh").read_text(encoding="utf-8")
+    assert 'GITLEAKS_VERSION="8.30.1"' in script
+    assert "--redact=100" in script
+    assert "--log-opts=--all" in script
 
 
 def test_public_fixtures_use_placeholder_hosts_and_ids() -> None:

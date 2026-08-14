@@ -6,16 +6,19 @@ on:
     tags: ["v*"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   checks:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.14"]
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: astral-sh/setup-uv@v9.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.12.3"
           python-version: ${{ matrix.python-version }}
@@ -34,12 +37,54 @@ jobs:
           uv run python scripts/check-module-coverage.py \
             /tmp/danvas-coverage.json src/danvas/authored_assets.py 82
 
-  install-smoke:
-    needs: checks
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.3"
+          python-version: "3.13"
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check .
+      - name: Typecheck
+        run: uv run ty check
+      - name: Audit dependencies
+        run: uv run pip-audit --skip-editable
+      - name: Test
+        run: |
+          uv run pytest --cov=danvas --cov-branch --cov-report=term-missing \
+            --cov-report=json:/tmp/danvas-coverage.json --cov-fail-under=82
+          uv run python scripts/check-module-coverage.py \
+            /tmp/danvas-coverage.json src/danvas/authored_assets.py 82
+      - name: Verify POSIX privacy and recovery contracts
+        run: |
+          uv run pytest \
+            tests/test_artifacts.py \
+            tests/test_reports.py \
+            tests/test_source_map.py \
+            tests/test_submissions.py \
+            tests/test_panopto.py
+      - name: Build and verify isolated CLI installs
+        run: scripts/release-smoke.sh
+
+  secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: astral-sh/setup-uv@v9.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Scan current tree and all reachable history
+        run: scripts/check-secrets.sh
+
+  install-smoke:
+    needs: [checks, macos, secret-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: "0.12.3"
           python-version: "3.14"
