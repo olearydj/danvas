@@ -1199,9 +1199,10 @@ def test_removed_compatibility_options_fail_before_context_or_output(
     )
 
     assert result.exit_code != 0
-    assert removed_option in result.output
-    assert "No such option" in result.output
-    assert "context resolved" not in result.output
+    rendered = normalized_cli_output(result)
+    assert removed_option in rendered
+    assert "No such option" in rendered
+    assert "context resolved" not in rendered
     assert not output.exists()
 
 
