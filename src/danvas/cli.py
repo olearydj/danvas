@@ -3700,17 +3700,31 @@ def recordings_panopto_captions(
         typer.Option("--dry-run", help="Write manifests without downloading caption files."),
     ] = False,
     caption_language: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--caption-language",
             help="Panopto caption language value used by the transcript export endpoint.",
         ),
-    ] = "English_USA",
+    ] = None,
     panopto_base_url: Annotated[
         str | None,
         typer.Option(
             "--panopto-base-url",
             help="Override Panopto base URL. Defaults to the Canvas Panopto tool domain.",
+        ),
+    ] = None,
+    panopto_tool_name: Annotated[
+        str | None,
+        typer.Option(
+            "--panopto-tool-name",
+            help="Exact case-insensitive Canvas navigation label for the Panopto tool.",
+        ),
+    ] = None,
+    panopto_tool_id: Annotated[
+        int | None,
+        typer.Option(
+            "--panopto-tool-id",
+            help="Exact Canvas external-tool ID for deterministic Panopto selection.",
         ),
     ] = None,
     profile: ProfileName = None,
@@ -3731,6 +3745,8 @@ def recordings_panopto_captions(
             dry_run=dry_run,
             caption_language=caption_language,
             panopto_base_url=panopto_base_url,
+            panopto_tool_name=panopto_tool_name,
+            panopto_tool_id=panopto_tool_id,
             overwrite=overwrite,
             project_root=str(project_root),
             profile=profile,

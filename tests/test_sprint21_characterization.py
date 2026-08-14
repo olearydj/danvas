@@ -238,9 +238,7 @@ def test_deprecated_options_and_panopto_language_default_are_frozen() -> None:
     assert roster_schema.default == "v2"
     assert isinstance(roster_schema.type, click.Choice)
     assert tuple(roster_schema.type.choices) == ("v2", "legacy-v1")
-    assert option(commands["recordings panopto-captions"], "--caption-language").default == (
-        "English_USA"
-    )
+    assert option(commands["recordings panopto-captions"], "--caption-language").default is None
 
 
 def test_invalid_init_timezone_fails_before_canvas_context(

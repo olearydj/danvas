@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 import requests
 
+from danvas.artifacts import write_private_pair
 from danvas.panopto import (
     caption_filename_from_response,
     collect_lti_sessions,
@@ -17,6 +18,7 @@ from danvas.panopto import (
     download_lti_caption,
     normalize_panopto_base_url,
     parse_panopto_date,
+    resolve_panopto_settings,
     write_caption_outputs,
 )
 
@@ -239,7 +241,7 @@ def test_download_lti_caption_writes_sanitized_caption_file(tmp_path: Path) -> N
     }
 
 
-def test_interrupted_bundle_currently_redownloads_with_unique_suffix(tmp_path: Path) -> None:
+def test_interrupted_bundle_reuses_valid_pair_without_network_or_suffix(tmp_path: Path) -> None:
     web = FakePanoptoSession(
         caption_content=b"caption text\n",
         caption_headers={"content-disposition": 'attachment; filename="Lecture One.txt"'},
@@ -274,10 +276,11 @@ def test_interrupted_bundle_currently_redownloads_with_unique_suffix(tmp_path: P
 
     manifest = json.loads((tmp_path / "artifact-manifest.json").read_text(encoding="utf-8"))
     retried_name = manifest["sessions"][0]["caption_path"]
-    assert retried_name == f"{interrupted_path.stem}-2{interrupted_path.suffix}"
-    assert interrupted_path.name not in manifest["files"]
+    assert retried_name == interrupted_path.name
+    assert manifest["sessions"][0]["status"] == "reused_after_interruption"
+    assert interrupted_path.name in manifest["files"]
     assert retried_name in manifest["files"]
-    assert len(web.get_calls) == 2
+    assert len(web.get_calls) == 1
 
 
 def test_write_caption_outputs_dry_run_writes_manifests_without_downloading(
@@ -315,6 +318,7 @@ def test_write_caption_outputs_dry_run_writes_manifests_without_downloading(
     assert manifest["artifact_class"] == "private"
     assert manifest["sessions"][0]["status"] == "caption_available"
     assert manifest["sessions"][0]["caption_path"] == ""
+    assert manifest["integration_settings"]["caption_language"] == "English_USA"
     assert "viewer" not in json.dumps(manifest).lower()
     assert "ViewerUrl" not in (tmp_path / "manifest.csv").read_text(encoding="utf-8")
     assert (tmp_path / "manifest.csv").is_file()
@@ -325,6 +329,304 @@ def test_write_caption_outputs_dry_run_writes_manifests_without_downloading(
     assert "Lecture 1" not in terminal
     assert "session-one" not in terminal
     assert "viewer" not in terminal.lower()
+
+
+def test_completed_caption_bundle_is_no_clobber_by_default(tmp_path: Path) -> None:
+    session = {"SessionID": "session-one", "HasCaptions": False}
+    web = FakePanoptoSession()
+    write_caption_outputs(
+        web,
+        [session],
+        "https://panopto.example",
+        output_dir=tmp_path,
+        dry_run=True,
+        language="English_USA",
+        course_id=101,
+        panopto_tool={"id": 202},
+    )
+
+    with pytest.raises(SystemExit, match="Refusing to overwrite"):
+        write_caption_outputs(
+            web,
+            [session],
+            "https://panopto.example",
+            output_dir=tmp_path,
+            dry_run=True,
+            language="English_USA",
+            course_id=101,
+            panopto_tool={"id": 202},
+        )
+
+    assert web.get_calls == []
+
+
+def test_manifest_records_effective_non_authorizing_integration_settings(
+    tmp_path: Path,
+) -> None:
+    settings = {
+        "caption_language": "French_FRA",
+        "tool_name": "Panopto Video",
+        "tool_id": 202,
+        "base_url": "https://media.example.edu",
+    }
+    write_caption_outputs(
+        FakePanoptoSession(),
+        [{"SessionID": "session-one", "HasCaptions": False}],
+        "https://media.example.edu",
+        output_dir=tmp_path,
+        dry_run=True,
+        language="French_FRA",
+        course_id=101,
+        panopto_tool={"id": 202, "name": "Panopto Video"},
+        integration_settings=settings,
+    )
+
+    manifest = json.loads((tmp_path / "artifact-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["integration_settings"] == settings
+    assert "launch" not in json.dumps(manifest).lower()
+    assert "signed" not in json.dumps(manifest).lower()
+
+
+def test_panopto_settings_use_cli_then_project_then_fallback(tmp_path: Path) -> None:
+    config_dir = tmp_path / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        "[canvas]\ncourse_id = 101\n\n"
+        "[integrations.panopto]\n"
+        "caption_language = 'French_FRA'\n"
+        "tool_name = 'Panopto Video'\n"
+        "base_url = 'https://media.example.edu/'\n",
+        encoding="utf-8",
+    )
+
+    configured = resolve_panopto_settings(SimpleNamespace(project_root=str(tmp_path)))
+    explicit = resolve_panopto_settings(
+        SimpleNamespace(
+            project_root=str(tmp_path),
+            caption_language="German_DEU",
+            panopto_tool_name=None,
+            panopto_tool_id=303,
+            panopto_base_url="https://video.example.edu",
+        )
+    )
+    fallback_root = tmp_path.parent / f"{tmp_path.name}-fallback"
+    fallback_root.mkdir()
+    fallback = resolve_panopto_settings(SimpleNamespace(project_root=str(fallback_root)))
+
+    assert configured.caption_language == "French_FRA"
+    assert configured.tool_name == "Panopto Video"
+    assert configured.base_url == "https://media.example.edu"
+    assert explicit.caption_language == "German_DEU"
+    assert explicit.tool_name is None
+    assert explicit.tool_id == 303
+    assert explicit.base_url == "https://video.example.edu"
+    assert fallback.caption_language == "English_USA"
+
+
+@pytest.mark.parametrize(
+    ("panopto_toml", "message"),
+    [
+        ("unknown = 'value'", "integrations.panopto.unknown"),
+        ("caption_language = 4", "caption_language must be a non-empty string"),
+        (
+            "tool_name = 'Panopto'\ntool_id = 202",
+            "either integrations.panopto.tool_name",
+        ),
+        ("base_url = 'http://media.example.edu'", "must be an HTTPS origin"),
+        ("base_url = 'https://user@media.example.edu'", "must be an HTTPS origin"),
+        ("base_url = 'https://media.example.edu/path'", "must be an HTTPS origin"),
+    ],
+)
+def test_invalid_panopto_config_fails_before_secret_resolution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    panopto_toml: str,
+    message: str,
+) -> None:
+    config_dir = tmp_path / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        "[canvas]\ncourse_id = 101\napi_url = 'https://canvas.example.edu/'\n\n"
+        f"[integrations.panopto]\n{panopto_toml}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "danvas.panopto.resolve_api_key",
+        lambda **kwargs: pytest.fail("secret resolution must not run"),
+    )
+
+    with pytest.raises(SystemExit, match=message):
+        command_panopto_captions(
+            SimpleNamespace(
+                project_root=str(tmp_path),
+                output_dir=str(tmp_path / "captions"),
+                overwrite=False,
+            )
+        )
+
+
+def test_configured_tool_name_is_exact_case_insensitive_and_ambiguity_rejected() -> None:
+    canvas = FakeCanvasSession(
+        [
+            FakeResponse(
+                [
+                    {"id": 201, "name": "Panopto Archive", "domain": "old.example.edu"},
+                    {"id": 202, "name": "Panopto Video", "domain": "media.example.edu"},
+                ]
+            )
+        ]
+    )
+
+    tool = discover_panopto_tool(
+        canvas,
+        "https://canvas.example.edu/",
+        101,
+        tool_name="panopto video",
+    )
+
+    assert tool["id"] == 202
+
+    ambiguous = FakeCanvasSession(
+        [
+            FakeResponse(
+                [
+                    {"id": 201, "name": "Panopto Video"},
+                    {"id": 202, "name": "PANOPTO VIDEO"},
+                ]
+            )
+        ]
+    )
+    with pytest.raises(SystemExit, match="ambiguous"):
+        discover_panopto_tool(
+            ambiguous,
+            "https://canvas.example.edu/",
+            101,
+            tool_name="Panopto Video",
+        )
+
+
+def test_configured_tool_id_unknown_is_truthfully_rejected() -> None:
+    canvas = FakeCanvasSession([FakeResponse([]), FakeResponse([])])
+
+    with pytest.raises(SystemExit, match="ID 303 was not found"):
+        discover_panopto_tool(
+            canvas,
+            "https://canvas.example.edu/",
+            101,
+            tool_id=303,
+        )
+
+
+@pytest.mark.parametrize("damage", ["missing_sidecar", "tampered", "orphan_sidecar"])
+def test_interrupted_bundle_rejects_invalid_pairs_without_redownload(
+    tmp_path: Path, damage: str
+) -> None:
+    web = FakePanoptoSession(
+        caption_content=b"caption text\n",
+        caption_headers={"content-disposition": 'attachment; filename="Lecture.txt"'},
+    )
+    session = {
+        "SessionID": "session-one",
+        "SessionName": "Lecture",
+        "DeliveryID": "delivery-one",
+        "HasCaptions": True,
+        "StartTime": "2026-06-01T18:00:00",
+    }
+    target = download_lti_caption(
+        web,
+        "https://panopto.example",
+        session,
+        output_dir=tmp_path,
+        language="English_USA",
+    )
+    sidecar = target.with_name(f"{target.name}.artifact.json")
+    if damage == "missing_sidecar":
+        sidecar.unlink()
+    elif damage == "tampered":
+        target.write_bytes(b"changed")
+    else:
+        target.unlink()
+
+    with pytest.raises(SystemExit):
+        write_caption_outputs(
+            web,
+            [session],
+            "https://panopto.example",
+            output_dir=tmp_path,
+            dry_run=False,
+            language="English_USA",
+            course_id=101,
+            panopto_tool={"id": 202, "name": "Panopto Video"},
+        )
+
+    assert len(web.get_calls) == 1
+    assert not (tmp_path / "artifact-manifest.json").exists()
+
+
+def test_interrupted_bundle_rejects_duplicate_session_sidecars(tmp_path: Path) -> None:
+    write_private_pair(
+        tmp_path / "one.txt",
+        b"one",
+        command="recordings panopto-captions",
+        sidecar_fields={"session_id": "session-one"},
+    )
+    write_private_pair(
+        tmp_path / "two.txt",
+        b"two",
+        command="recordings panopto-captions",
+        sidecar_fields={"session_id": "session-one"},
+    )
+
+    with pytest.raises(SystemExit, match="duplicate session identity"):
+        write_caption_outputs(
+            FakePanoptoSession(),
+            [{"SessionID": "session-one", "HasCaptions": True}],
+            "https://panopto.example",
+            output_dir=tmp_path,
+            dry_run=False,
+            language="English_USA",
+            course_id=101,
+            panopto_tool={"id": 202},
+        )
+
+
+def test_cross_session_filename_collision_blocks_without_suffix_or_manifest(
+    tmp_path: Path,
+) -> None:
+    web = FakePanoptoSession(
+        caption_content=b"caption text\n",
+        caption_headers={"content-disposition": 'attachment; filename="Lecture.txt"'},
+    )
+    first = {
+        "SessionID": "session-one",
+        "DeliveryID": "delivery-one",
+        "HasCaptions": True,
+        "StartTime": "2026-06-01T18:00:00",
+    }
+    second = {**first, "SessionID": "session-two", "DeliveryID": "delivery-two"}
+    target = download_lti_caption(
+        web,
+        "https://panopto.example",
+        first,
+        output_dir=tmp_path,
+        language="English_USA",
+    )
+
+    with pytest.raises(SystemExit, match="will not create a suffixed duplicate"):
+        write_caption_outputs(
+            web,
+            [first, second],
+            "https://panopto.example",
+            output_dir=tmp_path,
+            dry_run=False,
+            language="English_USA",
+            course_id=101,
+            panopto_tool={"id": 202},
+        )
+
+    assert target.is_file()
+    assert not any(path.stem.endswith("-2") for path in tmp_path.iterdir())
+    assert not (tmp_path / "artifact-manifest.json").exists()
 
 
 def test_panopto_requires_private_destination_before_auth(
