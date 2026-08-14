@@ -267,7 +267,7 @@ def test_invalid_init_timezone_fails_before_canvas_context(
     assert not (tmp_path / ".danvas").exists()
 
 
-def test_public_beta_package_metadata_advances_to_credential_boundary_candidate() -> None:
+def test_public_beta_package_metadata_matches_released_credential_boundary() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project = pyproject["project"]
 
@@ -307,11 +307,11 @@ def test_public_documentation_suite_and_anonymous_install_are_declared() -> None
 
     assert observed == expected
     assert (
-        'danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.18.0'
+        'danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.19.0'
         in readme
     )
     assert "git+ssh" not in readme
-    assert "signed release `v0.18.0` is the first public beta" in readme
+    assert "signed release `v0.19.0` is the latest public beta" in readme
     assert "must not be represented as released" not in readme
     assert "not affiliated with or endorsed by Instructure" in readme
     public_text = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in expected)

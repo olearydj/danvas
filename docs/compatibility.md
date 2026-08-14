@@ -1,13 +1,12 @@
 # Compatibility And Support
 
-The signed `v0.18.0` release is the planned public beta, not a 1.0 stability
-promise. A source tree before the tag completes its release gates remains a
+The signed `v0.19.0` release is the latest public beta, not a 1.0 stability
+promise. A source tree before its tag completes the release gates remains a
 candidate. This project is unofficial and is not affiliated with or endorsed
 by Instructure.
 
-The current source tree targets `0.19.0` and carries a deliberate authentication
-boundary break. The released `v0.18.0` interface remains the rollback point
-until the candidate is reviewed and tagged.
+Version `0.19.0` carries a deliberate authentication-boundary break. Signed
+`v0.18.0` remains the documented rollback point for that transition.
 
 ## Supported Runtime
 
@@ -96,13 +95,13 @@ Panopto deployment.
 
 ## Compatibility Lifetimes
 
-The `0.19.0` candidate removes the provider-specific authentication interface
+Version `0.19.0` removes the provider-specific authentication interface
 and the deprecated alternate roster schema. Authentication now accepts only
 provider-neutral environment or credential-file locators, and roster export is
 `LoginID`-only. Stale automation fails loudly rather than silently choosing a
 different credential source.
 
-The candidate also requires a user-controlled binding between the selected
+The release also requires a user-controlled binding between the selected
 credential and effective Canvas origin. Many existing projects with only a
 project URL will fail their first authenticated command until a matching
 profile, invocation URL, or environment URL establishes that intent. Follow the

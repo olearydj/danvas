@@ -18,8 +18,8 @@ Sprint 21.5 moves provider choice outside danvas:
 - documents optional external SecretSpec, 1Password, CI, and platform-mount
   patterns without making any provider a danvas dependency.
 
-This source tree remains a release candidate until the independent security
-review and exact branch/tag gates complete.
+Released as signed tag `v0.19.0` after independent security review and exact
+branch/tag, anonymous-install, and live read-only authentication gates.
 
 See [Migrating to 0.19.0](docs/migrations/0.19.0.md).
 

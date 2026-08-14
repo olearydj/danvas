@@ -28,7 +28,7 @@ No user or project configuration can restore mutation-on-omission.
 
 ## Commands Requiring Apply
 
-The `0.18.0` Canvas-mutation surface is:
+The current Canvas-mutation surface is:
 
 - `assignments overrides-sync`
 - `assignments create`

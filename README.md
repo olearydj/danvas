@@ -5,14 +5,9 @@ operations. It helps instructors inspect courses, manage authored content,
 download submissions, reconcile grades, and retain evidence for consequential
 changes.
 
-Status: signed release `v0.18.0` is the first public beta, not a 1.0 stability
+Status: signed release `v0.19.0` is the latest public beta, not a 1.0 stability
 promise. This is an unofficial project.
 It is not affiliated with or endorsed by Instructure.
-
-The current source tree is the `0.19.0` credential-boundary candidate. Its
-documentation describes the candidate interface; the install command below
-remains pinned to the latest released tag until the candidate passes release
-review.
 
 ## What It Does
 
@@ -39,18 +34,19 @@ permission contract there.
 
 ## Install
 
-Install the exact `0.18.0` tag anonymously over HTTPS:
+Install the exact `0.19.0` tag anonymously over HTTPS:
 
 ```bash
 uv tool install \
-  "danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.18.0"
+  "danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.19.0"
 ```
 
 The Python distribution is named `danvas-cli`; the installed command and import
-package remain `danvas`. Users upgrading from `0.17.x` must remove the old
-distribution first. Follow the
-[0.18.0 migration guide](docs/migrations/0.18.0.md) rather than forcing one
-distribution over the other.
+package remain `danvas`. Users upgrading from `0.18.x` should follow the
+[0.19.0 credential-boundary migration](docs/migrations/0.19.0.md). Users still
+on `0.17.x` must also follow the
+[0.18.0 distribution migration](docs/migrations/0.18.0.md) rather than forcing
+one distribution over the other.
 
 Verify the installation outside a source checkout:
 

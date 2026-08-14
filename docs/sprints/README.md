@@ -311,7 +311,7 @@ tag CI plus anonymous SHA/tag installations; the verified tag is installed
 globally as `danvas-cli 0.18.0`. No GitHub Release or PyPI publication was
 performed.
 
-## Accepted 0.19.0 Sprint 21.5 Credential Boundary
+## Released 0.19.0 Sprint 21.5 Credential Boundary
 
 The accepted post-beta prerequisite is:
 
@@ -324,17 +324,15 @@ credential-to-Canvas-origin binding. The design targets `0.19.0`, absorbs the
 already scheduled roster legacy-schema removal, and retargets the remaining
 accepted Sprint 22 agent-interface design to `0.20.0`. Independent review
 accepted the threat model, release sequence, and design on 2026-08-13 after the
-required contract edits. Group 0 characterization is complete at `1145791` with
-exact authentication-surface, current-risk, provider-call, and zero production
-process-spawn baselines; no production behavior changed. Focused review accepted
-Group 1's neutral resolver and origin trust gate at `c50d170` with no findings.
-Group 2's provider-specific option, profile, dotenv, dependency, doctor-schema,
-and roster-compatibility removals at `8efbfa5` are accepted after focused review
-with no findings. Group 3's public migration matrix, neutral guide rewrite,
-candidate version, and Sprint 22 refresh at `75ca92a` are accepted after
-focused review with no findings. Group 4 final security review and exact
-candidate release gates remain. No external secret-provider or personal-skill
-change is authorized by this index entry.
+required contract edits. Groups 0 through 3 passed focused review at `1145791`,
+`c50d170`, `8efbfa5`, and `75ca92a`. Final assembled-candidate review accepted
+`1d357a5`; a macOS/Linux FIFO-socket fixture portability correction produced
+exact release commit `bd9e38e`, which supplemental review accepted without
+runtime findings. Branch and signed-tag CI, anonymous exact-SHA and exact-tag
+installation, and the separately authorized live read-only `op run` Canvas
+doctor check all passed. The external teaching skill was migrated to the
+provider-neutral workflow before the verified tag was installed globally as
+`danvas-cli 0.19.0`. No GitHub Release or PyPI publication was performed.
 
 ## Accepted 0.20.0 Agent Interface Follow-On Design
 
@@ -351,5 +349,6 @@ Independent review accepted the design on 2026-08-13; Sprint 21.5's accepted
 sequencing moves the unchanged remaining interface scope to `0.20.0`. It does
 not authorize skill installation, marketplace publication, external agent
 invocation, or Canvas mutation. Group 3 commit `75ca92a` refreshes its baseline
-to the neutral `0.19.0` candidate and removes the completed roster-migration
-work item; implementation still waits for the exact `0.19.0` release gates.
+to the neutral `0.19.0` surface and removes the completed roster-migration work
+item. The `v0.19.0` release gate is complete; implementation may begin with
+Sprint 22's own Group 0 gate.

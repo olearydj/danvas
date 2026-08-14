@@ -352,10 +352,11 @@ the due roster `--schema legacy-v1` removal and provider-neutral authentication
 surface; Sprint 22 consumes that released `0.19.0` interface without otherwise
 changing its accepted scope. The design authorizes no early skill installation
 or external agent invocation. Group 3 commit `75ca92a` refreshes the accepted
-design against the neutral `0.19.0` candidate and removes the completed roster
-migration work item; implementation still waits for the exact release gates.
+design against the neutral `0.19.0` surface and removes the completed roster
+migration work item. The `v0.19.0` release gate is complete; Sprint 22 may begin
+with its own Group 0 gate.
 
-## Accepted 0.19.0 Provider-Neutral Credential Boundary
+## Released 0.19.0 Provider-Neutral Credential Boundary
 
 Sprint 21.5 is the accepted post-beta prerequisite:
 
@@ -376,8 +377,14 @@ with no findings. Group 2's provider-specific option, profile, dotenv,
 dependency, doctor-schema, and roster-compatibility removals at `8efbfa5` are
 accepted after focused review with no findings. Group 3's public migration
 matrix, neutral guide rewrite, candidate version, and Sprint 22 refresh are
-complete at `75ca92a` and accepted after focused review with no findings. Group
-4 final security review and exact candidate release gates remain.
+complete at `75ca92a` and accepted after focused review with no findings. Final
+assembled-candidate review accepted `1d357a5`. A test-fixture-only portability
+correction produced exact release commit `bd9e38e`, which passed supplemental
+review, branch and signed-tag CI, anonymous exact-SHA and exact-tag installs,
+and a separately authorized live read-only `op run` Canvas doctor check. The
+external teaching skill was migrated before the verified tag was installed
+globally as `danvas-cli 0.19.0`. No GitHub Release or PyPI publication was
+performed.
 
 Named post-beta maintenance: when Python 3.15 is released, revisit the
 `<3.15` upper bound. Expand support only with an explicit compatibility review

@@ -1,15 +1,13 @@
 # Sprint 21.5: Provider-Neutral Credential Boundary
 
-Status: design accepted on 2026-08-13 after independent review and the required
-contract edits. Sprint 21 shipped as verified public-beta tag `v0.18.0`; Group 0
-characterization is complete at `1145791` with no production change. Group 1's
-neutral resolver and trust gate are complete at `c50d170` and accepted after
-focused review. Group 2's provider-ownership removal at `8efbfa5` is accepted
-after focused review. Group 3's public migration and downstream-interface work
-at `75ca92a` is accepted after focused review. Group 4 release review and exact
-candidate gates remain. This sprint authorizes no secret migration, external
-secret-manager installation, Canvas access, release, or modification outside
-this repository.
+Status: released as signed tag `v0.19.0` from exact commit `bd9e38e`. Groups 0
+through 3 passed focused review at `1145791`, `c50d170`, `8efbfa5`, and
+`75ca92a`. Final assembled-candidate review accepted `1d357a5`; supplemental
+review accepted the test-fixture-only portability correction at `bd9e38e`.
+Branch and tag CI plus anonymous exact-SHA and exact-tag installation passed.
+The separately authorized personal `op run` workflow and teaching-skill
+migration were completed before the verified tag was installed globally as
+`danvas-cli 0.19.0`.
 
 This design targets `0.19.0` for the credential-boundary release, absorbs the
 already scheduled `0.19.0` roster legacy-schema removal, and moves the
@@ -801,6 +799,21 @@ coherent `0.20.0` retarget against the neutral released-surface contract.
    skill migration before replacing the maintainer's global CLI.
 6. Verify the global tagged installation and release documentation before
    declaring `0.19.0` complete.
+
+Implementation record: independent review accepted the assembled candidate at
+`1d357a5` after re-exercising credential selection, origin binding, file reads,
+diagnostics, distribution metadata, and migration behavior. Branch CI exposed
+one test-fixture portability defect: Linux lacks macOS's `/private/tmp` spelling
+for the real FIFO/socket rejection fixture. Commit `bd9e38e` changed only that
+fixture to portable `/tmp`; supplemental review accepted the correction and
+branch [CI run 31766215057](https://github.com/olearydj/danvas/actions/runs/31766215057)
+passed on the exact commit. Signed tag `v0.19.0` points to `bd9e38e`; tag
+[CI run 31766519280](https://github.com/olearydj/danvas/actions/runs/31766519280)
+and anonymous exact-tag installation passed. A separately authorized
+`danvas-op auth doctor --profile auburn --check-canvas` then verified the neutral
+environment transport, origin binding, and bounded Canvas current-user request
+without mutation or credential output. The external teaching skill was updated
+before the exact tag replaced the maintainer's global `0.18.0` installation.
 
 ## Automated Acceptance
 
