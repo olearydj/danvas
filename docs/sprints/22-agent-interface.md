@@ -1,11 +1,10 @@
 # Sprint 22: Agent-Facing Help And Portable Skill
 
-Status: accepted design on 2026-08-13; implementation and independent review
-completed on 2026-08-14 against the released provider-neutral 0.19.0 surface.
-Candidate `44ce9c2` passed the full branch matrix, anonymous exact-SHA install,
-and bounded Codex/Claude Code behavior acceptance. The remaining gates are this
-documentation closeout, exact-commit CI, signed tag, tag CI, exact-tag install,
-and global CLI advance. No Canvas access or mutation was performed.
+Status: released as signed tag `v0.20.0` on 2026-08-14 from `83c6a43` after
+independent review, bounded Codex/Claude Code behavior acceptance, branch CI
+run `31833468339`, tag CI run `31833795910`, and anonymous exact-SHA/tag install.
+The global CLI reports `danvas 0.20.0` outside the checkout. No real user/project
+skill was installed, and no Canvas access or mutation was performed.
 
 Implementation groups:
 
@@ -20,9 +19,8 @@ Implementation groups:
 7. `66dace2` assembles the release candidate; `3a7f352` fixes one description
    edge case; and test-only `44ce9c2` isolates ANSI behavior under CI.
 
-The release-candidate documentation and packaging commit follows these groups
-and must remain unpushed until the final implementation review accepts the
-assembled result.
+Release closeout commit `83c6a43` records agent behavior acceptance and the
+public host-support boundary before the signed tag.
 
 ## Outcome
 

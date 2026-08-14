@@ -19,8 +19,11 @@ Sprint 22 makes the installed CLI the authoritative human and agent interface:
   hashes, no-clobber classification, and atomic whole-directory commits.
 
 Canvas payloads, credentials, mutation behavior, and retained evidence schemas
-are unchanged. Release remains gated on independent command-truth and installer
-review, bounded agent-behavior acceptance, and exact-commit platform CI.
+are unchanged.
+
+Released as signed tag `v0.20.0` after independent command-truth and installer
+review, bounded Codex and Claude Code behavior acceptance, branch/tag platform
+CI, anonymous exact-ref installation, and global CLI verification.
 
 See [Migrating to 0.20.0](docs/migrations/0.20.0.md).
 

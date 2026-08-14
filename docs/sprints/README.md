@@ -334,7 +334,7 @@ doctor check all passed. The external teaching skill was migrated to the
 provider-neutral workflow before the verified tag was installed globally as
 `danvas-cli 0.19.0`. No GitHub Release or PyPI publication was performed.
 
-## 0.20.0 Agent Interface Candidate
+## 0.20.0 Agent Interface Release
 
 The accepted post-beta interface sprint is:
 
@@ -357,5 +357,7 @@ installer. Independent command-truth and adversarial-installer review accepted
 the assembled candidate. Candidate `44ce9c2` passed the full remote branch
 matrix and anonymous exact-SHA install. Bounded Codex and Claude Code behavior
 acceptance passed all ten scenarios and all seven criteria on 2026-08-14. The
-remaining gates are the documentation closeout, exact-commit CI, signed tag,
-tag CI, exact-tag install, global CLI advance, and release records.
+release closeout landed at `83c6a43`. Signed tag `v0.20.0`, branch CI run
+`31833468339`, tag CI run `31833795910`, anonymous exact-SHA/tag installs, and
+the global `danvas 0.20.0` verification all passed. No real user/project skill,
+GitHub Release, marketplace entry, or PyPI distribution was published.

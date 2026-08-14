@@ -339,7 +339,7 @@ branch and signed-tag CI plus anonymous SHA/tag installations. The verified tag
 is installed globally as `danvas-cli 0.18.0`; no GitHub Release or PyPI
 publication was performed.
 
-## 0.20.0 Agent Interface Candidate
+## Released 0.20.0 Agent Interface
 
 Sprint 22 is the accepted post-beta interface design:
 
@@ -358,8 +358,11 @@ completed roster migration work item. Local implementation completed in commits
 Independent review accepted the assembled candidate. Candidate `44ce9c2` passed
 the full remote branch matrix and anonymous exact-SHA install. Bounded Codex and
 Claude Code behavior acceptance passed all ten scenarios and all seven criteria
-on 2026-08-14. The remaining work is the documentation closeout and normal
-signed-tag, tag-CI, exact-tag-install, global-advance, and release-record gates.
+on 2026-08-14. Release closeout landed at `83c6a43`. Signed tag `v0.20.0`,
+branch CI run `31833468339`, tag CI run `31833795910`, anonymous exact-SHA/tag
+installs, and the global `danvas 0.20.0` verification all passed. No real
+user/project skill, GitHub Release, marketplace entry, or PyPI distribution was
+published.
 
 ## Released 0.19.0 Provider-Neutral Credential Boundary
 
