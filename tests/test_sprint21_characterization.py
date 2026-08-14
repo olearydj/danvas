@@ -294,28 +294,9 @@ def test_public_beta_package_metadata_is_declared() -> None:
     assert (ROOT / "LICENSE").read_text(encoding="utf-8").startswith("MIT License\n")
 
 
-def test_public_documentation_gaps_and_ssh_install_are_frozen() -> None:
+def test_public_documentation_suite_and_anonymous_install_are_declared() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    ssh_install = "danvas @ git+ssh://git@github.com/olearydj/danvas.git@v0.17.0"
-    missing = {
-        path.relative_to(ROOT).as_posix()
-        for path in (
-            ROOT / "docs/configuration.md",
-            ROOT / "docs/authentication.md",
-            ROOT / "docs/privacy.md",
-            ROOT / "docs/compatibility.md",
-            ROOT / "docs/authored-sources.md",
-            ROOT / "docs/mutation-safety.md",
-            ROOT / "CHANGELOG.md",
-            ROOT / "CONTRIBUTING.md",
-            ROOT / "SECURITY.md",
-        )
-        if not path.exists()
-    }
-
-    assert readme.count(ssh_install) == 2
-    assert "git+https://github.com/olearydj/danvas.git@v0.17.0" not in readme
-    assert missing == {
+    expected = {
         "docs/configuration.md",
         "docs/authentication.md",
         "docs/privacy.md",
@@ -326,6 +307,22 @@ def test_public_documentation_gaps_and_ssh_install_are_frozen() -> None:
         "CONTRIBUTING.md",
         "SECURITY.md",
     }
+    observed = {path for path in expected if (ROOT / path).is_file()}
+
+    assert observed == expected
+    assert (
+        'danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.18.0'
+        in readme
+    )
+    assert "git+ssh" not in readme
+    assert "signed `v0.18.0` release is the planned public beta" in readme
+    assert "must not be represented as released" in readme
+    assert "not affiliated with or endorsed by Instructure" in readme
+    public_text = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in expected)
+    assert "/Users/" not in public_text
+    assert "/Volumes/" not in public_text
+    assert "/casa/" not in public_text
+    assert "git+ssh" not in public_text
 
 
 def test_ci_and_secret_scan_gaps_are_frozen() -> None:
