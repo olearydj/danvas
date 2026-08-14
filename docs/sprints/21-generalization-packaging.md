@@ -4,7 +4,8 @@ Status: design accepted on 2026-08-13 after independent review. Sprints 18
 through 20 are released as `v0.15.x`, `v0.16.0`, and `v0.17.0`. This sprint is
 the final generalization and packaging slice of the accepted public-readiness
 program and targets `0.18.0`. Group 0 characterization is complete at
-`ded6b2e`; Group 1 project generalization is complete and awaiting focused
+`ded6b2e`; Group 1 project generalization has passed focused review; and Group
+2 parser and integration work is implementation-complete and awaiting focused
 review. The sprint does not authorize external publication, tagging,
 repository-setting changes, global installation, or live Canvas use.
 
@@ -717,7 +718,7 @@ Group 0 is complete. Commit `ded6b2e` adds an explicit public-boundary baseline
 and the missing executable Panopto interruption counterexample without changing
 runtime behavior. The exact gate passed 776 tests at 84.70% branch coverage,
 the authored-assets module floor, Ruff, ty, frozen-lock validation, and the
-dependency audit. Group 1 is the next implementation step.
+dependency audit. Independent review accepted Group 1 on 2026-08-13.
 
 ### Group 1: project generalization
 
@@ -740,15 +741,31 @@ Group 1 is implementation-complete in three reviewed-scope commits:
 
 The exact local gate passed 797 tests at 84.90% branch coverage, the
 authored-assets module floor at 88.87%, Ruff, ty, frozen-lock validation, and
-the dependency audit. Group 2 remains gated on focused review of this group.
+the dependency audit. Independent review accepted Group 1 on 2026-08-13 and
+cleared Group 2 to proceed.
 
 ### Group 2: parser and integration boundaries
 
-1. Add gradebook heading aliases, ambiguity checks, and bounded diagnostics.
-2. Add Panopto configuration precedence and deterministic interrupted-bundle
+1. [x] Add gradebook heading aliases, ambiguity checks, and bounded diagnostics.
+2. [x] Add Panopto configuration precedence and deterministic interrupted-bundle
    reconciliation.
-3. Remove `--live` and `--upload`; update the roster legacy warning to the
+3. [x] Remove `--live` and `--upload`; update the roster legacy warning to the
    fixed `0.19.0` removal.
+
+Group 2 is implementation-complete in three reviewed-scope commits:
+
+- `e95fa9b` adds canonical gradebook heading roles, project-configured aliases,
+  ambiguity rejection, and bounded diagnostics; it also rejects simultaneous
+  singular and plural source-kind tables explicitly;
+- `c7eec56` adds validated Panopto project settings and CLI precedence, exact
+  tool selection, and deterministic hash-checked interrupted-bundle
+  reconciliation without duplicate downloads; and
+- `cc18fd8` removes the due `--live` and `--upload` compatibility spellings and
+  pins the roster `legacy-v1` warning to its `0.19.0` removal.
+
+The exact local gate passed 815 tests at 84.99% branch-aware coverage, the
+authored-assets module floor at 88.87%, Ruff, ty, frozen-lock validation, and
+the dependency audit. Group 3 remains gated on focused review of this group.
 
 ### Group 3: package and public docs
 
