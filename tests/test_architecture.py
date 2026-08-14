@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from collections import Counter
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).parents[1] / "src" / "danvas"
@@ -19,6 +20,60 @@ LEGACY_COMPLEXITY_EXCEPTIONS = {
 RESOLVE_API_KEY_CALLS = {
     ("auth.py", "canvas_from_args"),
     ("panopto.py", "command_panopto_captions"),
+}
+CURRENT_PROVIDER_IMPORTS = Counter(
+    {
+        ("auth.py", "secretpath"): 1,
+        ("cli.py", "dotenv"): 1,
+    }
+)
+CURRENT_PROVIDER_CALLS = Counter(
+    {
+        ("auth.py", "resolve_api_key", "resolve_named_secret"): 1,
+        ("auth.py", "build_auth_doctor_report", "doctor_report"): 1,
+        ("auth.py", "build_auth_doctor_report", "resolve_named_secret"): 1,
+        ("cli.py", "main", "load_dotenv"): 1,
+    }
+)
+PROVIDER_PACKAGES = {
+    "azure",
+    "boto3",
+    "dotenv",
+    "google",
+    "hvac",
+    "keyring",
+    "onepassword",
+    "secretspec",
+    "secretpath",
+}
+PROCESS_CALLS = {
+    "asyncio": {"create_subprocess_exec", "create_subprocess_shell"},
+    "multiprocessing": {"Process"},
+    "os": {
+        "execl",
+        "execle",
+        "execlp",
+        "execlpe",
+        "execv",
+        "execve",
+        "execvp",
+        "execvpe",
+        "fork",
+        "popen",
+        "posix_spawn",
+        "posix_spawnp",
+        "spawnl",
+        "spawnle",
+        "spawnlp",
+        "spawnlpe",
+        "spawnv",
+        "spawnve",
+        "spawnvp",
+        "spawnvpe",
+        "system",
+    },
+    "pty": {"spawn"},
+    "subprocess": {"Popen", "call", "check_call", "check_output", "run"},
 }
 
 
@@ -147,3 +202,104 @@ def test_resolve_api_key_call_sites_are_bounded_and_pass_secret_name() -> None:
 
     assert found == RESOLVE_API_KEY_CALLS
     assert missing_secret_name == set()
+
+
+def test_current_provider_imports_and_calls_match_reviewed_baseline() -> None:
+    imports: Counter[tuple[str, str]] = Counter()
+    calls: Counter[tuple[str, str, str]] = Counter()
+    provider_call_names = {"doctor_report", "load_dotenv", "resolve_named_secret"}
+
+    for path in PACKAGE_ROOT.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    package = alias.name.split(".", 1)[0]
+                    if package in PROVIDER_PACKAGES:
+                        imports[(path.name, package)] += 1
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                package = node.module.split(".", 1)[0]
+                if package in PROVIDER_PACKAGES:
+                    imports[(path.name, package)] += 1
+        for function in (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ):
+            for node in ast.walk(function):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id in provider_call_names
+                ):
+                    calls[(path.name, function.name, node.func.id)] += 1
+
+    assert imports == CURRENT_PROVIDER_IMPORTS
+    assert calls == CURRENT_PROVIDER_CALLS
+
+
+def process_aliases(tree: ast.AST) -> tuple[dict[str, str], dict[str, str]]:
+    module_aliases: dict[str, str] = {}
+    callable_aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module = alias.name.split(".", 1)[0]
+                if module in PROCESS_CALLS:
+                    module_aliases[alias.asname or module] = module
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.module.split(".", 1)[0] in PROCESS_CALLS
+        ):
+            module = node.module.split(".", 1)[0]
+            for alias in node.names:
+                if alias.name in PROCESS_CALLS[module]:
+                    callable_aliases[alias.asname or alias.name] = (
+                        f"{module}.{alias.name}"
+                    )
+    return module_aliases, callable_aliases
+
+
+def process_call_name(
+    node: ast.Call,
+    *,
+    module_aliases: dict[str, str],
+    callable_aliases: dict[str, str],
+) -> str | None:
+    if isinstance(node.func, ast.Name):
+        return callable_aliases.get(node.func.id)
+    if not isinstance(node.func, ast.Attribute) or not isinstance(
+        node.func.value, ast.Name
+    ):
+        return None
+    module = module_aliases.get(node.func.value.id)
+    if module and node.func.attr in PROCESS_CALLS[module]:
+        return f"{module}.{node.func.attr}"
+    return None
+
+
+def test_production_process_spawn_call_sites_are_empty() -> None:
+    calls: Counter[tuple[str, str, str]] = Counter()
+
+    for path in PACKAGE_ROOT.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        module_aliases, callable_aliases = process_aliases(tree)
+
+        for function in (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ):
+            for node in ast.walk(function):
+                if not isinstance(node, ast.Call):
+                    continue
+                call_name = process_call_name(
+                    node,
+                    module_aliases=module_aliases,
+                    callable_aliases=callable_aliases,
+                )
+                if call_name:
+                    calls[(path.name, function.name, call_name)] += 1
+
+    assert calls == Counter()
