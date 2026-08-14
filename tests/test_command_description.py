@@ -178,5 +178,6 @@ def test_describe_cli_formats_and_unknown_path() -> None:
     assert text_result.output.startswith("danvas assignments create\n")
     assert json.loads(json_result.output)["command_path"] == "assignments create"
     assert missing.exit_code == 2
-    assert "Unknown command path" in missing.output
-    assert "danvas --help" in missing.output
+    missing_output = click.unstyle(missing.output)
+    assert "Unknown command path" in missing_output
+    assert "danvas --help" in missing_output

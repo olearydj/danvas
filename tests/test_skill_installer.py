@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path, PurePosixPath
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -387,24 +388,25 @@ def test_cli_requires_agent_and_explicit_project_root() -> None:
     )
 
     assert missing_agent.exit_code == 2
-    assert "Missing option '--agent'" in missing_agent.output
+    assert "Missing option '--agent'" in click.unstyle(missing_agent.output)
     assert missing_root.exit_code == 2
-    assert "requires --project-root" in missing_root.output
+    assert "requires --project-root" in click.unstyle(missing_root.output)
     assert irrelevant_root.exit_code == 2
-    assert "only with --scope project" in irrelevant_root.output
+    assert "only with --scope project" in click.unstyle(irrelevant_root.output)
 
 
 def test_installer_surface_has_no_force_update_or_apply_escape_hatch() -> None:
     result = runner.invoke(app, ["skill", "install", "--help"])
+    output = click.unstyle(result.output)
 
     assert result.exit_code == 0
-    assert "--agent" in result.output
-    assert "--scope" in result.output
-    assert "--project-root" in result.output
-    assert "--dry-run" in result.output
-    assert "Runs locally" in result.output
-    assert "never accesses or mutates Canvas" in result.output
-    assert "Reads Canvas" not in result.output
-    assert "--force" not in result.output
-    assert "--update" not in result.output
-    assert "--apply" not in result.output
+    assert "--agent" in output
+    assert "--scope" in output
+    assert "--project-root" in output
+    assert "--dry-run" in output
+    assert "Runs locally" in output
+    assert "never accesses or mutates Canvas" in output
+    assert "Reads Canvas" not in output
+    assert "--force" not in output
+    assert "--update" not in output
+    assert "--apply" not in output

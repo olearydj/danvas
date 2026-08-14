@@ -7,6 +7,7 @@ from typing import Any
 import click
 import pytest
 import typer
+import typer.rich_utils as typer_rich_utils
 from typer.testing import CliRunner
 
 import danvas.cli as cli_module
@@ -51,15 +52,20 @@ def render_help(path: tuple[str, ...], *, width: int, color: bool) -> str:
     env = {
         "COLUMNS": str(width),
         "FORCE_COLOR": "1" if color else None,
-        "NO_COLOR": None,
+        "NO_COLOR": None if color else "1",
     }
-    result = runner.invoke(
-        app,
-        [*path, "--help"],
-        color=color,
-        terminal_width=width,
-        env=env,
-    )
+    original_force_terminal = typer_rich_utils.FORCE_TERMINAL
+    try:
+        typer_rich_utils.FORCE_TERMINAL = color
+        result = runner.invoke(
+            app,
+            [*path, "--help"],
+            color=color,
+            terminal_width=width,
+            env=env,
+        )
+    finally:
+        typer_rich_utils.FORCE_TERMINAL = original_force_terminal
     assert result.exit_code == 0, (path, result.output)
     return result.output
 
