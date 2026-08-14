@@ -1,6 +1,6 @@
 [project]
 name = "danvas-cli"
-version = "0.19.0"
+version = "0.20.0"
 description = "Safety-focused command-line tools for day-to-day Canvas course operations"
 readme = "README.md"
 requires-python = ">=3.12,<3.15"

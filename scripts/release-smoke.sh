@@ -239,8 +239,53 @@ check_install() {
             "$executable" auth doctor \
                 --api-url https://canvas.example.invalid/ \
                 --api-key-env DANVAS_RELEASE_SMOKE_TOKEN >/dev/null
+        env -i \
+            PATH="$bin_dir:$PATH" \
+            HOME="$clean_home" \
+            XDG_CONFIG_HOME="$xdg_config" \
+            PYTHONPATH= \
+            "$executable" guide list >/dev/null
+        env -i \
+            PATH="$bin_dir:$PATH" \
+            HOME="$clean_home" \
+            XDG_CONFIG_HOME="$xdg_config" \
+            PYTHONPATH= \
+            "$executable" describe assignments create --format json >/dev/null
+        env -i \
+            PATH="$bin_dir:$PATH" \
+            HOME="$clean_home" \
+            XDG_CONFIG_HOME="$xdg_config" \
+            PYTHONPATH= \
+            "$executable" skill show >/dev/null
+        env -i \
+            PATH="$bin_dir:$PATH" \
+            HOME="$clean_home" \
+            XDG_CONFIG_HOME="$xdg_config" \
+            PYTHONPATH= \
+            "$executable" skill install --agent shared --dry-run >/dev/null
+        if [ -e "$clean_home/.agents" ]; then
+            echo "release smoke: $label skill dry-run wrote to the temporary home" >&2
+            exit 1
+        fi
+        env -i \
+            PATH="$bin_dir:$PATH" \
+            HOME="$clean_home" \
+            XDG_CONFIG_HOME="$xdg_config" \
+            PYTHONPATH= \
+            "$executable" skill install --agent shared >/dev/null
+        if [ ! -f "$clean_home/.agents/skills/danvas/SKILL.md" ]; then
+            echo "release smoke: $label skill install missed its confined target" >&2
+            exit 1
+        fi
+        env -i \
+            PATH="$bin_dir:$PATH" \
+            HOME="$clean_home" \
+            XDG_CONFIG_HOME="$xdg_config" \
+            PYTHONPATH= \
+            "$executable" skill doctor \
+                --agent shared --project-root "$SMOKE_ROOT" >/dev/null
     )
-    echo "release smoke: $label install passed version, help, and auth doctor"
+    echo "release smoke: $label install passed CLI, guide, description, and skill checks"
 }
 
 check_install editable "$EDITABLE_BIN_DIR"

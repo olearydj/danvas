@@ -339,7 +339,7 @@ branch and signed-tag CI plus anonymous SHA/tag installations. The verified tag
 is installed globally as `danvas-cli 0.18.0`; no GitHub Release or PyPI
 publication was performed.
 
-## Accepted 0.20.0 Agent Interface Follow-On Design
+## 0.20.0 Agent Interface Candidate
 
 Sprint 22 is the accepted post-beta interface design:
 
@@ -350,11 +350,14 @@ adds bounded help, offline guides, versioned JSON description, and packages one
 generic skill source inside the `danvas-cli` distribution. Sprint 21.5 now owns
 the due roster `--schema legacy-v1` removal and provider-neutral authentication
 surface; Sprint 22 consumes that released `0.19.0` interface without otherwise
-changing its accepted scope. The design authorizes no early skill installation
-or external agent invocation. Group 3 commit `75ca92a` refreshes the accepted
+changing its accepted scope. The design authorizes no implicit skill
+installation or external agent invocation. Group 3 commit `75ca92a` refreshes the accepted
 design against the neutral `0.19.0` surface and removes the completed roster
-migration work item. The `v0.19.0` release gate is complete; Sprint 22 may begin
-with its own Group 0 gate.
+migration work item. Local implementation completed in commits `c09c419`
+through `48cd01e`, after the Group 0 fixture isolation at `cecf735`. The
+assembled `0.20.0` candidate remains unpushed pending independent command-truth
+and installer review, separately authorized bounded external-agent acceptance,
+and the normal exact-commit release gates.
 
 ## Released 0.19.0 Provider-Neutral Credential Boundary
 

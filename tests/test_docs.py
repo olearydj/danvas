@@ -40,7 +40,7 @@ def test_public_documentation_suite_passes_offline_link_check() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "13 Markdown files" in result.stdout
+    assert "14 Markdown files" in result.stdout
 
 
 def test_documentation_checker_accepts_local_links_anchors_and_external_urls(

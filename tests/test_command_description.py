@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 
 from danvas import __version__
 from danvas.access import ACCESS_POLICIES
-from danvas.cli import app
+from danvas.cli import app, normalize_describe_path
 from danvas.command_description import (
     COMMAND_GUIDE_SCHEMA,
     describe_json,
@@ -26,6 +26,11 @@ runner = CliRunner()
 
 def root_command() -> click.Command:
     return typer.main.get_command(app)
+
+
+def test_variadic_command_path_is_compatible_with_joined_or_split_typer_values() -> None:
+    assert normalize_describe_path(["assignments", "create"]) == ("assignments", "create")
+    assert normalize_describe_path(["assignments create"]) == ("assignments", "create")
 
 
 def record_count(record: dict[str, Any]) -> int:

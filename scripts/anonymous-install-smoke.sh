@@ -160,6 +160,21 @@ fi
 
 run_clean "$EXECUTABLE" --help >/dev/null
 run_clean "$EXECUTABLE" sources lint --help >/dev/null
+run_clean "$EXECUTABLE" guide list >/dev/null
+run_clean "$EXECUTABLE" describe assignments create --format json >/dev/null
+run_clean "$EXECUTABLE" skill show >/dev/null
+run_clean "$EXECUTABLE" skill install --agent shared --dry-run >/dev/null
+if [ -e "$CLEAN_HOME/.agents" ]; then
+    echo "anonymous install smoke: skill dry-run wrote to the temporary home" >&2
+    exit 1
+fi
+run_clean "$EXECUTABLE" skill install --agent shared >/dev/null
+if [ ! -f "$CLEAN_HOME/.agents/skills/danvas/SKILL.md" ]; then
+    echo "anonymous install smoke: skill install missed its confined target" >&2
+    exit 1
+fi
+run_clean "$EXECUTABLE" skill doctor \
+    --agent shared --project-root "$SMOKE_ROOT" >/dev/null
 (
     cd "$SMOKE_ROOT"
     env -i \

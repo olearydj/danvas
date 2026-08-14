@@ -1,12 +1,26 @@
 # Sprint 22: Agent-Facing Help And Portable Skill
 
-Status: accepted design on 2026-08-13 after independent review and refreshed
-during Sprint 21.5 Group 3 for the provider-neutral 0.19.0 candidate surface.
-Implementation begins only after 0.19.0 has shipped and passed its
-credential-boundary release gates. This design authorizes no early
-implementation, skill
-installation, external plugin publication, filesystem change outside the
-repository, or Canvas access or mutation.
+Status: accepted design on 2026-08-13; local implementation completed on
+2026-08-14 against the released provider-neutral 0.19.0 surface. The unpushed
+0.20.0 candidate awaits independent command-truth and adversarial-installer
+review, bounded agent-behavior acceptance, and exact-commit release gates. No
+user/project skill installation, external plugin publication, external agent
+invocation, Canvas access, push, tag, or global CLI change has been performed.
+
+Implementation groups:
+
+1. `c09c419` freezes the released interface after fixture isolation in
+   `cecf735`.
+2. `228e556` establishes the typed semantic registry.
+3. `74011c5` renders progressive registry-backed help.
+4. `b69e059` adds offline guides and versioned description.
+5. `f5c9cc9` packages the canonical portable skill.
+6. `48cd01e` adds the bounded installer, doctor, host-path evidence, and
+   adversarial filesystem tests.
+
+The release-candidate documentation and packaging commit follows these groups
+and must remain unpushed until the final implementation review accepts the
+assembled result.
 
 ## Outcome
 

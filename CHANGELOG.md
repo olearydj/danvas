@@ -3,6 +3,27 @@
 This file records operator-visible release changes. Detailed transition steps
 live in the linked migration guides.
 
+## 0.20.0 - Agent Interface
+
+Sprint 22 makes the installed CLI the authoritative human and agent interface:
+
+- adds progressive root, family, and leaf help derived from typed command
+  semantics and the existing access/privacy registries;
+- adds packaged offline task guides and deterministic
+  `danvas-command-guide-v1` JSON discovery;
+- packages one portable, provider-neutral `danvas` Agent Skill in editable,
+  sdist, and wheel installations;
+- adds explicit dry-run/install/doctor workflows for documented Codex, Claude
+  Code, Gemini, Copilot, and shared skill locations; and
+- protects skill installation with allowlisted paths, provenance and content
+  hashes, no-clobber classification, and atomic whole-directory commits.
+
+Canvas payloads, credentials, mutation behavior, and retained evidence schemas
+are unchanged. Release remains gated on independent command-truth and installer
+review, bounded agent-behavior acceptance, and exact-commit platform CI.
+
+See [Migrating to 0.20.0](docs/migrations/0.20.0.md).
+
 ## 0.19.0 - Provider-Neutral Credentials
 
 Sprint 21.5 moves provider choice outside danvas:

@@ -80,8 +80,13 @@ def test_unknown_guide_topic_has_suggestion_and_list_command() -> None:
 
 
 def test_discovery_commands_are_shareable_and_local_only() -> None:
-    for command in ("guide", "describe", "skill show"):
+    for command in ("guide", "describe", "skill show", "skill doctor"):
         assert ACCESS_POLICIES[command].canvas_read is False
         assert ACCESS_POLICIES[command].local_write is False
         assert ARTIFACT_POLICIES[command].artifact_class is ArtifactClass.SHAREABLE
         assert ARTIFACT_POLICIES[command].retained is False
+
+    assert ACCESS_POLICIES["skill install"].canvas_read is False
+    assert ACCESS_POLICIES["skill install"].local_write is True
+    assert ARTIFACT_POLICIES["skill install"].artifact_class is ArtifactClass.SHAREABLE
+    assert ARTIFACT_POLICIES["skill install"].retained is True

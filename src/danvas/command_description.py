@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Final
 
-import click
+from typer.core import TyperGroup, TyperOption
 
 from danvas import __version__
 from danvas.access import ACCESS_POLICIES
@@ -30,9 +30,9 @@ def _json_value(value: Any) -> Any:
     return f"<{type(value).__module__}.{type(value).__qualname__}>"
 
 
-def _parameter_record(parameter: click.Parameter) -> dict[str, Any]:
+def _parameter_record(parameter: Any) -> dict[str, Any]:
     record: dict[str, Any] = {
-        "kind": "option" if isinstance(parameter, click.Option) else "argument",
+        "kind": "option" if isinstance(parameter, TyperOption) else "argument",
         "name": parameter.name,
         "type": parameter.type.name,
         "required": parameter.required,
@@ -41,10 +41,11 @@ def _parameter_record(parameter: click.Parameter) -> dict[str, Any]:
         "safe_default": _json_value(parameter.default),
         "description": getattr(parameter, "help", None),
     }
-    if isinstance(parameter.type, click.Choice):
-        record["choices"] = [_json_value(choice) for choice in parameter.type.choices]
-        record["case_sensitive"] = parameter.type.case_sensitive
-    if isinstance(parameter, click.Option):
+    choices = getattr(parameter.type, "choices", None)
+    if choices is not None:
+        record["choices"] = [_json_value(choice) for choice in choices]
+        record["case_sensitive"] = bool(getattr(parameter.type, "case_sensitive", True))
+    if isinstance(parameter, TyperOption):
         record.update(
             {
                 "names": [*parameter.opts, *parameter.secondary_opts],
@@ -105,11 +106,11 @@ def _guide_record(command: str) -> dict[str, Any]:
     }
 
 
-def _requirements(command: click.Command, path: str) -> dict[str, Any]:
+def _requirements(command: Any, path: str) -> dict[str, Any]:
     option_names = {
         option
         for parameter in command.params
-        if isinstance(parameter, click.Option)
+        if isinstance(parameter, TyperOption)
         for option in (*parameter.opts, *parameter.secondary_opts)
     }
     access = ACCESS_POLICIES.get(path)
@@ -122,13 +123,13 @@ def _requirements(command: click.Command, path: str) -> dict[str, Any]:
     }
 
 
-def _command_record(command: click.Command, path: tuple[str, ...]) -> dict[str, Any]:
+def _command_record(command: Any, path: tuple[str, ...]) -> dict[str, Any]:
     canonical = " ".join(path)
     guide = COMMAND_GUIDES[canonical]
     record: dict[str, Any] = {
         "command_path": canonical,
         "name": command.name,
-        "kind": "group" if isinstance(command, click.Group) else "leaf",
+        "kind": "group" if isinstance(command, TyperGroup) else "leaf",
         "aliases": [],
         "summary": command.get_short_help_str(),
         **_guide_record(canonical),
@@ -143,7 +144,7 @@ def _command_record(command: click.Command, path: tuple[str, ...]) -> dict[str, 
         "apply_option": bool(access and access.canvas_mutation),
         "additional_guards": list(guide.guards),
     }
-    if isinstance(command, click.Group):
+    if isinstance(command, TyperGroup):
         record["children"] = [
             _command_record(child, (*path, name)) for name, child in command.commands.items()
         ]
@@ -151,13 +152,13 @@ def _command_record(command: click.Command, path: tuple[str, ...]) -> dict[str, 
 
 
 def _resolve_command(
-    root: click.Command, command_path: tuple[str, ...]
-) -> tuple[click.Command, tuple[str, ...]]:
+    root: Any, command_path: tuple[str, ...]
+) -> tuple[Any, tuple[str, ...]]:
     current = root
     resolved: list[str] = []
     for part in command_path:
-        if not isinstance(current, click.Group) or part not in current.commands:
-            available = sorted(current.commands) if isinstance(current, click.Group) else []
+        if not isinstance(current, TyperGroup) or part not in current.commands:
+            available = sorted(current.commands) if isinstance(current, TyperGroup) else []
             suffix = f" Available here: {', '.join(available)}." if available else ""
             raise ValueError(
                 f"Unknown command path: {' '.join(command_path)!r}.{suffix} "
@@ -168,7 +169,7 @@ def _resolve_command(
     return current, tuple(resolved)
 
 
-def describe_payload(root: click.Command, command_path: tuple[str, ...] = ()) -> dict[str, Any]:
+def describe_payload(root: Any, command_path: tuple[str, ...] = ()) -> dict[str, Any]:
     command, resolved = _resolve_command(root, command_path)
     return {
         "schema_version": COMMAND_GUIDE_SCHEMA,
@@ -178,7 +179,7 @@ def describe_payload(root: click.Command, command_path: tuple[str, ...] = ()) ->
     }
 
 
-def describe_json(root: click.Command, command_path: tuple[str, ...] = ()) -> str:
+def describe_json(root: Any, command_path: tuple[str, ...] = ()) -> str:
     return (
         json.dumps(
             describe_payload(root, command_path),
@@ -190,7 +191,7 @@ def describe_json(root: click.Command, command_path: tuple[str, ...] = ()) -> st
     )
 
 
-def describe_text(root: click.Command, command_path: tuple[str, ...] = ()) -> str:
+def describe_text(root: Any, command_path: tuple[str, ...] = ()) -> str:
     command, resolved = _resolve_command(root, command_path)
     canonical = " ".join(resolved)
     guide = COMMAND_GUIDES[canonical]
@@ -211,7 +212,7 @@ def describe_text(root: click.Command, command_path: tuple[str, ...] = ()) -> st
     if guide.examples:
         lines.append("Examples:")
         lines.extend(f"  {' '.join(example.argv)}" for example in guide.examples)
-    if isinstance(command, click.Group):
+    if isinstance(command, TyperGroup):
         lines.append("Commands:")
         lines.extend(
             f"  {name:<20} {child.get_short_help_str()}" for name, child in command.commands.items()

@@ -131,6 +131,11 @@ AgentName = Literal["shared", "codex", "claude-code", "gemini", "copilot"]
 SkillScopeName = Literal["user", "project"]
 
 
+def normalize_describe_path(values: list[str] | None) -> tuple[str, ...]:
+    """Normalize Typer versions that return variadic arguments joined or split."""
+    return tuple(part for value in (values or ()) for part in value.split())
+
+
 app = typer.Typer(
     name="danvas",
     help=(
@@ -3670,7 +3675,7 @@ def describe(
     ] = "text",
 ) -> None:
     root = get_typer_command(app)
-    path = tuple(command_path or ())
+    path = normalize_describe_path(command_path)
     try:
         output = describe_json(root, path) if format == "json" else describe_text(root, path)
     except ValueError as exc:

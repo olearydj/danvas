@@ -9,6 +9,7 @@ import re
 import sys
 import tarfile
 import zipfile
+from collections.abc import Callable
 from email.message import Message
 from email.parser import Parser
 from pathlib import Path, PurePosixPath
@@ -28,6 +29,13 @@ REQUIRED_CLASSIFIERS = {
 }
 REQUIRED_PROJECT_URLS = {"Repository", "Issues", "Documentation", "Changelog"}
 FORBIDDEN_REQUIREMENTS = {"python-dotenv", "secretpath"}
+SKILL_RESOURCE_FILES = {
+    "SKILL.md",
+    "references/discovery.md",
+    "references/privacy-and-auth.md",
+    "references/safety-and-recovery.md",
+    "references/workflows.md",
+}
 
 
 class DistributionError(ValueError):
@@ -95,7 +103,27 @@ def verify_metadata(metadata: Message, *, expected_version: str) -> None:
         )
 
 
-def verify_wheel(path: Path, *, expected_version: str) -> None:
+def skill_resources(
+    names: list[str],
+    *,
+    prefix: str,
+    reader: Callable[[str], bytes],
+    label: str,
+) -> dict[str, bytes]:
+    resources = {
+        name.removeprefix(prefix): reader(name)
+        for name in names
+        if name.startswith(prefix) and not name.endswith("/")
+    }
+    if set(resources) != SKILL_RESOURCE_FILES:
+        raise DistributionError(
+            f"{label} skill files are {sorted(resources)}; "
+            f"expected {sorted(SKILL_RESOURCE_FILES)}"
+        )
+    return resources
+
+
+def verify_wheel(path: Path, *, expected_version: str) -> dict[str, bytes]:
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
         safe_archive_names(names, label="wheel")
@@ -120,9 +148,15 @@ def verify_wheel(path: Path, *, expected_version: str) -> None:
             raise DistributionError(
                 f"wheel console scripts are {console_scripts}; expected {expected_scripts}"
             )
+        return skill_resources(
+            names,
+            prefix=f"{MODULE_NAME}/_skill/danvas/",
+            reader=archive.read,
+            label="wheel",
+        )
 
 
-def verify_sdist(path: Path, *, expected_version: str) -> None:
+def verify_sdist(path: Path, *, expected_version: str) -> dict[str, bytes]:
     with tarfile.open(path, mode="r:gz") as archive:
         names = archive.getnames()
         safe_archive_names(names, label="sdist")
@@ -150,6 +184,19 @@ def verify_sdist(path: Path, *, expected_version: str) -> None:
         if missing:
             raise DistributionError(f"sdist is missing required files: {missing}")
 
+        def read_member(name: str) -> bytes:
+            member = archive.extractfile(name)
+            if member is None:
+                raise DistributionError(f"sdist skill resource is unreadable: {name}")
+            return member.read()
+
+        return skill_resources(
+            [member.name for member in archive.getmembers() if member.isfile()],
+            prefix=f"{root}/src/{MODULE_NAME}/_skill/danvas/",
+            reader=read_member,
+            label="sdist",
+        )
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -159,8 +206,17 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        verify_wheel(args.wheel, expected_version=args.expected_version)
-        verify_sdist(args.sdist, expected_version=args.expected_version)
+        wheel_skill = verify_wheel(args.wheel, expected_version=args.expected_version)
+        sdist_skill = verify_sdist(args.sdist, expected_version=args.expected_version)
+        if wheel_skill != sdist_skill:
+            raise DistributionError("wheel and sdist contain different Agent Skill resources")
+        skill_text = wheel_skill["SKILL.md"].decode("utf-8")
+        expected_skill_version = f'danvas-cli-version: "{args.expected_version}"'
+        if expected_skill_version not in skill_text:
+            raise DistributionError(
+                "Agent Skill metadata does not match the distribution version: "
+                f"expected {expected_skill_version}"
+            )
     except (DistributionError, OSError, tarfile.TarError, zipfile.BadZipFile) as exc:
         print(f"distribution check failed: {exc}", file=sys.stderr)
         return 1

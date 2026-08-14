@@ -7,3 +7,22 @@ Never infer mutation authority from the presence of an apply option. Plan first,
 retain bounded evidence, and request explicit authorization before applying.
 Credential providers remain outside danvas; agents pass only the neutral
 environment-variable name or credential-file path selected by the operator.
+
+Inspect the exact packaged public skill before installation:
+
+  danvas skill show
+
+Preview one explicit allowlisted target, then install only after reviewing the
+target and hashes:
+
+  danvas skill install --agent shared --scope user --dry-run
+  danvas skill install --agent shared --scope user
+
+Use `shared` for the portable `.agents/skills` location, or select `codex`,
+`claude-code`, `gemini`, or `copilot` for that vendor's documented path. Project
+scope requires `--project-root`; the installer never guesses a repository.
+
+Run `danvas skill doctor` to inspect the executable and all user/project targets
+offline. Exact installs are idempotent and unmodified stale installs update in
+place. Modified, unowned, or unsafe targets are never replaced; inspect or move
+the conflict aside yourself and rerun without a force flag.

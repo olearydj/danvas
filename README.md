@@ -18,8 +18,11 @@ It is not affiliated with or endorsed by Instructure.
 - downloads rosters, submissions, feedback material, and course files;
 - plans and verifies grade, comment, feedback, quiz-import, and file-upload
   transactions;
-- scores discussions into a private `grades post`-compatible plan; and
-- experimentally downloads Panopto captions through a Canvas LTI launch.
+- scores discussions into a private `grades post`-compatible plan;
+- experimentally downloads Panopto captions through a Canvas LTI launch;
+- provides workflow-rich help, offline task guides, and versioned JSON command
+  discovery; and
+- packages a portable Agent Skill with an explicit no-clobber installer.
 
 It intentionally does not manage archival ledger or history databases.
 
@@ -151,7 +154,20 @@ danvas reports latest
 ```
 
 Use `danvas --help`, group help such as `danvas assignments --help`, and leaf
-command help for the current option surface.
+command help for the current option surface. For longer or structured discovery:
+
+```bash
+danvas guide list
+danvas guide safety
+danvas describe assignments update --format json
+danvas skill show
+danvas skill install --agent shared --dry-run
+danvas skill doctor
+```
+
+`skill install` is an explicit local write, not a Canvas mutation. It installs
+only the version-matched bundled `danvas` skill at one selected allowlisted
+agent location. Preview first; modified or unowned targets are refused.
 
 ## Documentation
 
@@ -164,6 +180,7 @@ command help for the current option surface.
 - [Course policy YAML](docs/course-yaml.md)
 - [0.18.0 migration guide](docs/migrations/0.18.0.md)
 - [0.19.0 credential-boundary migration](docs/migrations/0.19.0.md)
+- [0.20.0 agent-interface migration](docs/migrations/0.20.0.md)
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
@@ -181,7 +198,7 @@ uv run ruff check .
 uv run ty check
 uv run pytest --cov=danvas --cov-branch --cov-fail-under=82
 uv run python scripts/check-docs.py
-scripts/release-smoke.sh --expected-version 0.19.0
+scripts/release-smoke.sh --expected-version 0.20.0
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete local gate, safe fixture

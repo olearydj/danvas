@@ -334,14 +334,14 @@ doctor check all passed. The external teaching skill was migrated to the
 provider-neutral workflow before the verified tag was installed globally as
 `danvas-cli 0.19.0`. No GitHub Release or PyPI publication was performed.
 
-## Accepted 0.20.0 Agent Interface Follow-On Design
+## 0.20.0 Agent Interface Candidate
 
 The accepted post-beta interface sprint is:
 
 - Sprint 22: [Agent-Facing Help And Portable Skill](22-agent-interface.md)
 
-Sprint 22 begins only after Sprint 21.5 has shipped the provider-neutral
-credential and `LoginID`-only roster surface. It makes the installed CLI
+Sprint 22 began after Sprint 21.5 shipped the provider-neutral credential and
+`LoginID`-only roster surface. It makes the installed CLI
 authoritative for bounded workflow-rich help, offline guides, versioned
 machine-readable command discovery, and a generic portable Agent Skill with an
 explicit no-clobber installer. It adds no Canvas feature or MCP server.
@@ -350,5 +350,9 @@ sequencing moves the unchanged remaining interface scope to `0.20.0`. It does
 not authorize skill installation, marketplace publication, external agent
 invocation, or Canvas mutation. Group 3 commit `75ca92a` refreshes its baseline
 to the neutral `0.19.0` surface and removes the completed roster-migration work
-item. The `v0.19.0` release gate is complete; implementation may begin with
-Sprint 22's own Group 0 gate.
+item. Local implementation completed in review-sized commits from `c09c419`
+through `48cd01e`: characterization, typed command guides, progressive help,
+offline guides and description, portable skill packaging, and the bounded
+installer. The assembled `0.20.0` candidate remains unpushed pending independent
+command-truth and adversarial-installer review, bounded external-agent
+acceptance, and exact-commit platform and release gates.
