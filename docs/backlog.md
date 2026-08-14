@@ -331,12 +331,12 @@ suite, POSIX/macOS and Python support, workflow hardening, secret scanning, and
 the cross-release beta audit. Independent review selected `danvas-cli` as the
 distribution while preserving the `danvas` import package and executable. The
 Sprint 22 design review and Sprint 21 Group 0 characterization are complete.
-Groups 1 and 2 have passed focused review. Group 3 packaging and public
-documentation is implementation-complete and awaiting focused review; the real
-anonymous exact-candidate/tag installs remain release gates after those refs
-exist remotely.
+Groups 1 through 3 have passed focused review. Group 4 CI and security hardening
+is implementation-complete and awaiting focused review; the real anonymous
+exact-candidate/tag installs remain release gates after those refs exist
+remotely.
 
-## Accepted 0.19.0 Agent Interface Design
+## Accepted 0.20.0 Agent Interface Follow-On Design
 
 Sprint 22 is the accepted post-beta interface design:
 
@@ -344,9 +344,30 @@ Sprint 22 is the accepted post-beta interface design:
 
 It extends the shipped access and artifact registries with workflow guidance,
 adds bounded help, offline guides, versioned JSON description, and packages one
-generic skill source inside the `danvas-cli` distribution. It also owns removal
-of roster `--schema legacy-v1`. Implementation begins only after 0.18.0 ships;
-the design authorizes no early skill installation or external agent invocation.
+generic skill source inside the `danvas-cli` distribution. Sprint 21.5 now owns
+the due roster `--schema legacy-v1` removal and provider-neutral authentication
+surface; Sprint 22 consumes that released `0.19.0` interface without otherwise
+changing its accepted scope. The design authorizes no early skill installation
+or external agent invocation. Its existing `0.19.0` and roster-removal wording
+is intentionally revised during Sprint 21.5 Group 3, once the neutral released
+surface exists.
+
+## Accepted 0.19.0 Provider-Neutral Credential Boundary
+
+Sprint 21.5 is the accepted post-beta prerequisite:
+
+- [Provider-Neutral Credential Boundary](sprints/21-5-credential-boundary.md)
+
+The design removes provider choice, direct SecretPath integration, and implicit
+dotenv loading from danvas while retaining explicit environment-variable and
+single-purpose credential-file delivery. It also binds credential use to a
+user-controlled Canvas origin and makes external SecretSpec, 1Password, CI, or
+platform injection an individual/organization decision. The design targets
+`0.19.0`, absorbs the roster legacy-schema removal already promised for that
+release, and moves the remaining accepted Sprint 22 agent-interface work to
+`0.20.0`. Independent review accepted the threat model, release sequence, and
+design on 2026-08-13 after the required contract edits. Implementation begins
+only after `v0.18.0` ships.
 
 Named post-beta maintenance: when Python 3.15 is released, revisit the
 `<3.15` upper bound. Expand support only with an explicit compatibility review

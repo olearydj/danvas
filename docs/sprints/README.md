@@ -302,20 +302,39 @@ in 0.18.0; completes anonymous packaging and public documentation; and adds the
 declared macOS/Python/security matrix. Independent review selected `danvas-cli`
 as the distribution while preserving the `danvas` import and command. Sprint 22
 design review and Sprint 21 Group 0 characterization are complete. Groups 1
-and 2 have passed focused review. Group 3 packaging and public
-documentation is implementation-complete and awaiting focused review.
+through 3 have passed focused review. Group 4 CI and security hardening is
+implementation-complete and awaiting focused review.
 
-## Accepted 0.19.0 Agent Interface Follow-On Design
+## Accepted 0.19.0 Sprint 21.5 Credential Boundary
+
+The accepted post-beta prerequisite is:
+
+- Sprint 21.5: [Provider-Neutral Credential Boundary](21-5-credential-boundary.md)
+
+Sprint 21.5 moves durable secret-provider choice outside danvas, replaces the
+required SecretPath integration and implicit dotenv loading with explicit
+environment-variable or single-purpose credential-file delivery, and hardens
+credential-to-Canvas-origin binding. The design targets `0.19.0`, absorbs the
+already scheduled roster legacy-schema removal, and retargets the remaining
+accepted Sprint 22 agent-interface design to `0.20.0`. Independent review
+accepted the threat model, release sequence, and design on 2026-08-13 after the
+required contract edits. Implementation begins only after `v0.18.0` ships; no
+external secret-provider change is authorized by this index entry.
+
+## Accepted 0.20.0 Agent Interface Follow-On Design
 
 The accepted post-beta interface sprint is:
 
 - Sprint 22: [Agent-Facing Help And Portable Skill](22-agent-interface.md)
 
-Sprint 22 begins only after the Sprints 18-21 contracts have shipped. It makes
-the installed CLI authoritative for bounded workflow-rich help, offline guides,
-versioned machine-readable command discovery, and a generic portable Agent
-Skill with an explicit no-clobber installer. It adds no Canvas feature or MCP
-server. Independent review accepted the design on 2026-08-13 and assigned roster
-compatibility removal to 0.19.0. Implementation waits for the 0.18.0 release and
-does not authorize skill installation, marketplace publication, external agent
-invocation, or Canvas mutation.
+Sprint 22 begins only after Sprint 21.5 has shipped the provider-neutral
+credential and `LoginID`-only roster surface. It makes the installed CLI
+authoritative for bounded workflow-rich help, offline guides, versioned
+machine-readable command discovery, and a generic portable Agent Skill with an
+explicit no-clobber installer. It adds no Canvas feature or MCP server.
+Independent review accepted the design on 2026-08-13; Sprint 21.5's accepted
+sequencing moves the unchanged remaining interface scope to `0.20.0`. It does
+not authorize skill installation, marketplace publication, external agent
+invocation, or Canvas mutation. Sprint 22's existing `0.19.0` and roster-removal
+wording is intentionally revised during Sprint 21.5 Group 3, once the neutral
+released surface exists.
