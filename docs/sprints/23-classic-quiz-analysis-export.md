@@ -1,8 +1,15 @@
 # Sprint 23: Classic Quiz Student-Analysis Export
 
 Status: accepted for `0.21.0` after independent design review on 2026-08-14.
-Implementation has not begun. No Canvas report has been requested and no live
-course has been used to validate this design.
+Groups 0-2 are implemented in `62db183`, `99a04af`, and `fa04445`; the reusable
+agent-acceptance rig was reviewed and committed separately as `f27d113`.
+Group 3 assembled the local `0.21.0` candidate with public workflow/migration
+documentation. The local gate passes 1,046 tests at 85.57% branch-aware
+coverage, Ruff, ty, Markdown/docs checks, isolated editable/wheel installation,
+dependency audit, lock validation, and redacted current-tree/all-history secret
+scans. No Canvas report or agent scenario has been run; remote CI,
+exact-candidate review, tag, and release gates remain open. No release claim is
+made.
 
 ## Outcome
 
@@ -586,14 +593,14 @@ Independent review should challenge:
 ## Definition Of Done
 
 - [x] Independent review accepts the design.
-- [ ] Group 0 freezes the released surface without runtime changes.
-- [ ] Report creation plans by default and requires `--apply` plus assertion.
-- [ ] Identity, progress, file, and uncertain outcomes reconcile without blind
+- [x] Group 0 freezes the released surface without runtime changes.
+- [x] Report creation plans by default and requires `--apply` plus assertion.
+- [x] Identity, progress, file, and uncertain outcomes reconcile without blind
       retry.
-- [ ] The official CSV commits as a verified private pair.
-- [ ] No protected URL, raw payload, or student row leaks.
-- [ ] Existing local analysis consumes the acquired CSV.
-- [ ] Help, guides, description, and skill teach the safe two-step workflow.
+- [x] The official CSV commits as a verified private pair.
+- [x] No protected URL, raw payload, or student row leaks.
+- [x] Existing local analysis consumes the acquired CSV.
+- [x] Help, guides, description, and skill teach the safe two-step workflow.
 - [ ] Automated, platform, packaging, and release gates pass.
 - [ ] Separately authorized Canvas and agent acceptance pass.
 - [ ] Independent final review accepts the exact candidate.

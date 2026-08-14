@@ -13,6 +13,7 @@ CURRENT_AUTHORITY_DOCS = (
     "SECURITY.md",
     "docs/authentication.md",
     "docs/authored-sources.md",
+    "docs/quizzes.md",
     "docs/compatibility.md",
     "docs/configuration.md",
     "docs/course-yaml.md",
@@ -40,7 +41,7 @@ def test_public_documentation_suite_passes_offline_link_check() -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "14 Markdown files" in result.stdout
+    assert "16 Markdown files" in result.stdout
 
 
 def test_documentation_checker_accepts_local_links_anchors_and_external_urls(
@@ -115,6 +116,33 @@ def test_current_guides_expose_only_login_id_roster_schema() -> None:
     migration = (ROOT / "docs/migrations/0.19.0.md").read_text(encoding="utf-8")
     assert "CanvasID,Name,LoginID,SIS_ID" in migration
     assert "roster --schema legacy-v1" in migration
+
+
+def test_classic_quiz_docs_teach_plan_apply_private_analysis_boundary() -> None:
+    workflow = (ROOT / "docs/quizzes.md").read_text(encoding="utf-8")
+    migration = (ROOT / "docs/migrations/0.21.0.md").read_text(encoding="utf-8")
+    combined = f"{workflow}\n{migration}"
+
+    for command in (
+        "danvas quiz export-analysis --course-id 101 --quiz-id 202",
+        "danvas quiz export-analysis --course-id 101 --quiz-id 202 --apply",
+        "danvas quiz analysis",
+    ):
+        assert command in combined
+    assert "Canvas mutation" in combined
+    assert ".danvas/private/quizzes/quiz-202/student-analysis.csv" in combined
+    assert "Anonymous Surveys" in combined
+    assert "New Quizzes" in combined
+    assert "blindly" in combined
+    assert "does not authorize a direct Canvas API" in combined
+
+
+def test_security_policy_tracks_latest_signed_release_not_candidate() -> None:
+    policy = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+
+    assert "latest signed `0.20.x`" in policy
+    assert "`0.19.x` and earlier" in policy
+    assert "latest signed `0.21.x`" not in policy
 
 
 def test_sprint22_baseline_is_provider_neutral_020_surface() -> None:

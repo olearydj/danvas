@@ -78,10 +78,10 @@ def test_canonical_skill_is_small_spec_valid_and_provider_neutral() -> None:
     assert metadata["name"] == SKILL_NAME
     assert set(metadata) == {"name", "description", "license", "compatibility", "metadata"}
     assert metadata["license"] == "MIT"
-    assert "danvas-cli 0.20.x" in str(metadata["compatibility"])
+    assert "danvas-cli 0.21.x" in str(metadata["compatibility"])
     assert metadata["metadata"] == {
         "danvas-cli-distribution": "danvas-cli",
-        "danvas-cli-version": "0.20.0",
+        "danvas-cli-version": "0.21.0",
         "skill-version": "1",
     }
     assert len(text.splitlines()) < 500

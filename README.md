@@ -9,6 +9,10 @@ Status: signed release `v0.20.0` is the latest public beta, not a 1.0 stability
 promise. This is an unofficial project.
 It is not affiliated with or endorsed by Instructure.
 
+The source tree currently contains the reviewed `0.21.0` Classic Quiz analysis
+export candidate. It is not released until its live, agent, independent-review,
+and exact-ref gates pass.
+
 ## What It Does
 
 - initializes course projects and snapshots Canvas metadata;
@@ -19,6 +23,8 @@ It is not affiliated with or endorsed by Instructure.
 - plans and verifies grade, comment, feedback, quiz-import, and file-upload
   transactions;
 - scores discussions into a private `grades post`-compatible plan;
+- acquires verified private Classic Quiz student-analysis CSVs for local
+  inspection;
 - experimentally downloads Panopto captions through a Canvas LTI launch;
 - provides workflow-rich help, offline task guides, and versioned JSON command
   discovery; and
@@ -159,6 +165,12 @@ danvas grades post \
 # Inspect retained report runs.
 danvas reports list
 danvas reports latest
+
+# Plan an official Classic Quiz analysis report, then apply after authorization.
+danvas quiz export-analysis --course-id 101 --quiz-id 202
+danvas quiz export-analysis --course-id 101 --quiz-id 202 --apply
+danvas quiz analysis \
+  .danvas/private/quizzes/quiz-202/student-analysis.csv
 ```
 
 Use `danvas --help`, group help such as `danvas assignments --help`, and leaf
@@ -184,11 +196,13 @@ agent location. Preview first; modified or unowned targets are refused.
 - [Privacy and retained artifacts](docs/privacy.md)
 - [Compatibility and support](docs/compatibility.md)
 - [Authored sources](docs/authored-sources.md)
+- [Classic Quiz workflows](docs/quizzes.md)
 - [Mutation safety](docs/mutation-safety.md)
 - [Course policy YAML](docs/course-yaml.md)
 - [0.18.0 migration guide](docs/migrations/0.18.0.md)
 - [0.19.0 credential-boundary migration](docs/migrations/0.19.0.md)
 - [0.20.0 agent-interface migration](docs/migrations/0.20.0.md)
+- [0.21.0 Classic Quiz analysis-export migration](docs/migrations/0.21.0.md)
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
@@ -206,7 +220,7 @@ uv run ruff check .
 uv run ty check
 uv run pytest --cov=danvas --cov-branch --cov-fail-under=82
 uv run python scripts/check-docs.py
-scripts/release-smoke.sh --expected-version 0.20.0
+scripts/release-smoke.sh --expected-version 0.21.0
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete local gate, safe fixture

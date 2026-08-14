@@ -10,12 +10,12 @@ description: >-
   or institution-specific policy.
 license: MIT
 compatibility: >-
-  Requires the danvas command from the danvas-cli 0.20.x distribution on a POSIX
+  Requires the danvas command from the danvas-cli 0.21.x distribution on a POSIX
   platform. Canvas-backed operations require operator-configured neutral
   credential delivery and network access.
 metadata:
   danvas-cli-distribution: danvas-cli
-  danvas-cli-version: "0.20.0"
+  danvas-cli-version: "0.21.0"
   skill-version: "1"
 ---
 

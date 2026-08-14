@@ -3,6 +3,30 @@
 This file records operator-visible release changes. Detailed transition steps
 live in the linked migration guides.
 
+## 0.21.0 - Classic Quiz Analysis Export
+
+Sprint 23 closes the supported acquisition gap for Classic Quiz analysis:
+
+- adds plan-by-default `quiz export-analysis` for Canvas's official identified
+  `student_analysis` report;
+- treats the report `POST` as a Canvas mutation requiring `--apply`, even though
+  it changes no quiz content or grades;
+- reconciles create-or-reuse, `409`, asynchronous progress, readback, and
+  uncertain transport outcomes without blind retries;
+- validates and commits the downloaded CSV as a private SHA-bearing artifact
+  pair for the existing local `quiz analysis` consumer;
+- excludes anonymous Surveys and New Quizzes from acquisition with explicit
+  diagnostics; and
+- teaches the human and agent interfaces that missing command coverage does not
+  authorize direct API, browser, or provider-specific fallback.
+
+Existing QTI import and local analysis behavior are unchanged. Release remains
+gated on one separately authorized sandbox report request, bounded agent
+acceptance, independent exact-candidate review, and the established branch/tag
+installation gates.
+
+See [Migrating to 0.21.0](docs/migrations/0.21.0.md).
+
 ## 0.20.0 - Agent Interface
 
 Sprint 22 makes the installed CLI the authoritative human and agent interface:

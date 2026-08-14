@@ -272,7 +272,7 @@ def test_public_beta_package_metadata_preserves_released_identity() -> None:
     project = pyproject["project"]
 
     assert project["name"] == "danvas-cli"
-    assert project["version"] == "0.20.0"
+    assert project["version"] == "0.21.0"
     assert project["requires-python"] == ">=3.12,<3.15"
     assert project["scripts"] == {"danvas": "danvas.cli:main"}
     assert pyproject["tool"]["uv"]["build-backend"]["module-name"] == "danvas"
@@ -298,6 +298,7 @@ def test_public_documentation_suite_and_anonymous_install_are_declared() -> None
         "docs/privacy.md",
         "docs/compatibility.md",
         "docs/authored-sources.md",
+        "docs/quizzes.md",
         "docs/mutation-safety.md",
         "CHANGELOG.md",
         "CONTRIBUTING.md",

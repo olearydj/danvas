@@ -4,6 +4,10 @@ The signed `v0.20.0` release is the latest public beta, not a 1.0 stability
 promise. This project is unofficial and is not affiliated with or endorsed by
 Instructure.
 
+The source tree's `0.21.0` candidate adds Classic Quiz analysis-report
+acquisition. The signed `v0.20.0` release remains the rollback and public
+installation point until the candidate completes its release gates.
+
 Version `0.19.0` carries a deliberate authentication-boundary break. Signed
 `v0.18.0` remains the documented rollback point for that transition.
 
@@ -99,6 +103,24 @@ quiz settings that danvas owns.
 Package acceptance and imported question behavior can vary by Canvas release.
 Inspect the resulting quiz before student use.
 
+## Classic Quiz Analysis Reports
+
+`quiz export-analysis` targets the Canvas Classic Quiz `student_analysis`
+report. Report generation uses a create-or-reuse `POST` and is therefore a
+Canvas mutation requiring `--apply`; it is not read-only merely because it
+changes no questions or grades.
+
+The command supports Classic Quizzes and identified Surveys. Anonymous Surveys
+are refused before creation because their report may omit the stable identity
+columns required by the acquisition contract. New Quizzes use a separate
+service and are unsupported.
+
+Canvas deployments may differ in report availability, progress objects,
+permissions, and signed file transport. Danvas validates deployed response
+identity and stops on ambiguity or uncertain acceptance instead of retrying
+blindly. A browser-downloaded CSV remains usable by local `quiz analysis`.
+See [Classic Quiz Workflows](quizzes.md).
+
 ## Panopto
 
 Panopto caption support is experimental and deployment-dependent. It assumes a
@@ -138,6 +160,7 @@ Migration guides describe operator-visible changes release by release:
 - [0.18.0 public beta](migrations/0.18.0.md)
 - [0.19.0 provider-neutral credentials](migrations/0.19.0.md)
 - [0.20.0 agent interface](migrations/0.20.0.md)
+- [0.21.0 Classic Quiz analysis export](migrations/0.21.0.md)
 
 ## Reporting Problems
 

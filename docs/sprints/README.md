@@ -374,7 +374,7 @@ The accepted next field-driven slice is:
 - Sprint 23: [Classic Quiz Student-Analysis Export](23-classic-quiz-analysis-export.md)
 
 Sprint 23 closes the missing acquisition step in the existing local Classic
-Quiz analysis workflow. It proposes one plan-by-default command that requests
+Quiz analysis workflow. It adds one plan-by-default command that requests
 Canvas's official `student_analysis` report only with `--apply`, reconciles its
 asynchronous state without blind retries, and commits the CSV as a verified
 private artifact for the existing `quiz analysis` consumer.
@@ -384,5 +384,10 @@ missing Danvas coverage does not authorize a direct Canvas API or browser
 fallback, and Classic Quiz report generation is not read-only merely because it
 does not change questions or grades. Independent review accepted the design on
 2026-08-14 after clarifying anonymous-Survey exclusion and keeping GitHub/PyPI
-publication outside the feature-completion gate. Group 0 characterization is
-next; no implementation or live Canvas request has occurred.
+publication outside the feature-completion gate. Groups 0-2 completed in
+`62db183`, `99a04af`, and `fa04445`; reusable acceptance tooling landed
+separately as `f27d113`. The local `0.21.0` candidate is assembled. The
+local candidate gate passes 1,046 tests, coverage, lint/type/docs, isolated
+editable/wheel installation, dependency audit, lock validation, and redacted
+secret scans. The bounded live report request, agent scenario, exact-candidate
+review, push, and release gates remain open.

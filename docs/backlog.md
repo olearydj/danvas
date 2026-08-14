@@ -7,13 +7,13 @@ Released behavior belongs in `CHANGELOG.md`, migration guides, and the accepted
 sprint records under `docs/sprints/`. Rejected directions and completed work are
 kept in those records and in git history rather than repeated here.
 
-Sprint 23 is accepted and is the current implementation priority. Feature
-priority follows concrete course-workflow demand.
+Sprint 23 implementation is assembled locally and is the current release gate.
+Feature priority follows concrete course-workflow demand.
 
 ## Current Priority Order
 
-1. Implement accepted Sprint 23 for supported Classic Quiz student-analysis
-   acquisition.
+1. Complete Sprint 23's separately authorized Canvas and agent acceptance,
+   exact-candidate review, and release gates.
 2. Add the Page asset adapter on top of the verified assignment asset
    transaction.
 3. Add group-category, membership-import, verification, and local group-planning
@@ -25,20 +25,14 @@ The recurring Classic Quiz acquisition gap now outranks the larger Page and
 grouped-case candidates. Their relative order may still change when an actual
 course deadline makes one more valuable.
 
-## Accepted Sprint 23: Classic Quiz Student-Analysis Export
+## Current Release Gate: Sprint 23
 
-[Sprint 23](sprints/23-classic-quiz-analysis-export.md) defines a supported
-way to request, reconcile, and privately download Canvas's official Classic
-Quiz or identified Survey `student_analysis` CSV for the existing local
-`quiz analysis` command.
-
-The report request is a Canvas mutation and must remain plan-by-default with
-`--apply`. The slice must keep protected URLs and raw response payloads out of
-evidence, reconcile asynchronous or uncertain report creation before retry,
-and teach agents that missing CLI coverage does not authorize direct API
-fallback. Independent design review accepted the slice on 2026-08-14. Group 0
-characterization is next; implementation and live Canvas acceptance remain
-separately authorized.
+[Sprint 23](sprints/23-classic-quiz-analysis-export.md) now contains the complete
+local implementation and its reviewed transaction/interface contracts. The
+remaining work is bounded there: one separately authorized sandbox report
+request, scenario-11 agent acceptance, independent exact-candidate review, and
+the established exact-ref release sequence. GitHub Release and PyPI publication
+remain optional, separately authorized post-tag actions.
 
 ## Candidate: Page Asset Deployment
 

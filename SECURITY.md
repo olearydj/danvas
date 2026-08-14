@@ -6,12 +6,12 @@ privacy vulnerabilities privately.
 
 ## Supported Releases
 
-Security fixes target the latest signed `0.19.x` public-beta release only.
+Security fixes target the latest signed `0.20.x` public-beta release only.
 
 | Version | Supported |
 | --- | --- |
-| Latest signed `0.19.x` | Yes |
-| `0.18.x` and earlier | No |
+| Latest signed `0.20.x` | Yes |
+| `0.19.x` and earlier | No |
 | Unreleased branches and commits | No release-support guarantee |
 
 Upgrade to the latest signed patch release before assuming a reported issue is
