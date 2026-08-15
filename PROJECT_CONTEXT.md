@@ -85,7 +85,9 @@ system.
   typed transaction evidence, reconciliation, and recovery.
 - `src/danvas/files.py`: Canvas Files inventory, targeted comparison, contained
   downloads, and non-destructive-by-default upload.
-- `src/danvas/quiz_import.py` and `quiz.py`: QTI import and local quiz analysis.
+- `src/danvas/quiz_import.py`, `quiz.py`, and `quiz_reports.py`: QTI import,
+  local quiz analysis, and guarded acquisition of official Classic Quiz
+  student-analysis reports.
 - `src/danvas/panopto.py`: experimental Panopto caption discovery/download
   through Canvas LTI with private interrupted-bundle reconciliation.
 - `tests/`: command-tree architecture checks and behavioral coverage.
@@ -99,11 +101,11 @@ system.
 `danvas --version` and `danvas.__version__` read installed distribution
 metadata.
 
-Current public beta: `0.20.0`. Signed tag `v0.20.0` resolves to
-`83c6a43520a3ddf36b8aff32f578f439c8ecaafe`. The global CLI reports
-`danvas 0.20.0` outside the checkout. The GitHub prerelease carries one wheel,
+Current public beta: `0.21.0`. Signed tag `v0.21.0` resolves to
+`0953757208a6662ec6e1be3bc3e89ddd4667d212`. The global CLI reports
+`danvas 0.21.0` outside the checkout. The GitHub prerelease carries one wheel,
 one source distribution, and `SHA256SUMS`; the same distributions are published
-as [`danvas-cli 0.20.0`](https://pypi.org/project/danvas-cli/0.20.0/) through
+as [`danvas-cli 0.21.0`](https://pypi.org/project/danvas-cli/0.21.0/) through
 PyPI Trusted Publishing with repository-linked attestations.
 
 The public-readiness sequence is complete:
@@ -122,7 +124,11 @@ The public-readiness sequence is complete:
   of SecretPath/dotenv/provider-specific options, and `LoginID`-only rosters;
   and
 - `0.20.0`: progressive help, offline guides, deterministic description JSON,
-  a portable generic Agent Skill, and bounded skill installation/diagnostics.
+  a portable generic Agent Skill, and bounded skill installation/diagnostics;
+  and
+- `0.21.0`: plan-by-default acquisition of official Classic Quiz identified
+  student-analysis reports, bounded progress and uncertainty reconciliation,
+  private verified CSV pairs, and a supported handoff to local quiz analysis.
 
 Supported runtime is Python `>=3.12,<3.15` on Linux and macOS. Windows is
 unsupported because danvas cannot promise its POSIX private-file and atomic
@@ -250,10 +256,10 @@ Do not add a long-lived PyPI token.
 - The current Page workflow remains bounded: safe Markdown/native HTML,
   restricted CSS, stable-ID create/update/readback, and one-way local source
   creation. Asset rewriting, lifecycle controls, front-page changes, and broad
-  upsert remain separate designs. Accepted Sprint 23 now precedes the Page
-  adapter because repeated field use exposed a missing supported path for
-  acquiring Classic Quiz student-analysis CSVs. The Page-specific adapter over
-  the existing assignment asset transaction remains the next major candidate.
+  upsert remain separate designs. Released Sprint 23 closed the field-driven
+  gap for acquiring Classic Quiz student-analysis CSVs. The Page-specific
+  adapter over the existing assignment asset transaction remains the next major
+  candidate.
 - Page snapshot/sync canonicalizes stable Canvas links and blocks unresolved
   volatile or signed URLs before hashing or writing authored sources. The
   current profiles are `pages-html-v4` and `pages-markdown-v2`.
