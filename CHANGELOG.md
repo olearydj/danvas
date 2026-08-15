@@ -3,6 +3,44 @@
 This file records operator-visible release changes. Detailed transition steps
 live in the linked migration guides.
 
+## 0.21.1 - Post-Program Hygiene
+
+Sprint 24 remediates the eight low-severity findings from the first
+whole-system deep review after the public-readiness program. No command,
+option, or Canvas mutation surface changes.
+
+Three fixes are operator-visible because previously silent mismatches now fail
+with a bounded error instead of quietly using something else:
+
+- `--final-score-column` (and the equivalent audit policy key) now raises when
+  the requested heading matches no gradebook heading, instead of silently
+  auditing the first canonical score column it finds;
+- a configured Panopto `tool_name`/`tool_id` that matches no course-navigation
+  tool no longer falls back to the "contains panopto" heuristic. The selector
+  is still resolved against Canvas tabs, so a tool present only in tabs keeps
+  working; a selector matching nothing now reports that truthfully; and
+- `danvas status` now applies the project's `[files.inventory]` ignore
+  configuration when comparing local files against Canvas, so it agrees with
+  `danvas files inventory` instead of using built-in defaults. Projects that
+  set `use_default_ignores` or custom `ignore` patterns will see different, and
+  correct, local-file classifications.
+
+The remaining fixes correct behavior without changing accepted inputs:
+
+- zero-length CSS values written with `%` (`margin: 0%`) now normalize like
+  every other unit, removing spurious Page body differences in `pages verify`
+  and `pages update --dry-run`;
+- Panopto caption manifests and filename prefixes now record the session start
+  as an explicit UTC instant rather than the operator's local wall clock with
+  no offset, so bundles are comparable across operators;
+- the shared sanitizer now recognizes the environment-variable form of
+  `AWS_ACCESS_KEY_ID`, matching the coverage its paired secret already had;
+- `files upload` walks the Canvas folder listing once instead of twice when a
+  `--folder` name is not found; and
+- the `assignments overrides-sync` example in help, guides, `describe`, and the
+  packaged skill now shows the Markdown `SOURCE` argument the command actually
+  accepts rather than a CSV path.
+
 ## 0.21.0 - Classic Quiz Analysis Export
 
 Sprint 23 closes the supported acquisition gap for Classic Quiz analysis:

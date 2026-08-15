@@ -1,8 +1,16 @@
 # Compatibility And Support
 
-The signed `v0.21.0` release is the latest public beta, not a 1.0 stability
+The signed `v0.21.1` release is the latest public beta, not a 1.0 stability
 promise. This project is unofficial and is not affiliated with or endorsed by
 Instructure.
+
+Version `0.21.1` is a defect-fix release that adds no command or option. Three
+fixes are operator-visible because a previously silent mismatch now fails with
+a bounded error: an unmatched `--final-score-column` request, an unmatched
+configured Panopto tool selector, and `danvas status` now honoring the
+project's `[files.inventory]` ignore configuration instead of built-in
+defaults. Signed `v0.21.0` remains the documented rollback point for those
+strictness changes.
 
 Version `0.21.0` adds Classic Quiz analysis-report acquisition. Signed
 `v0.20.0` remains the documented rollback point for that feature transition.

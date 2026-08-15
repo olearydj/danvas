@@ -406,3 +406,24 @@ Trusted Publishing run `31852406840` published the same files as
 publication check on 2026-08-14 America/Chicago (2026-08-15 UTC) verified PyPI
 version `0.21.0`, exact hashes, repository/workflow provenance, both
 cryptographic attestations, and an isolated PyPI installation.
+
+## 0.21.1 Post-Program Hygiene Sprint
+
+The accepted remediation slice from the first whole-system deep review is:
+
+- Sprint 24: [Post-Program Hygiene](24-post-program-hygiene.md)
+
+Sprint 24 responds to the 2026-08-14 whole-file cloud review of `src/danvas` at
+`85955b4`, which returned eight verified low-severity findings and no defect in
+the security-critical credential, installer, artifact, or mutation contracts.
+The sprint lands all eight fixes with regression tests under three themes:
+explicit operator selectors are honored or fail with bounded errors instead of
+silently falling through to heuristics or defaults; retained evidence and
+comparison normalization become deterministic across timezones and
+serialization variants; and agent-facing guide examples plus one pagination
+idiom match established conventions. It adds one new durable decision recording
+the explicit-selector principle, attempts no C901 or `cli.py` refactor, and
+requires no Canvas access for acceptance. Independent design review re-verified
+all eight findings and accepted the sprint for patch release `0.21.1` on
+2026-08-14 after requiring an explicit Release Contract and committing the
+Panopto fix to the tabs-matching path.

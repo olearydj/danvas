@@ -192,6 +192,11 @@ Do not add a long-lived PyPI token.
   exactly once with the intent that drove it; mutation status remains distinct
   from evidence status; and indeterminate outcomes instruct the operator to
   verify before retrying.
+- Explicit operator selectors and configured filters are honored or fail with a
+  bounded error naming the request and the observed candidates. They never
+  silently fall through to a heuristic, a default, or a different filter.
+  Requested gradebook headings, configured Panopto tool selectors, and project
+  inventory ignore configuration all follow this rule.
 - Danvas consumes one credential through one provider-neutral environment
   variable or one externally managed single-purpose file. It does not contact,
   configure, or diagnose secret providers and does not load dotenv files.
