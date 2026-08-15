@@ -262,20 +262,23 @@ def discover_panopto_tool(
         canvas_api_url,
         f"api/v1/courses/{course_id}/external_tools/visible_course_nav_tools",
     )
-    if tool_name is not None or tool_id is not None:
+    configured = tool_name is not None or tool_id is not None
+    if configured:
+        # An explicit selector is never widened by the substring heuristic; an
+        # unmatched selector continues to the tabs listing, which raises.
         tool_matches = configured_tool_matches(tools, tool_name=tool_name, tool_id=tool_id)
         if len(tool_matches) > 1:
             raise SystemExit("Configured Panopto tool selector is ambiguous in Canvas navigation.")
         if len(tool_matches) == 1:
             return tool_matches[0]
-
-    for tool in tools:
-        text = " ".join(str(tool.get(key) or "") for key in ("name", "url", "domain")).lower()
-        if "panopto" in text:
-            return tool
+    else:
+        for tool in tools:
+            text = " ".join(str(tool.get(key) or "") for key in ("name", "url", "domain")).lower()
+            if "panopto" in text:
+                return tool
 
     tabs = canvas_get_paginated(canvas, canvas_api_url, f"api/v1/courses/{course_id}/tabs")
-    if tool_name is not None or tool_id is not None:
+    if configured:
         normalized_tabs = [
             {
                 "id": external_tool_id(tab),
@@ -611,7 +614,7 @@ def parse_panopto_date(value: Any) -> str:
         return str(value)
     timestamp_ms = int(match.group(1))
     try:
-        return datetime.fromtimestamp(timestamp_ms / 1000).isoformat(timespec="seconds")
+        return datetime.fromtimestamp(timestamp_ms / 1000, UTC).isoformat(timespec="seconds")
     except (OverflowError, OSError, ValueError):
         return str(value)
 

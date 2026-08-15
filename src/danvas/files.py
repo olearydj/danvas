@@ -950,16 +950,17 @@ def resolve_upload_folder(
         return resolved
 
     requested = str(folder or "")
+    all_folders = list(course.get_folders())
     matches = [
         candidate
-        for candidate in course.get_folders()
+        for candidate in all_folders
         if str(getattr(candidate, "full_name", "") or "") == requested
     ]
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:
         raise SystemExit(f"Canvas folder name is ambiguous: {requested}")
-    folders = sorted(str(getattr(candidate, "full_name", "") or "") for candidate in course.get_folders())
+    folders = sorted(str(getattr(candidate, "full_name", "") or "") for candidate in all_folders)
     suggestions = nearby_folder_names(requested, folders)
     message = f"Canvas folder not found: {requested}"
     if suggestions:

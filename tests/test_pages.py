@@ -283,6 +283,18 @@ def test_style_normalization_accepts_common_canvas_equivalents() -> None:
     assert actual == expected
 
 
+@pytest.mark.parametrize("zero_value", ["0%", "0.0%", "0px", "0rem", "0"])
+def test_zero_length_percentage_normalizes_with_every_other_unit(zero_value: str) -> None:
+    expected = normalize_html_fragment('<p style="margin: 0">Text</p>')
+
+    assert normalize_html_fragment(f'<p style="margin: {zero_value}">Text</p>') == expected
+
+
+@pytest.mark.parametrize("kept", ["10%", "0.5%", "100%"])
+def test_nonzero_percentage_values_are_not_collapsed(kept: str) -> None:
+    assert kept in normalize_html_fragment(f'<p style="margin: {kept}">Text</p>')
+
+
 def test_page_url_canonicalization_removes_canvas_verifiers_and_blocks_external_signatures() -> None:
     canvas = canonicalize_page_html(
         '<a href="https://canvas.test/courses/42/files/7/download?verifier=secret&wrap=1">File</a>',

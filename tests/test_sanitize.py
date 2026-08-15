@@ -71,6 +71,7 @@ DETECTOR_CREDENTIAL_NAMES = (
     "expires",
     "key_pair_id",
     "awsaccesskeyid",
+    "aws_access_key_id",
     "aws_secret_access_key",
     "x-amz-signature",
     "x-goog-credential",
@@ -161,6 +162,42 @@ def ambiguous_prose_cases() -> list[str]:
             ORDINARY_PROSE_VALUES,
         )
     ]
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "AWS_ACCESS_KEY_ID",
+        "AWSAccessKeyId",
+        "aws-access-key-id",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWSSecretAccessKey",
+    ],
+)
+def test_paired_aws_credential_names_are_symmetrically_sensitive(key: str) -> None:
+    assert is_sensitive_key(key)
+
+
+def test_public_sanitizer_drops_both_halves_of_env_form_aws_credentials() -> None:
+    payload = {
+        "AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE",
+        "AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI",
+        "course": "kept",
+    }
+
+    assert sanitize_public(payload) == {"course": "kept"}
+
+
+def test_error_sanitizer_redacts_env_form_aws_access_key_id() -> None:
+    sanitized = sanitize_error("boto failed AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE afterward")
+
+    assert "AKIAIOSFODNN7EXAMPLE" not in sanitized
+    assert "afterward" in sanitized
+
+
+def test_aws_credential_widening_preserves_ordinary_prose() -> None:
+    assert not contains_sensitive_text("the access key is in the shared drive")
+    assert not contains_sensitive_text("students access key readings each week")
 
 
 def test_sensitive_detector_supports_whole_value_hashing_without_near_matches() -> None:

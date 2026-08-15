@@ -272,7 +272,7 @@ def test_public_beta_package_metadata_preserves_released_identity() -> None:
     project = pyproject["project"]
 
     assert project["name"] == "danvas-cli"
-    assert project["version"] == "0.21.0"
+    assert project["version"] == "0.21.1"
     assert project["requires-python"] == ">=3.12,<3.15"
     assert project["scripts"] == {"danvas": "danvas.cli:main"}
     assert pyproject["tool"]["uv"]["build-backend"]["module-name"] == "danvas"
@@ -309,11 +309,11 @@ def test_public_documentation_suite_and_anonymous_install_are_declared() -> None
     assert observed == expected
     assert "uv tool install danvas-cli" in readme
     assert (
-        'danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.21.0'
+        'danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.21.1'
         in readme
     )
     assert "git+ssh" not in readme
-    assert "signed release `v0.21.0` is the latest public beta" in readme
+    assert "signed release `v0.21.1` is the latest public beta" in readme
     assert "must not be represented as released" not in readme
     assert "not affiliated with or endorsed by Instructure" in readme
     public_text = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in expected)
@@ -383,7 +383,10 @@ def test_public_fixtures_use_placeholder_hosts_and_ids() -> None:
 
     assert canvas_occurrences == {}
     assert panopto_occurrences == {}
+    # Long numerics are reviewed one by one so no real course, quiz, or session
+    # identifier reaches a public fixture. The accepted values are a placeholder
+    # color, a Unix millisecond epoch, and an out-of-range epoch.
     assert numeric_occurrences == {
         "tests/test_pages.py": ["123456"],
-        "tests/test_panopto.py": ["99999999999999999"],
+        "tests/test_panopto.py": ["1700000000000", "99999999999999999"],
     }

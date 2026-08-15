@@ -12,7 +12,7 @@ operations. It helps instructors inspect courses, manage authored content,
 download submissions, reconcile grades, and retain evidence for consequential
 changes.
 
-Status: signed release `v0.21.0` is the latest public beta, not a 1.0 stability
+Status: signed release `v0.21.1` is the latest public beta, not a 1.0 stability
 promise. This is an unofficial project.
 It is not affiliated with or endorsed by Instructure.
 
@@ -56,7 +56,7 @@ For an exact Git-ref installation directly from the repository instead:
 
 ```bash
 uv tool install \
-  "danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.21.0"
+  "danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.21.1"
 ```
 
 The Python distribution is named `danvas-cli`; the installed command and import
@@ -223,7 +223,7 @@ uv run ruff check .
 uv run ty check
 uv run pytest --cov=danvas --cov-branch --cov-fail-under=82
 uv run python scripts/check-docs.py
-scripts/release-smoke.sh --expected-version 0.21.0
+scripts/release-smoke.sh --expected-version 0.21.1
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete local gate, safe fixture

@@ -129,6 +129,26 @@ def test_exact_requested_observed_heading_wins_after_alias_resolution(tmp_path: 
     )
 
 
+def test_requested_final_score_heading_absent_from_headers_raises(tmp_path: Path) -> None:
+    path = tmp_path / "gradebook.csv"
+    path.write_text(
+        "Student,ID,SIS Login ID,Assignment,Final Score,Final Grade\n"
+        "Points Possible,,,10,,\n"
+        "PRIVATE STUDENT NAME,1,login@example.edu,9,90,A\n",
+        encoding="utf-8",
+    )
+    gradebook = CanvasGradebook.read(path)
+
+    with pytest.raises(ValueError) as exc_info:
+        gradebook.choose_final_score_column("Unposted Final Score")
+
+    message = str(exc_info.value)
+    assert "not found" in message
+    assert "Unposted Final Score" in message
+    assert "Final Score" in message
+    assert "PRIVATE STUDENT NAME" not in message
+
+
 def test_gradebook_alias_cannot_map_to_multiple_roles() -> None:
     with pytest.raises(ValueError, match="maps to multiple canonical roles"):
         resolve_gradebook_heading_aliases(

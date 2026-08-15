@@ -16,7 +16,7 @@ from danvas.config import (
     find_config_dir,
     load_project_config,
 )
-from danvas.files import local_files, status_for
+from danvas.files import files_inventory_ignore_policy, local_files, status_for
 from danvas.overrides import (
     assignment_base_compare_row,
     compare_local_overrides,
@@ -622,8 +622,18 @@ def compare_quizzes(
     return items
 
 
-def compare_files(canvas_files: list[dict[str, Any]], root: Path) -> list[dict[str, Any]]:
-    local_rows = local_files(root)
+def compare_files(
+    canvas_files: list[dict[str, Any]],
+    root: Path,
+    *,
+    ignore_patterns: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    effective_patterns = (
+        files_inventory_ignore_policy(root, local_root=root).effective_patterns
+        if ignore_patterns is None
+        else ignore_patterns
+    )
+    local_rows = local_files(root, ignore_patterns=effective_patterns)
     local_by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in local_rows:
         local_by_name[row["normalized_name"]].append(row)

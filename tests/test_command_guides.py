@@ -85,6 +85,22 @@ def test_guide_examples_workflows_and_relationships_name_real_surface() -> None:
             assert related in commands, (guide.command, related)
 
 
+def test_authored_source_examples_use_the_shared_source_placeholder() -> None:
+    authored_source_commands = [
+        "assignments overrides-sync",
+        "assignments create",
+        "assignments update",
+        "assignments verify",
+        "pages create",
+        "pages update",
+    ]
+
+    for command in authored_source_commands:
+        argv = COMMAND_GUIDES[command].examples[0].argv
+        assert "SOURCE" in argv, command
+        assert not any(token.endswith(".csv") for token in argv), command
+
+
 def test_mutation_guides_have_plan_then_apply_without_retyping_effects() -> None:
     guide_fields = {field.name for field in fields(CommandGuide)}
 

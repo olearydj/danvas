@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import time
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -174,6 +176,33 @@ def test_parse_panopto_date_preserves_out_of_range_value() -> None:
     value = "/Date(99999999999999999)/"
 
     assert parse_panopto_date(value) == value
+
+
+@pytest.fixture
+def operator_timezone() -> Iterator[Callable[[str], None]]:
+    original = os.environ.get("TZ")
+
+    def apply(zone: str) -> None:
+        os.environ["TZ"] = zone
+        time.tzset()
+
+    try:
+        yield apply
+    finally:
+        if original is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = original
+        time.tzset()
+
+
+@pytest.mark.parametrize("zone", ["America/Chicago", "Europe/Berlin", "UTC", "Pacific/Auckland"])
+def test_parse_panopto_date_renders_utc_instant_regardless_of_operator_timezone(
+    zone: str, operator_timezone: Callable[[str], None]
+) -> None:
+    operator_timezone(zone)
+
+    assert parse_panopto_date("/Date(1700000000000)/") == "2023-11-14T22:13:20+00:00"
 
 
 def test_discover_panopto_tool_from_visible_course_nav() -> None:
@@ -554,6 +583,51 @@ def test_configured_tool_name_is_exact_case_insensitive_and_ambiguity_rejected()
             101,
             tool_name="Panopto Video",
         )
+
+
+def test_unmatched_configured_tool_name_does_not_fall_back_to_substring_match() -> None:
+    canvas = FakeCanvasSession(
+        [
+            FakeResponse(
+                [
+                    {"id": 201, "name": "Panopto Recordings", "domain": "old.example.edu"},
+                    {"id": 202, "name": "Panopto Video (Beta)", "domain": "media.example.edu"},
+                ]
+            ),
+            FakeResponse([]),
+        ]
+    )
+
+    with pytest.raises(SystemExit, match="'Panopto Video' was not found"):
+        discover_panopto_tool(
+            canvas,
+            "https://canvas.example.edu/",
+            101,
+            tool_name="Panopto Video",
+        )
+
+
+def test_configured_tool_absent_from_nav_still_resolves_from_tabs() -> None:
+    canvas = FakeCanvasSession(
+        [
+            FakeResponse([{"id": 11, "name": "Grades", "domain": ""}]),
+            FakeResponse(
+                [
+                    {"id": "context_external_tool_202", "label": "Panopto Video"},
+                ]
+            ),
+        ]
+    )
+
+    tool = discover_panopto_tool(
+        canvas,
+        "https://canvas.example.edu/",
+        101,
+        tool_name="Panopto Video",
+    )
+
+    assert tool["id"] == 202
+    assert canvas.get_calls[1]["url"].endswith("/api/v1/courses/101/tabs")
 
 
 def test_configured_tool_id_unknown_is_truthfully_rejected() -> None:

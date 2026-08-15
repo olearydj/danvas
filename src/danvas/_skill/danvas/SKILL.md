@@ -15,7 +15,7 @@ compatibility: >-
   credential delivery and network access.
 metadata:
   danvas-cli-distribution: danvas-cli
-  danvas-cli-version: "0.21.0"
+  danvas-cli-version: "0.21.1"
   skill-version: "1"
 ---
 

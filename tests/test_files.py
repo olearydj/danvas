@@ -18,6 +18,7 @@ from danvas.files import (
     files_inventory_ignore_policy,
     local_files,
     plan_upload_rows,
+    resolve_upload_folder,
     scrub_sensitive_upload_payload,
     write_missing_report,
 )
@@ -1144,6 +1145,30 @@ def test_command_files_upload_rejects_missing_and_ambiguous_folder(
 
     with pytest.raises(SystemExit, match="ambiguous"):
         command_files_upload(args)
+
+
+def test_unmatched_upload_folder_walks_canvas_folder_listing_once() -> None:
+    class CountingCourse(FakeUploadCourse):
+        def __init__(self) -> None:
+            super().__init__()
+            self.folder_walks = 0
+
+        def get_folders(self) -> list[FakeUploadFolder]:
+            self.folder_walks += 1
+            return [self.slides, self.cases]
+
+    course = CountingCourse()
+
+    with pytest.raises(SystemExit, match="Canvas folder not found") as exc_info:
+        resolve_upload_folder(
+            FakeUploadCanvas(course),
+            course,
+            folder="course files/slide",
+            folder_id=None,
+        )
+
+    assert course.folder_walks == 1
+    assert "course files/slides" in str(exc_info.value)
 
 
 def test_command_files_upload_live_uploads_and_writes_safe_report(

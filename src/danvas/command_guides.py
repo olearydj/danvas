@@ -571,7 +571,7 @@ _BASE_EXAMPLES: Mapping[str, tuple[str, ...]] = {
     "roster": ("roster",),
     "assignments export": ("assignments", "export"),
     "assignments overrides": ("assignments", "overrides", "--assignment-id", "123"),
-    "assignments overrides-sync": ("assignments", "overrides-sync", "OVERRIDES.csv"),
+    "assignments overrides-sync": ("assignments", "overrides-sync", "SOURCE"),
     "assignments create": ("assignments", "create", "SOURCE"),
     "assignments verify": ("assignments", "verify", "SOURCE"),
     "assignments update": ("assignments", "update", "SOURCE"),

@@ -483,7 +483,7 @@ def normalize_css_value(value: str) -> str:
     normalized = " ".join(value.casefold().split())
     normalized = re.sub(r"\s*([,:/()])\s*", r"\1", normalized)
     normalized = re.sub(
-        r"(?<![\w.-])(?:0+(?:\.0+)?)(?:px|em|rem|%|pt|pc|in|cm|mm|ex|ch|vh|vw|vmin|vmax)\b",
+        r"(?<![\w.-])(?:0+(?:\.0+)?)(?:px|em|rem|%|pt|pc|in|cm|mm|ex|ch|vh|vw|vmin|vmax)(?![\w.-])",
         "0",
         normalized,
     )

@@ -10,6 +10,8 @@ SENSITIVE_NAMES = {
     "api_key",
     "authorization",
     "awsaccesskeyid",
+    "aws_access_key_id",
+    "awssecretaccesskey",
     "aws_secret_access_key",
     "download_url",
     "error_url",
@@ -41,7 +43,8 @@ URLISH_RE = re.compile(r"https?://\S+|[A-Za-z]+://\S+")
 AUTHORIZATION_RE = re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer|bearer)\s+[^\s,;]+")
 SENSITIVE_NAME_PATTERN = (
     r"(?:access_)?token|verifier|secret|api[_-]?key|secure[_-]?params|signature|policy|"
-    r"expires|key[_-]?pair[_-]?id|awsaccesskeyid|aws[_-]?secret[_-]?access[_-]?key|"
+    r"expires|key[_-]?pair[_-]?id|aws[_-]?access[_-]?key[_-]?id|"
+    r"aws[_-]?secret[_-]?access[_-]?key|"
     r"x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+"
 )
 ASSIGNED_VALUE_PATTERN = r'(?:"[^"\r\n]+"|\'[^\'\r\n]+\'|[^&\s,;"\']+)'
@@ -52,7 +55,7 @@ SENSITIVE_VALUE_RE = re.compile(
 )
 UNAMBIGUOUS_CREDENTIAL_RE = re.compile(
     rf"(?i)(?<![A-Za-z0-9])(?:access[_-]?token|verifier|secret|api[_-]?key|"
-    rf"secure[_-]?params|key[_-]?pair[_-]?id|awsaccesskeyid|"
+    rf"secure[_-]?params|key[_-]?pair[_-]?id|aws[_-]?access[_-]?key[_-]?id|"
     rf"aws[_-]?secret[_-]?access[_-]?key|x-amz-[a-z0-9-]+|x-goog-[a-z0-9-]+)"
     rf"\s*[:=]\s*{ASSIGNED_VALUE_PATTERN}"
 )

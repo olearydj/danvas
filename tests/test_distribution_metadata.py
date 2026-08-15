@@ -30,8 +30,8 @@ def built_distributions(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path,
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    wheels = list(output.glob("danvas_cli-0.21.0-*.whl"))
-    sdists = list(output.glob("danvas_cli-0.21.0.tar.gz"))
+    wheels = list(output.glob("danvas_cli-0.21.1-*.whl"))
+    sdists = list(output.glob("danvas_cli-0.21.1.tar.gz"))
     assert len(wheels) == 1
     assert len(sdists) == 1
     return wheels[0], sdists[0]
@@ -48,7 +48,7 @@ def test_built_distributions_match_public_contract(
             str(wheel),
             str(sdist),
             "--expected-version",
-            "0.21.0",
+            "0.21.1",
         ],
         cwd=ROOT,
         check=False,
@@ -57,7 +57,7 @@ def test_built_distributions_match_public_contract(
     )
 
     assert result.returncode == 0, result.stderr
-    assert "danvas-cli 0.21.0" in result.stdout
+    assert "danvas-cli 0.21.1" in result.stdout
 
 
 def test_distribution_checker_rejects_wrong_expected_version(

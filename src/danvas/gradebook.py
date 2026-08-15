@@ -172,6 +172,10 @@ class CanvasGradebook:
                     f"Requested final score heading is ambiguous: {requested!r}. "
                     f"Observed headings: {bounded_observed_headings(self.headers)}"
                 )
+            raise ValueError(
+                f"Requested final score heading was not found: {requested!r}. "
+                f"Observed headings: {bounded_observed_headings(self.headers)}"
+            )
         for role in SCORE_ROLES:
             observed = self.role_headers[role]
             if observed is not None:

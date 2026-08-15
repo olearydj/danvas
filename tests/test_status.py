@@ -15,6 +15,7 @@ from danvas.snapshot_collections import COLLECTION_NAMES
 from danvas.status import (
     build_status,
     command_status,
+    compare_files,
     render_status_lines,
     render_status_markdown,
     values_equal,
@@ -336,6 +337,41 @@ def test_build_status_does_not_scan_local_files_when_files_are_unavailable(
 
     assert payload["sections"]["files"] == []
     assert payload["section_availability"]["files"]["status"] == "failed"
+
+
+def test_compare_files_honors_project_inventory_ignore_configuration(tmp_path: Path) -> None:
+    config_dir = tmp_path / ".danvas"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text(
+        '[files.inventory]\nuse_default_ignores = false\nignore = ["drafts/**"]\n',
+        encoding="utf-8",
+    )
+    drafts = tmp_path / "drafts"
+    drafts.mkdir()
+    (drafts / "lecture-01.pdf").write_text("draft", encoding="utf-8")
+    canvas_files = [
+        {"id": 7, "display_name": "lecture-01.pdf", "filename": "lecture-01.pdf", "size": 99}
+    ]
+
+    ignored = compare_files(canvas_files, tmp_path)
+
+    assert [row["classification"] for row in ignored] == ["Canvas-only"]
+    assert ignored[0]["local_path"] == ""
+    assert compare_files(canvas_files, tmp_path, ignore_patterns=[])[0]["classification"] == (
+        "filename-only match"
+    )
+
+
+def test_compare_files_default_behavior_without_inventory_configuration(tmp_path: Path) -> None:
+    (tmp_path / "handout.pdf").write_text("body", encoding="utf-8")
+    canvas_files = [
+        {"id": 8, "display_name": "handout.pdf", "filename": "handout.pdf", "size": 4}
+    ]
+
+    rows = compare_files(canvas_files, tmp_path)
+
+    assert rows[0]["classification"] == "exact"
+    assert rows[0]["local_matches"][0]["relative_path"] == "handout.pdf"
 
 
 def test_group_category_status_distinguishes_unavailable_from_available_empty(
