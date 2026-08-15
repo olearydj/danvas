@@ -407,9 +407,9 @@ publication check on 2026-08-14 America/Chicago (2026-08-15 UTC) verified PyPI
 version `0.21.0`, exact hashes, repository/workflow provenance, both
 cryptographic attestations, and an isolated PyPI installation.
 
-## 0.21.1 Post-Program Hygiene Sprint
+## Released 0.21.1 Post-Program Hygiene
 
-The accepted remediation slice from the first whole-system deep review is:
+The released remediation slice from the first whole-system deep review is:
 
 - Sprint 24: [Post-Program Hygiene](24-post-program-hygiene.md)
 
@@ -426,4 +426,11 @@ the explicit-selector principle, attempts no C901 or `cli.py` refactor, and
 requires no Canvas access for acceptance. Independent design review re-verified
 all eight findings and accepted the sprint for patch release `0.21.1` on
 2026-08-14 after requiring an explicit Release Contract and committing the
-Panopto fix to the tabs-matching path.
+Panopto fix to the tabs-matching path. Independent exact-candidate review
+accepted `dd30019`. Signed tag `v0.21.1` resolves to that commit; branch CI
+`31857479652`, tag CI `31857776914`, anonymous exact-tag and exact-SHA
+installs, and global `danvas 0.21.1` verification all passed. PyPI Trusted
+Publishing run `31858000548` published the reviewed GitHub Release artifacts as
+[`danvas-cli 0.21.1`](https://pypi.org/project/danvas-cli/0.21.1/), verified by
+matching digests, Integrity provenance, cryptographic attestations, and an
+isolated installation.

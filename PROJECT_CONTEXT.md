@@ -101,11 +101,11 @@ system.
 `danvas --version` and `danvas.__version__` read installed distribution
 metadata.
 
-Current public beta: `0.21.0`. Signed tag `v0.21.0` resolves to
-`0953757208a6662ec6e1be3bc3e89ddd4667d212`. The global CLI reports
-`danvas 0.21.0` outside the checkout. The GitHub prerelease carries one wheel,
+Current public beta: `0.21.1`. Signed tag `v0.21.1` resolves to
+`dd30019a70e62238d66b58ead161dafef8abecae`. The global CLI reports
+`danvas 0.21.1` outside the checkout. The GitHub prerelease carries one wheel,
 one source distribution, and `SHA256SUMS`; the same distributions are published
-as [`danvas-cli 0.21.0`](https://pypi.org/project/danvas-cli/0.21.0/) through
+as [`danvas-cli 0.21.1`](https://pypi.org/project/danvas-cli/0.21.1/) through
 PyPI Trusted Publishing with repository-linked attestations.
 
 The public-readiness sequence is complete:
@@ -128,7 +128,11 @@ The public-readiness sequence is complete:
   and
 - `0.21.0`: plan-by-default acquisition of official Classic Quiz identified
   student-analysis reports, bounded progress and uncertainty reconciliation,
-  private verified CSV pairs, and a supported handoff to local quiz analysis.
+  private verified CSV pairs, and a supported handoff to local quiz analysis;
+  and
+- `0.21.1`: post-program review remediation making explicit selectors fail
+  bounded rather than silently, normalization and retained evidence
+  deterministic, and agent-facing guidance consistent.
 
 Supported runtime is Python `>=3.12,<3.15` on Linux and macOS. Windows is
 unsupported because danvas cannot promise its POSIX private-file and atomic

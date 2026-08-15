@@ -1,10 +1,21 @@
 # Sprint 24: Post-Program Hygiene
 
-Status: accepted for `0.21.1` on 2026-08-14 by independent design review, which
+Status: released as signed tag `v0.21.1` on 2026-08-14 from `dd30019`, and
+published to PyPI. Accepted for `0.21.1` by independent design review, which
 re-verified all eight findings against the tree and required the Release
-Contract section plus the committed Panopto fix choice recorded below. This
-sprint remediates the eight verified findings from the first whole-system deep
-review after the public-readiness program, run on 2026-08-14 against `85955b4`
+Contract section plus the committed Panopto fix choice recorded below.
+Independent exact-candidate review accepted `dd30019`. Branch CI
+`31857479652`, tag CI `31857776914`, anonymous exact-tag and exact-SHA
+installs, and global verification as `danvas 0.21.1` all passed. PyPI Trusted
+Publishing run `31858000548` published the reviewed GitHub Release artifacts as
+[`danvas-cli 0.21.1`](https://pypi.org/project/danvas-cli/0.21.1/); the dated
+check on 2026-08-14 America/Chicago (2026-08-15 UTC) verified matching
+SHA-256 digests, repository-linked Integrity provenance, both cryptographic
+attestations, and an isolated PyPI installation.
+
+This sprint remediates the eight verified findings from the first
+whole-system deep review after the public-readiness program, run on
+2026-08-14 against `85955b4`
 (`v0.21.0` plus the landing-page commit). The review covered whole-file views
 of `src/danvas` in three cloud ultra reviews, scaffolded as do-not-merge pull
 requests 2 through 4 over the `review-baseline` branch: legacy internals and
