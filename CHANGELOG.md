@@ -44,7 +44,8 @@ The remaining fixes correct behavior without changing accepted inputs:
 Released as signed tag `v0.21.1` after independent exact-candidate review,
 green branch and tag CI, and anonymous exact-tag and exact-SHA installs. The
 verified wheel, source distribution, and checksum manifest are published in the
-[`v0.21.1` GitHub prerelease](https://github.com/olearydj/danvas/releases/tag/v0.21.1).
+[`v0.21.1` GitHub release](https://github.com/olearydj/danvas/releases/tag/v0.21.1),
+the first published without GitHub's prerelease flag.
 PyPI Trusted Publishing run `31858000548` published those same artifacts as
 [`danvas-cli 0.21.1`](https://pypi.org/project/danvas-cli/0.21.1/) with
 repository-linked attestations.

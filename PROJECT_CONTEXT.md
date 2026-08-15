@@ -103,10 +103,12 @@ metadata.
 
 Current public beta: `0.21.1`. Signed tag `v0.21.1` resolves to
 `dd30019a70e62238d66b58ead161dafef8abecae`. The global CLI reports
-`danvas 0.21.1` outside the checkout. The GitHub prerelease carries one wheel,
+`danvas 0.21.1` outside the checkout. The GitHub release carries one wheel,
 one source distribution, and `SHA256SUMS`; the same distributions are published
 as [`danvas-cli 0.21.1`](https://pypi.org/project/danvas-cli/0.21.1/) through
-PyPI Trusted Publishing with repository-linked attestations.
+PyPI Trusted Publishing with repository-linked attestations. `v0.21.1` is the
+first release published without GitHub's prerelease flag and is the repository's
+Latest release.
 
 The public-readiness sequence is complete:
 
@@ -196,6 +198,13 @@ Do not add a long-lived PyPI token.
   exactly once with the intent that drove it; mutation status remains distinct
   from evidence status; and indeterminate outcomes instruct the operator to
   verify before retrying.
+- Publish GitHub releases as normal releases, not prereleases. GitHub's
+  prerelease flag is a release-channel signal for previews of a release still to
+  come, which danvas never publishes; using it only suppressed the Latest
+  release and broke `releases/latest` for consumers. Pre-1.0 maturity is
+  communicated where it governs: the `0.x` version, the README status line,
+  `docs/compatibility.md`, and the release-notes text. Releases before `v0.21.1`
+  keep their original prerelease flag as a truthful record.
 - Explicit operator selectors and configured filters are honored or fail with a
   bounded error naming the request and the observed candidates. They never
   silently fall through to a heuristic, a default, or a different filter.
