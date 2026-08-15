@@ -1,7 +1,0 @@
-Inventory describes Canvas Files, downloads retain local content and manifests,
-compare evaluates one stable file identity, and upload is a separate mutation
-workflow. Course files can contain sensitive material even though ordinary file
-artifacts are classified course-internal.
-
-Upload plans name duplicate behavior. Apply only after choosing the intended
-error, overwrite, or rename policy; a rename race is a conflict, never success.

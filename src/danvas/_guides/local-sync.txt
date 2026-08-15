@@ -1,7 +1,0 @@
-Local sync creates only missing authored sources. Preview first, then run the
-same command without the dry-run flag to create local files. Existing authored
-files are not overwritten and Canvas is never mutated by these commands.
-
-The configured source layout determines destinations. Fix an ambiguous layout
-or move a conflicting file aside instead of bypassing containment or no-clobber
-checks.

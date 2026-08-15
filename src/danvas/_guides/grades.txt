@@ -1,7 +1,0 @@
-Grade and feedback workflows operate on stable Canvas user IDs and retain
-private plans, rollback material, results, and readback evidence. Discussion
-scoring prepares a grade-plan CSV; the grade transaction remains the only engine
-that posts it.
-
-Review every plan before applying. If a row is accepted but not authoritatively
-verified, stop new writes and inspect the evidence before any retry or recovery.

@@ -1,9 +1,0 @@
-Set up the Canvas origin and neutral credential transport before initializing a
-course project. Diagnose the boundary without printing credentials, then create
-project configuration and a first snapshot. A user profile can bind an instance,
-timezone, and credential locator; the course project may pin only non-secret
-course and origin settings.
-
-After initialization, refresh the snapshot before relying on comparisons. A
-partial snapshot is explicit evidence, not proof that inaccessible Canvas state
-is absent.
