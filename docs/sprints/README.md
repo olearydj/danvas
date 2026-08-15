@@ -399,4 +399,10 @@ candidate documentation landed at `0953757`. Signed tag `v0.21.0` resolves to
 `0953757`. Branch CI run `31851275738`, tag CI run `31851556017`, anonymous
 exact-SHA and exact-tag installs, and global `danvas 0.21.0` verification all
 passed. GitHub Release and PyPI publication remain separately authorized
-post-tag actions.
+post-tag actions. Those actions subsequently published a GitHub prerelease with
+the verified wheel, source distribution, and checksum manifest. Tag-scoped PyPI
+Trusted Publishing run `31852406840` published the same files as
+[`danvas-cli 0.21.0`](https://pypi.org/project/danvas-cli/0.21.0/). The dated
+publication check on 2026-08-14 America/Chicago (2026-08-15 UTC) verified PyPI
+version `0.21.0`, exact hashes, repository/workflow provenance, both
+cryptographic attestations, and an isolated PyPI installation.

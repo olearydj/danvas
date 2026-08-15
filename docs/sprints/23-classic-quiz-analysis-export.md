@@ -17,6 +17,36 @@ scored agent record landed at `0953757`. Branch CI run `31851275738`, signed-tag
 CI run `31851556017`, anonymous exact-SHA/tag installs, and global verification
 as `danvas 0.21.0` all passed.
 
+Subsequent separately authorized distribution work published the verified
+wheel, source distribution, and checksum manifest in the
+[`v0.21.0` GitHub prerelease](https://github.com/olearydj/danvas/releases/tag/v0.21.0).
+The first PyPI dispatch from `main` (`31852342632`) verified the artifacts but
+correctly stopped before publication because the protected `pypi` environment
+allows only `v*` tag deployments. Tag-scoped Trusted Publishing run
+`31852406840` then published those exact files as
+[`danvas-cli 0.21.0`](https://pypi.org/project/danvas-cli/0.21.0/).
+
+The dated publication check on 2026-08-14 America/Chicago (2026-08-15 UTC)
+verified:
+
+- PyPI metadata reports version `0.21.0`; the wheel and source distribution
+  were uploaded at `2026-08-15T00:04:12.009322Z` and
+  `2026-08-15T00:04:13.431701Z`;
+- the published SHA-256 digests are
+  `27163bacd06649bd1b5ea9eb47653da0c383fd19f3fcb25e34c865e80ab92341`
+  for the wheel and
+  `6d9b4eb6c111a390b0ba21bacca7c05f13220e5e61c19f32a3e2c1d21feb0e4a`
+  for the source distribution, exactly matching the GitHub Release assets and
+  `SHA256SUMS`;
+- PyPI's Integrity API identifies both publishers as GitHub repository
+  `olearydj/danvas`, workflow `publish-pypi.yml`, environment `pypi`;
+- `pypi-attestations verify pypi --repository
+  https://github.com/olearydj/danvas` cryptographically verified both files;
+  and
+- a fresh-cache installation from the official PyPI index reported
+  `danvas 0.21.0` and passed the offline quiz help, command description, and
+  packaged-skill checks.
+
 ## Outcome
 
 Add one supported Danvas workflow for acquiring the official Canvas Classic

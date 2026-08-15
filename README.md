@@ -39,18 +39,17 @@ permission contract there.
 
 ## Install
 
-Install the current public beta from its exact signed Git tag:
+Install the current public beta from PyPI:
+
+```bash
+uv tool install danvas-cli
+```
+
+For an exact Git-ref installation directly from the repository instead:
 
 ```bash
 uv tool install \
   "danvas-cli @ git+https://github.com/olearydj/danvas.git@v0.21.0"
-```
-
-PyPI currently carries `0.20.0`; its separately published wheel can be installed
-with:
-
-```bash
-uv tool install danvas-cli==0.20.0
 ```
 
 The Python distribution is named `danvas-cli`; the installed command and import

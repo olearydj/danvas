@@ -27,9 +27,13 @@ bounded agent acceptance passed, independent exact-candidate review accepted
 the implementation, branch and tag CI passed, anonymous exact-SHA and exact-tag
 installs passed, and the global CLI reported `danvas 0.21.0`.
 
-GitHub Release and PyPI publication remain separately authorized post-tag
-actions. PyPI continues to carry `danvas-cli 0.20.0` until that publication is
-performed.
+The verified wheel, source distribution, and checksum manifest are published in
+the [`v0.21.0` GitHub prerelease](https://github.com/olearydj/danvas/releases/tag/v0.21.0).
+PyPI Trusted Publishing run `31852406840` published those same artifacts as
+[`danvas-cli 0.21.0`](https://pypi.org/project/danvas-cli/0.21.0/) with
+repository-linked attestations. On 2026-08-14 America/Chicago (2026-08-15 UTC),
+the published version, hashes, provenance, cryptographic attestations, and an
+isolated PyPI installation were independently verified.
 
 See [Migrating to 0.21.0](docs/migrations/0.21.0.md).
 
