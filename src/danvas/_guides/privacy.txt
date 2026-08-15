@@ -1,0 +1,8 @@
+Retained artifacts have shareable, course-internal, or private classifications.
+Student-identifying exports, grade evidence, feedback, discussion posts, and
+recording captions use protected project defaults beneath .danvas/private when a
+project is initialized.
+
+An explicit destination does not make sensitive content public. Preserve the
+classification when copying, reviewing, retaining, or deleting an artifact, and
+inspect integrity sidecars or manifest markers before trusting a bundle.
