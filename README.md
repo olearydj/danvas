@@ -1,5 +1,12 @@
 # danvas
 
+[![CI](https://github.com/olearydj/danvas/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/olearydj/danvas/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/danvas-cli?logo=pypi&logoColor=white)](https://pypi.org/project/danvas-cli/)
+[![Python](https://img.shields.io/pypi/pyversions/danvas-cli?logo=python&logoColor=white)](https://pypi.org/project/danvas-cli/)
+[![License: MIT](https://img.shields.io/pypi/l/danvas-cli)](LICENSE)
+
+**Plan first. Apply explicitly. Verify everything.**
+
 `danvas` is a safety-focused command-line tool for day-to-day Canvas course
 operations. It helps instructors inspect courses, manage authored content,
 download submissions, reconcile grades, and retain evidence for consequential
