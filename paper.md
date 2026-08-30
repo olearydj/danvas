@@ -108,9 +108,10 @@ measured time savings, fewer errors, or improved student learning.
 
 # Secondary Benefits
 
-Deterministic JSON descriptions expose each command's effects, privacy class,
-plan/apply contract, and recovery guidance. A version-matched portable Agent
-Skill packages the same instructions for supervised software agents. Because
+Deterministic JSON descriptions identify each command's effects and privacy
+class and state its plan/apply contract and recovery guidance. A version-matched
+portable Agent Skill packages the same instructions for supervised software
+agents. Because
 machine-readable guidance neither grants authorization nor makes model behavior
 deterministic, agents use the same explicit mutation path as a human operator.
 
@@ -118,10 +119,11 @@ Retained evidence also supports later course revision: dated comparisons,
 verification reports, and source checks record the inputs, software version,
 and intermediate results, following reproducibility principles developed for
 computational work [@sandve2013reproducible]. `danvas` applies those principles to
-course operations rather than research analyses. Plans, stable identities,
-request results, readback, and reconciliation preserve a time-bounded record of
-what was intended, attempted, observed, and left uncertain. The record supports
-human supervision and recovery, concerns that remain relevant even when routine
+course operations rather than research analyses. Plans and stable identities
+record intended changes, while request results, readback, and reconciliation
+preserve time-bounded evidence of what was attempted, observed, and left
+uncertain. The record supports human supervision and recovery, concerns that
+remain relevant even when routine
 steps are automated [@bainbridge1983ironies]. Canvas remains the external system
 of record, while `danvas` preserves bounded local evidence, not a permanent
 course-history or student-data ledger.
