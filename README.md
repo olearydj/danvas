@@ -7,10 +7,11 @@
 
 **Plan first. Apply explicitly. Verify everything.**
 
-`danvas` is a safety-focused command-line tool for day-to-day Canvas course
-operations. It helps instructors inspect courses, manage authored content,
-download submissions, reconcile grades, and retain evidence for consequential
-changes.
+`danvas` is a safety-focused command-line tool built on the
+[CanvasAPI](https://github.com/ucfopen/canvasapi) Python client for day-to-day
+Canvas course operations. It helps instructors inspect courses, manage authored
+content, download submissions, reconcile grades, and retain evidence for
+consequential changes.
 
 Status: signed release `v0.21.1` is the latest public beta, not a 1.0 stability
 promise. This is an unofficial project.
