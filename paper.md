@@ -88,8 +88,9 @@ govern access, retention, sharing, and disposal.
 
 # Use in Teaching
 
-The author used `danvas` across seven course workspaces during Summer and Fall
-2026. The count requires durable source bindings or report history, so an eighth
+The author developed `danvas` for recurring Canvas work and used it across seven
+course workspaces during Summer and Fall 2026. The count requires durable source
+bindings or report history, so an eighth
 initialized workspace without comparable evidence was excluded. Operational
 use included course-state audits, local-to-Canvas comparisons, assignment and
 announcement updates, Page creation, file handling, Classic Quiz imports,
