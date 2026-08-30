@@ -171,7 +171,7 @@ Migration guides describe operator-visible changes release by release:
 
 ## Reporting Problems
 
-Use the repository issue tracker for non-sensitive defects and feature
-requests. Do not put tokens, private course data, student information, or
-protected URLs in an issue. Follow [SECURITY.md](../SECURITY.md) for a suspected
-vulnerability.
+Search the repository issue tracker for non-sensitive usage questions, defects,
+and feature requests, and open an issue if the topic is not already covered. Do
+not put tokens, private course data, student information, or protected URLs in
+an issue. Follow [SECURITY.md](../SECURITY.md) for a suspected vulnerability.

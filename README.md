@@ -213,6 +213,17 @@ agent location. Preview first; modified or unowned targets are refused.
 Sprint notes and the backlog record design history; they are not required user
 instructions.
 
+## Support And Community
+
+For non-sensitive usage questions, defects, and feature requests, search the
+[issue tracker](https://github.com/olearydj/danvas/issues) and open an issue if
+the topic is not already covered. Remove tokens, student information, private
+course data, and protected URLs before posting. Report suspected vulnerabilities
+privately by following the [security policy](SECURITY.md).
+
+Contributions to documentation, tests, and bounded fixes are welcome; see the
+[contribution guide](CONTRIBUTING.md) for the development and review process.
+
 ## Development
 
 From a trusted checkout:
