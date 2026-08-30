@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use Danvas, please cite the software using these metadata."
+title: "Danvas"
+type: software
+authors:
+  - family-names: "O'Leary"
+    given-names: "Dan"
+    affiliation: "Department of Industrial and Systems Engineering, Auburn University"
+    orcid: "https://orcid.org/0009-0003-0501-1913"
+abstract: >-
+  Danvas is a safety-focused command-line tool for day-to-day Canvas course
+  operations.
+version: "0.21.1"
+date-released: "2026-08-14"
+commit: "dd30019a70e62238d66b58ead161dafef8abecae"
+license: MIT
+repository-code: "https://github.com/olearydj/danvas"
+repository-artifact: "https://pypi.org/project/danvas-cli/0.21.1/"
+url: "https://github.com/olearydj/danvas#readme"
+identifiers:
+  - type: url
+    value: "https://github.com/olearydj/danvas/releases/tag/v0.21.1"
+    description: "GitHub release for Danvas v0.21.1"
+keywords:
+  - "Canvas LMS"
+  - "command-line interface"
+  - "course operations"
+  - "educational software"
+  - "learning management systems"
+  - Python
+  - reproducibility
+  - safety
