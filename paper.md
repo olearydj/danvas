@@ -23,8 +23,9 @@ bibliography: paper.bib
 for recurring day-to-day instructor tasks involving content, assignments,
 files, quizzes, and grades. Built on the
 [CanvasAPI Python client](https://github.com/ucfopen/canvasapi), it organizes
-this work into local course projects that let instructors review changes before
-applying them and retain evidence of the resulting Canvas state. Supervised
+this work into local course projects that let instructors work from local files,
+review changes before applying them, and retain evidence of the resulting
+Canvas state. Supervised
 agentic systems are also first-class users of the documented interface, although
 its guidance does not authorize course changes. The author has used `danvas` in
 seven course workspaces across Summer and Fall 2026. Version 0.21.1 is available
@@ -90,23 +91,22 @@ retention, sharing, and disposal.
 
 # Use in Teaching
 
-The author developed `danvas` for recurring Canvas work and used it across seven
-course workspaces during Summer and Fall 2026. Operational use included
-course-state audits, local-to-Canvas comparisons, assignment and announcement
-updates, Page creation, file handling, Classic Quiz imports, gradebook checks,
-and grade-related workflows.
+The author developed `danvas` incrementally to meet course-administration needs
+that arose across seven course workspaces during Summer and Fall 2026. Its
+present scope reflects recurring work in active courses, from course preparation
+and content maintenance to assessment and grade-related checks. Development
+over two semesters turned these encountered needs into reusable workflows.
 
-This use exposed a practical distinction between sending a successful request
-and knowing the resulting course state. A content or grade request may be
-accepted even when the final effect cannot be confirmed. `danvas` therefore
-records the attempted change separately from the evidence available afterward
-and treats uncertain outcomes as work for the instructor to inspect and
-reconcile. The teaching record establishes maintainer use across several course
-surfaces, but it does not establish independent adoption, measured time savings,
-fewer errors, or improved student learning.
+Experience with consequential course changes shaped the emphasis on reviewing
+intended changes before application and retaining evidence afterward. This
+teaching record establishes maintainer use across several parts of a course, but
+it does not establish independent adoption, measured time savings, fewer errors,
+or improved student learning.
 
 # Secondary Benefits
 
+The current `danvas` interface was deliberately designed to support
+agent-assisted course administration as well as direct human use.
 Machine-readable descriptions state what each command can read or change,
 whether it handles private information, how it must be reviewed, and how to
 recover from an uncertain result. A portable, version-matched instruction
@@ -139,11 +139,11 @@ approach to private data.
 Canvas deployments vary in endpoints, feature flags, permissions, and response
 behavior, and the gradebook profile is tested against English Canvas
 headings, with explicit aliases available for known exports. Classic Quizzes are
-supported within documented limits, New Quizzes are not supported, and Panopto
-caption acquisition remains experimental and deployment-dependent. Windows is
-excluded because `danvas` cannot enforce its POSIX private-file contract there.
-The software is an unofficial public beta and is neither affiliated with nor
-endorsed by Instructure.
+supported within documented limits, New Quizzes are not yet supported, and
+Panopto caption acquisition remains experimental and deployment-dependent.
+Windows is excluded because `danvas` cannot enforce its POSIX private-file
+contract there. The software is an unofficial public beta and is neither
+affiliated with nor endorsed by Instructure.
 
 # Acknowledgments
 
@@ -151,11 +151,10 @@ This work received no specific grant from any funding agency in the public,
 commercial, or not-for-profit sectors. The author declares no competing
 interests.
 
-Claude Code assisted with `danvas` software development, review, testing, and
-documentation. OpenAI Codex assisted with publication planning, manuscript
-infrastructure, and manuscript preparation. Danny J. O'Leary determined the
-architecture, requirements, claims, and acceptance criteria, reviewed proposed
-changes, and verified the software and manuscript. The author accepts
-responsibility for the work.
+Generative AI tools supported the design, development, testing, and
+documentation of `danvas`, as well as preparation of this manuscript. Danny J.
+O'Leary determined the architecture, requirements, claims, and acceptance
+criteria, reviewed proposed changes, and verified the software and manuscript.
+The author accepts responsibility for the work.
 
 # References
