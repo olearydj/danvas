@@ -67,14 +67,8 @@ Canvas deployments vary in endpoints, feature flags, permissions, and response b
 
 # Acknowledgments
 
-This work received no specific grant from any funding agency in the public,
-commercial, or not-for-profit sectors. The author declares no competing
-interests.
+This work received no specific grant from any funding agency in the public, commercial, or not-for-profit sectors. The author declares no competing interests.
 
-Generative AI tools supported the design, development, testing, and
-documentation of `danvas`, as well as preparation of this manuscript. Danny J.
-O'Leary determined the architecture, requirements, claims, and acceptance
-criteria, reviewed proposed changes, and verified the software and manuscript.
-The author accepts responsibility for the work.
+Generative AI tools supported the design, development, testing, and documentation of `danvas`, as well as preparation of this manuscript. The author determined the architecture, requirements, claims, and acceptance criteria, reviewed proposed changes, and verified the software and manuscript. He accepts responsibility for the work.
 
 # References
