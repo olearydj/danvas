@@ -23,18 +23,18 @@ jobs:
           version: "0.12.3"
           python-version: ${{ matrix.python-version }}
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
       - name: Lint
-        run: uv run ruff check .
+        run: uv run --locked ruff check .
       - name: Typecheck
-        run: uv run ty check
+        run: uv run --locked ty check
       - name: Audit dependencies
-        run: uv run pip-audit --skip-editable
+        run: uv run --locked pip-audit --skip-editable
       - name: Test
         run: |
-          uv run pytest --cov=danvas --cov-branch --cov-report=term-missing \
+          uv run --locked pytest --cov=danvas --cov-branch --cov-report=term-missing \
             --cov-report=json:/tmp/danvas-coverage.json --cov-fail-under=82
-          uv run python scripts/check-module-coverage.py \
+          uv run --locked python scripts/check-module-coverage.py \
             /tmp/danvas-coverage.json src/danvas/authored_assets.py 82
 
   macos:
@@ -46,22 +46,22 @@ jobs:
           version: "0.12.3"
           python-version: "3.13"
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
       - name: Lint
-        run: uv run ruff check .
+        run: uv run --locked ruff check .
       - name: Typecheck
-        run: uv run ty check
+        run: uv run --locked ty check
       - name: Audit dependencies
-        run: uv run pip-audit --skip-editable
+        run: uv run --locked pip-audit --skip-editable
       - name: Test
         run: |
-          uv run pytest --cov=danvas --cov-branch --cov-report=term-missing \
+          uv run --locked pytest --cov=danvas --cov-branch --cov-report=term-missing \
             --cov-report=json:/tmp/danvas-coverage.json --cov-fail-under=82
-          uv run python scripts/check-module-coverage.py \
+          uv run --locked python scripts/check-module-coverage.py \
             /tmp/danvas-coverage.json src/danvas/authored_assets.py 82
       - name: Verify POSIX privacy and recovery contracts
         run: |
-          uv run pytest \
+          uv run --locked pytest \
             tests/test_artifacts.py \
             tests/test_reports.py \
             tests/test_source_map.py \
