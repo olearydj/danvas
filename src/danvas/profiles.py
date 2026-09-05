@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -14,6 +14,7 @@ from platformdirs import user_config_path as platform_user_config_path
 
 from danvas.credentials import (
     CredentialInput,
+    require_credential_command,
     require_environment_name,
     select_credential_input,
 )
@@ -25,6 +26,7 @@ PROFILE_KEYS = {
     "timezone",
     "api_key_env",
     "api_key_file",
+    "credential_command",
 }
 RETIRED_PROFILE_KEYS = {"secret_name", "secret_provider", "op_reference"}
 RETIRED_ENVIRONMENT_CONTROLS = {
@@ -57,6 +59,7 @@ class CanvasProfile:
     timezone: str | None = None
     api_key_env: str | None = None
     api_key_file: str | None = None
+    credential_command: tuple[str, ...] | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -124,13 +127,10 @@ def load_user_profiles(path: Path | None = None) -> UserProfiles:
         raise SystemExit(f"profiles must be a TOML table in {source}")
 
     profiles = {
-        str(name): _parse_profile(str(name), raw, source)
-        for name, raw in raw_profiles.items()
+        str(name): _parse_profile(str(name), raw, source) for name, raw in raw_profiles.items()
     }
     if default_profile and default_profile not in profiles:
-        raise SystemExit(
-            f"Default danvas profile {default_profile!r} is not defined in {source}"
-        )
+        raise SystemExit(f"Default danvas profile {default_profile!r} is not defined in {source}")
     return UserProfiles(path=source, default_profile=default_profile, profiles=profiles)
 
 
@@ -232,6 +232,7 @@ def resolve_canvas_context(
         explicit_file=explicit_api_key_file,
         profile_env=profile.api_key_env if profile else None,
         profile_file=profile.api_key_file if profile else None,
+        profile_command=profile.credential_command if profile else None,
         environ=environment,
     )
     config_dir = find_config_dir(start)
@@ -267,36 +268,44 @@ def _parse_profile(name: str, raw: Any, source: Path) -> CanvasProfile:
         )
     unknown = sorted(set(raw).difference(PROFILE_KEYS))
     if unknown:
-        raise SystemExit(
-            f"Unknown keys in profile {name!r} in {source}: {', '.join(unknown)}"
-        )
+        raise SystemExit(f"Unknown keys in profile {name!r} in {source}: {', '.join(unknown)}")
     for key in ("api_key_env", "api_key_file"):
         if key in raw and (not isinstance(raw[key], str) or not raw[key].strip()):
             raise SystemExit(f"{key} in profile {name!r} in {source} must be a string.")
-    values = {key: _optional_string(raw.get(key)) for key in PROFILE_KEYS}
+    command = (
+        require_credential_command(raw["credential_command"])
+        if "credential_command" in raw
+        else None
+    )
+    if command and ("api_key_env" in raw or "api_key_file" in raw):
+        raise SystemExit(
+            "Choose exactly one of api_key_env, api_key_file, or credential_command in a profile."
+        )
+    if command and not raw.get("api_url"):
+        raise SystemExit("A credential_command profile must bind an api_url.")
+    values = {
+        key: _optional_string(raw.get(key)) for key in PROFILE_KEYS if key != "credential_command"
+    }
     timezone = values["timezone"]
     if timezone:
         timezone = require_timezone(timezone, source=f"profile {name!r} in {source}")
     api_key_file = values["api_key_file"]
     if values["api_key_env"]:
-        require_environment_name(
-            values["api_key_env"], source=f"profile {name!r} in {source}"
-        )
+        require_environment_name(values["api_key_env"], source=f"profile {name!r} in {source}")
     if values["api_key_env"] and api_key_file:
         raise SystemExit(
             f"Profile {name!r} in {source} selects both api_key_env and api_key_file; "
             "choose one Canvas credential transport."
         )
     if api_key_file and not Path(api_key_file).is_absolute():
-        raise SystemExit(
-            f"api_key_file in profile {name!r} in {source} must be an absolute path."
-        )
+        raise SystemExit(f"api_key_file in profile {name!r} in {source} must be an absolute path.")
     return CanvasProfile(
         name=name,
         api_url=values["api_url"],
         timezone=timezone,
         api_key_env=values["api_key_env"],
         api_key_file=api_key_file,
+        credential_command=command,
     )
 
 

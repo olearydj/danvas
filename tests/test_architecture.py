@@ -28,7 +28,10 @@ RESOLVE_NEUTRAL_CREDENTIAL_CALLS = {
 CURRENT_PROVIDER_IMPORTS: Counter[tuple[str, str]] = Counter()
 CURRENT_PROVIDER_CALLS: Counter[tuple[str, str, str]] = Counter()
 CURRENT_PROCESS_SPAWNS = Counter(
-    {("skill_installer.py", "_executable_version", "subprocess.run"): 1}
+    {
+        ("skill_installer.py", "_executable_version", "subprocess.run"): 1,
+        ("credential_command.py", "read_command", "subprocess.Popen"): 1,
+    }
 )
 PROVIDER_PACKAGES = {
     "azure",

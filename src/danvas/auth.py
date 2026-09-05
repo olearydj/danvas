@@ -52,11 +52,11 @@ def resolve_canvas_credential(args: Any) -> ResolvedCredential:
 
 def announce_canvas_credential(credential: ResolvedCredential) -> None:
     """Report only the transport danvas directly observed."""
-    source = (
-        "environment"
-        if credential.source_kind is CredentialKind.ENVIRONMENT
-        else "credential file"
-    )
+    source = {
+        CredentialKind.ENVIRONMENT: "environment",
+        CredentialKind.FILE: "credential file",
+        CredentialKind.COMMAND: "credential command",
+    }[credential.source_kind]
     print(f"Using Canvas credential from: {source}")
 
 
@@ -142,20 +142,20 @@ def build_auth_doctor_report(args: Any) -> dict[str, Any]:
             )
         return payload
 
+    if credential_input.kind is CredentialKind.COMMAND and not check_canvas:
+        credential_report["status"] = "not_requested"
+        return payload
+
     try:
         resolved = resolve_credential(
             credential_input,
-            project_root=_optional_path(
-                getattr(args, "credential_project_root", None)
-            ),
+            project_root=_optional_path(getattr(args, "credential_project_root", None)),
             emit_warnings=False,
         )
     except CredentialResolutionError as exc:
         credential_report["status"] = exc.reason.value
         credential_report["error"] = str(exc)
-        payload["issues"].append(
-            f"canvas credential input is {exc.reason.value}"
-        )
+        payload["issues"].append(f"canvas credential input is {exc.reason.value}")
         if check_canvas:
             canvas_report["reachable"] = False
             canvas_report["error"] = (
@@ -177,9 +177,7 @@ def build_auth_doctor_report(args: Any) -> dict[str, Any]:
             canvas_report["reachable"] = True
             canvas_report["current_user"] = {
                 "id": getattr(user, "id", None),
-                "name": getattr(user, "name", None)
-                or getattr(user, "sortable_name", None)
-                or "",
+                "name": getattr(user, "name", None) or getattr(user, "sortable_name", None) or "",
             }
     return payload
 
@@ -239,6 +237,8 @@ def _doctor_locator(credential_input: object) -> str | None:
         return None
     if credential_input.kind is CredentialKind.ENVIRONMENT:
         return credential_input.locator
+    if credential_input.kind is CredentialKind.COMMAND:
+        return "configured credential command"
     return "configured credential file"
 
 

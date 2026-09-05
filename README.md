@@ -102,9 +102,7 @@ danvas auth doctor --profile example-university --check-canvas
 unset CANVAS_EXAMPLE_API_KEY
 ```
 
-Danvas consumes the selected variable but does not own the secret store. A
-credential file or an external runner such as SecretSpec or 1Password can
-provide the same process boundary. See [Authentication](docs/authentication.md).
+Danvas consumes the selected variable but does not own the secret store. A credential file or an external runner can also supply the token. For on-demand retrieval, a trusted user profile may configure an optional `credential_command`; local diagnostics do not execute it. See [Authentication](docs/authentication.md).
 
 Initialize a course project. New projects materialize the `standard-v1` source
 layout in `.danvas/config.toml`; they do not move or create authored files.

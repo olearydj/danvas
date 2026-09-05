@@ -3,6 +3,10 @@
 This file records operator-visible release changes. Detailed transition steps
 live in the linked migration guides.
 
+## Unreleased
+
+- Add optional `credential_command` argument arrays in trusted user profiles for on-demand token retrieval. Commands require a profile-bound API URL, preserve explicit environment/file overrides, and execute with bounded time/output and sanitized failures. Offline auth diagnostics do not execute them. No secret provider or credential store is bundled.
+
 ## 0.21.1 - Post-Program Hygiene
 
 Sprint 24 remediates the eight low-severity findings from the first

@@ -21,9 +21,7 @@ metadata:
 
 # Danvas
 
-Use the installed `danvas` command as the authority for Canvas course
-operations. Keep provider, institution, workspace, and approval policy outside
-this generic skill.
+Use the installed `danvas` command as the authority for Canvas course operations. Keep provider, institution, workspace, and approval policy outside this generic skill.
 
 ## Start With Discovery
 
@@ -32,8 +30,7 @@ this generic skill.
 3. Use `danvas guide list` and a task guide for multi-command workflows.
 4. Use `danvas describe COMMAND --format json` for structured command facts.
 
-Do not rely on a remembered option when installed help or description differs.
-Do not inspect a source checkout merely to recover ordinary command syntax.
+Do not rely on a remembered option when installed help or description differs. Do not inspect a source checkout merely to recover ordinary command syntax.
 
 ## Classify The Requested Effect
 
@@ -44,9 +41,7 @@ Before running anything, distinguish:
 - local source/report/download creation that never changes Canvas; and
 - a Canvas mutation that requires a reviewed plan and explicit authorization.
 
-Help and `describe` derive those effects from the shipped access registry. A
-local write is not a Canvas mutation, but it still needs an appropriate output
-location and no-clobber review.
+Help and `describe` derive those effects from the shipped access registry. A local write is not a Canvas mutation, but it still needs an appropriate output location and no-clobber review.
 
 ## Use The Safe Workflow
 
@@ -60,49 +55,27 @@ location and no-clobber review.
    any additional `--confirm` guard shown by help.
 7. Inspect authoritative verification or retained results after apply.
 
-Never drop `--apply` to make an outdated example work. Never add `--apply` to a
-local sync command. Never infer mutation authorization from a request to inspect,
-compare, prepare, download, export, or explain.
+Never drop `--apply` to make an outdated example work. Never add `--apply` to a local sync command. Never infer mutation authorization from a request to inspect, compare, prepare, download, export, or explain.
 
-Missing danvas command coverage does not authorize direct Canvas API calls,
-browser automation, or provider-specific fallback. Classify the proposed effect
-and ask the operator before leaving the supported interface. A Classic Quiz
-analysis report request is a Canvas mutation even though it changes no quiz
-content or grades.
+Missing danvas command coverage does not authorize direct Canvas API calls, browser automation, or provider-specific fallback. Classify the proposed effect and ask the operator before leaving the supported interface. A Classic Quiz analysis report request is a Canvas mutation even though it changes no quiz content or grades.
 
 ## Preserve Identity And Evidence
 
-Prefer stable Canvas IDs, explicit URLs where required, source front matter, and
-project provenance. Do not silently title-match or substitute a display name for
-a stable identity.
+Prefer stable Canvas IDs, explicit URLs where required, source front matter, and project provenance. Do not silently title-match or substitute a display name for a stable identity.
 
-Treat partial snapshots, conflicts, rejected writes, accepted-unverified writes,
-and indeterminate outcomes as different states. Do not blindly retry a write
-whose acceptance is uncertain. Read the private result/recovery artifact and the
-leaf help before proposing the next action.
+Treat partial snapshots, conflicts, rejected writes, accepted-unverified writes, and indeterminate outcomes as different states. Do not blindly retry a write whose acceptance is uncertain. Read the private result/recovery artifact and the leaf help before proposing the next action.
 
 ## Protect Retained Data
 
-Respect `shareable`, `course_internal`, and `private` classifications. Student
-identifiers, rosters, submissions, grades, comments, discussion posts, feedback,
-and recording captions commonly require private handling. In an initialized
-project, private defaults live beneath `.danvas/private/` with protected POSIX
-permissions.
+Respect `shareable`, `course_internal`, and `private` classifications. Student identifiers, rosters, submissions, grades, comments, discussion posts, feedback, and recording captions commonly require private handling. In an initialized project, private defaults live beneath `.danvas/private/` with protected POSIX permissions.
 
-An explicit path does not change the data classification. Do not paste raw
-private artifacts, token values, reusable protected URLs, or full large payloads
-into the conversation. Prefer aggregate terminal output, report summaries,
-manifests, and bounded excerpts.
+An explicit path does not change the data classification. Do not paste raw private artifacts, token values, reusable protected URLs, or full large payloads into the conversation. Prefer aggregate terminal output, report summaries, manifests, and bounded excerpts.
 
 ## Keep Credentials Provider-Neutral
 
-Danvas accepts an environment-variable name or an absolute credential-file path.
-It does not own a password-manager integration. Follow operator or organization
-policy for external injection; never print, resolve, copy, or retain the token.
+Danvas accepts an environment-variable name, an absolute credential-file path, or an optional credential command configured in a trusted user profile. It does not own a password-manager integration. Follow operator or organization policy for credential delivery; never manually resolve, print, copy, or retain the token. Offline auth diagnostics do not execute credential commands.
 
-Use `danvas auth doctor` for offline origin and transport diagnosis. Use
-`danvas auth doctor --check-canvas` only when a bounded live Canvas check is
-authorized and credential delivery is available.
+Use `danvas auth doctor` for offline origin and transport diagnosis. Use `danvas auth doctor --check-canvas` only when a bounded live Canvas check is authorized and credential delivery is available.
 
 ## Load Focused References Only As Needed
 

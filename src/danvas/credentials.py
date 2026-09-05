@@ -7,7 +7,7 @@ import re
 import stat
 import sys
 from collections.abc import Mapping, MutableMapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
@@ -20,6 +20,7 @@ class CredentialKind(StrEnum):
 
     ENVIRONMENT = "environment"
     FILE = "file"
+    COMMAND = "command"
 
 
 class SelectionSource(StrEnum):
@@ -54,6 +55,7 @@ class CredentialInput:
     kind: CredentialKind
     locator: str
     selection_source: SelectionSource
+    command: tuple[str, ...] = field(default=(), repr=False)
 
 
 @dataclass(frozen=True, repr=False)
@@ -65,10 +67,7 @@ class ResolvedCredential:
     warnings: tuple[str, ...] = ()
 
     def __repr__(self) -> str:
-        return (
-            "ResolvedCredential(value=[redacted], "
-            f"source_kind={self.source_kind.value!r})"
-        )
+        return f"ResolvedCredential(value=[redacted], source_kind={self.source_kind.value!r})"
 
 
 def select_credential_input(
@@ -77,6 +76,7 @@ def select_credential_input(
     explicit_file: str | Path | None = None,
     profile_env: str | None = None,
     profile_file: str | Path | None = None,
+    profile_command: object = None,
     environ: Mapping[str, str] | None = None,
 ) -> CredentialInput:
     """Select one credential locator with deterministic, validated precedence."""
@@ -86,13 +86,9 @@ def select_credential_input(
     _reject_blank_selector(profile_env, source="profile api_key_env")
     _reject_blank_selector(profile_file, source="profile api_key_file")
     if "CANVAS_API_KEY_ENV" in environment:
-        _reject_blank_selector(
-            environment.get("CANVAS_API_KEY_ENV"), source="CANVAS_API_KEY_ENV"
-        )
+        _reject_blank_selector(environment.get("CANVAS_API_KEY_ENV"), source="CANVAS_API_KEY_ENV")
     if "CANVAS_API_KEY_FILE" in environment:
-        _reject_blank_selector(
-            environment.get("CANVAS_API_KEY_FILE"), source="CANVAS_API_KEY_FILE"
-        )
+        _reject_blank_selector(environment.get("CANVAS_API_KEY_FILE"), source="CANVAS_API_KEY_FILE")
     process_env = _optional_text(environment.get("CANVAS_API_KEY_ENV"))
     process_file = _optional_text(environment.get("CANVAS_API_KEY_FILE"))
 
@@ -107,6 +103,18 @@ def select_credential_input(
     )
     for source, env_name, file_path in layers:
         _reject_selector_conflict(source, env_name=env_name, file_path=file_path)
+
+    if profile_command is not None:
+        command = require_credential_command(profile_command)
+        if profile_env or profile_file:
+            raise SystemExit("Choose exactly one credential transport in the user profile.")
+        if not explicit_env and not explicit_file:
+            return CredentialInput(
+                kind=CredentialKind.COMMAND,
+                locator="configured credential command",
+                selection_source=SelectionSource.USER_PROFILE,
+                command=command,
+            )
 
     for source, env_name, file_path in layers:
         if env_name:
@@ -136,6 +144,22 @@ def resolve_credential(
     emit_warnings: bool = True,
 ) -> ResolvedCredential:
     """Read exactly one selected input and return a redacting result."""
+    if credential_input.kind is CredentialKind.COMMAND:
+        if credential_input.selection_source is not SelectionSource.USER_PROFILE:
+            raise CredentialResolutionError(
+                "Credential commands must be selected by a user profile.",
+                reason=CredentialErrorReason.INVALID,
+            )
+        from danvas.credential_command import CredentialCommandError, read_command
+
+        try:
+            value = read_command(require_credential_command(credential_input.command))
+        except CredentialCommandError as exc:
+            raise CredentialResolutionError(
+                str(exc), reason=CredentialErrorReason.UNREADABLE
+            ) from None
+        _validate_credential_text(value, source="command output")
+        return ResolvedCredential(value=value, source_kind=CredentialKind.COMMAND)
     if credential_input.kind is CredentialKind.ENVIRONMENT:
         return resolve_environment_credential(credential_input, environ=environ)
     return resolve_file_credential(
@@ -346,3 +370,21 @@ def _broad_permissions_warning(opened: os.stat_result) -> str | None:
         "WARNING: the selected Canvas credential file is readable by group or other "
         "users; consider mode 0600 where the deployment model permits it."
     )
+
+
+def require_credential_command(value: object) -> tuple[str, ...]:
+    """Validate opaque argv without echoing executable arguments."""
+    if not isinstance(value, (list, tuple)) or not value:
+        raise SystemExit(
+            "credential_command must be a nonempty array of strings without NUL bytes."
+        )
+    parts: list[str] = []
+    for part in value:
+        if not isinstance(part, str) or "\0" in part:
+            raise SystemExit(
+                "credential_command must be a nonempty array of strings without NUL bytes."
+            )
+        parts.append(part)
+    if not Path(parts[0]).is_absolute():
+        raise SystemExit("credential_command executable must be an absolute path.")
+    return tuple(parts)
