@@ -1,6 +1,6 @@
 # danvas Backlog
 
-Last consolidated: 2026-08-14.
+Last consolidated: 2026-08-16.
 
 This document contains only work that remains to be done or reconsidered.
 Released behavior belongs in `CHANGELOG.md`, migration guides, and the accepted
@@ -13,13 +13,49 @@ Feature priority follows concrete course-workflow demand.
 
 1. Add the Page asset adapter on top of the verified assignment asset
    transaction.
-2. Add group-category, membership-import, verification, and local group-planning
+2. Add assignment-group creation, weighting, reconciliation, and verification
+   so a new course gradebook can be configured without the Canvas UI.
+3. Add group-category, membership-import, verification, and local group-planning
    workflows for grouped cases.
-3. Add section-aware roster data and report-first exam reconciliation.
-4. Pull a smaller candidate forward only when field use justifies it.
+4. Add section-aware roster data and report-first exam reconciliation.
+5. Pull a smaller candidate forward only when field use justifies it.
 
 Their relative order may still change when an actual course deadline makes one
 more valuable.
+
+## Candidate: Assignment-Group Lifecycle Management
+
+### Assignment-Group Goal
+
+Make initial weighted-gradebook setup reproducible without requiring the Canvas UI. The field trigger is the Fall 2026 BET 5500 launch: danvas can inventory and audit assignment groups and place assignments into existing groups, but it cannot create the six syllabus-defined groups or enable and verify their weights.
+
+### Proposed Scope
+
+- Add read-only listing plus plan/`--apply` create and update operations for assignment groups.
+- Support a small local declaration of exact group names, weights, and optional positions, with a batch plan that classifies each group as create, update, unchanged, ambiguous, or conflict.
+- Explicitly manage and verify the course setting that enables weighted assignment groups when the declaration requests weighting.
+- Require exact-name or stable-ID resolution; reject duplicate or ambiguous names before any write.
+- Read back every applied group and the course weighting setting before reporting success.
+- Refresh or emit the resulting name-to-ID mappings needed by `.danvas/config.toml` and assignment-source workflows.
+- Audit that declared weights total 100 percent when weighted grading is enabled, while preserving legitimate zero-weight groups.
+- Do not delete groups, move assignments, or silently rename existing groups in the initial slice.
+
+Potential surface:
+
+```bash
+danvas assignment-groups list
+danvas assignment-groups reconcile assignment-groups.yaml
+danvas assignment-groups reconcile assignment-groups.yaml --apply
+danvas assignment-groups verify assignment-groups.yaml
+```
+
+### Safety And Acceptance
+
+- Omission plans; only `--apply` authorizes Canvas mutation.
+- Planning identifies every proposed course-setting and group write before mutation.
+- A partial or indeterminate result records enough stable identity and readback evidence to verify before retrying without duplicating a group.
+- A disposable-course test creates a weighted multi-group gradebook, verifies names, IDs, positions, weights, and the course weighting setting, then exercises a bounded update without deleting groups or assignments.
+- Existing assignment creation can resolve each verified group from the refreshed project mapping.
 
 ## Candidate: Page Asset Deployment
 

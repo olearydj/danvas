@@ -201,6 +201,7 @@ agent location. Preview first; modified or unowned targets are refused.
 - [Classic Quiz workflows](docs/quizzes.md)
 - [Mutation safety](docs/mutation-safety.md)
 - [Course policy YAML](docs/course-yaml.md)
+- [Related Canvas tools](docs/related-tools.md)
 - [0.18.0 migration guide](docs/migrations/0.18.0.md)
 - [0.19.0 credential-boundary migration](docs/migrations/0.19.0.md)
 - [0.20.0 agent-interface migration](docs/migrations/0.20.0.md)
