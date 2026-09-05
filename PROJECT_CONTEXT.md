@@ -52,8 +52,8 @@ system.
   packaged Agent Skill, resource identity, and bounded no-clobber installation.
 - `src/danvas/auth.py`: resolved-credential Canvas client creation and offline
   authentication diagnostics.
-- `src/danvas/credentials.py`: provider-neutral environment/file credential
-  selection, origin binding, descriptor-safe file reads, and redacted results.
+- `src/danvas/credentials.py`: provider-neutral environment/file/command credential selection, origin binding, descriptor-safe file reads, and redacted results.
+- `src/danvas/credential_command.py`: bounded subprocess retrieval for trusted user-profile commands, with sanitized failures and process-group cleanup.
 - `src/danvas/profiles.py`: user profile loading plus profile, instance,
   timezone, and credential-locator precedence.
 - `src/danvas/timezones.py`: bounded Canvas/Rails-to-IANA timezone mapping.
@@ -101,14 +101,7 @@ system.
 `danvas --version` and `danvas.__version__` read installed distribution
 metadata.
 
-Current public beta: `0.21.1`. Signed tag `v0.21.1` resolves to
-`dd30019a70e62238d66b58ead161dafef8abecae`. The global CLI reports
-`danvas 0.21.1` outside the checkout. The GitHub release carries one wheel,
-one source distribution, and `SHA256SUMS`; the same distributions are published
-as [`danvas-cli 0.21.1`](https://pypi.org/project/danvas-cli/0.21.1/) through
-PyPI Trusted Publishing with repository-linked attestations. `v0.21.1` is the
-first release published without GitHub's prerelease flag and is the repository's
-Latest release.
+Current public beta: `0.22.0`. Signed tag `v0.22.0` identifies commit `7de756e6fe2b9301b47f28b0eb12048bef46a7a2`. The normal GitHub release carries one wheel, one source distribution, and `SHA256SUMS`; the same artifacts are published as `danvas-cli 0.22.0` on PyPI through Trusted Publishing. See [0.22.0 release evidence](docs/releases/0.22.0.md) for verified checks, artifact hashes, and publication links. The global CLI was verified at 0.22.0 after installation. `v0.21.1` was the first normal GitHub release; earlier prerelease flags remain historical.
 
 The public-readiness sequence is complete:
 
@@ -135,6 +128,7 @@ The public-readiness sequence is complete:
 - `0.21.1`: post-program review remediation making explicit selectors fail
   bounded rather than silently, normalization and retained evidence
   deterministic, and agent-facing guidance consistent.
+- `0.22.0`: optional trusted-profile credential commands for on-demand retrieval, with environment/file overrides and offline diagnostics that do not execute the helper.
 
 Supported runtime is Python `>=3.12,<3.15` on Linux and macOS. Windows is
 unsupported because danvas cannot promise its POSIX private-file and atomic
@@ -210,13 +204,8 @@ Do not add a long-lived PyPI token.
   silently fall through to a heuristic, a default, or a different filter.
   Requested gradebook headings, configured Panopto tool selectors, and project
   inventory ignore configuration all follow this rule.
-- Danvas consumes one credential through one provider-neutral environment
-  variable or one externally managed single-purpose file. It does not contact,
-  configure, or diagnose secret providers and does not load dotenv files.
-- User profiles may select a credential locator; project repositories may not.
-  The effective HTTPS Canvas origin must be bound by a matching user profile,
-  explicit `--api-url`, or matching `CANVAS_API_URL` before the credential is
-  read. There is no origin-binding bypass.
+- Danvas consumes one credential through a provider-neutral environment variable, an externally managed single-purpose file, or an optional trusted-profile credential command. Secret storage and provider-specific authentication remain external. Danvas does not bundle provider integrations, diagnose provider sessions, store tokens, or load dotenv files.
+- User profiles may select a credential locator or absolute-executable command array; project repositories may not. Command profiles require their own API URL. The effective HTTPS Canvas origin must be bound by a matching user profile, explicit `--api-url`, or matching `CANVAS_API_URL` before the credential is read. There is no origin-binding bypass.
 - Once a credential locator wins precedence, an empty, missing, invalid, or
   unsafe value is final; never fall through to another source. Remove a selected
   environment entry before Canvas construction. File reads remain bounded,
