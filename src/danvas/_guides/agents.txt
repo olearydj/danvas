@@ -5,8 +5,9 @@ help surface.
 
 Never infer mutation authority from the presence of an apply option. Plan first,
 retain bounded evidence, and request explicit authorization before applying.
-Credential providers remain outside danvas; agents pass only the neutral
-environment-variable name or credential-file path selected by the operator.
+Credential providers remain outside danvas. Use the operator-selected profile,
+environment-variable name, or credential-file path. A trusted user profile may
+configure on-demand retrieval; local diagnostics do not run its helper.
 
 Missing danvas command coverage is not permission to switch to direct Canvas
 API calls, browser automation, or provider-specific tooling. First classify the

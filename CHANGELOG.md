@@ -1,11 +1,12 @@
 # Changelog
 
-This file records operator-visible release changes. Detailed transition steps
-live in the linked migration guides.
+This file records operator-visible release changes. Detailed transition steps live in the linked migration guides.
 
-## Unreleased
+## 0.22.0 - On-Demand Credentials
 
 - Add optional `credential_command` argument arrays in trusted user profiles for on-demand token retrieval. Commands require a profile-bound API URL, preserve explicit environment/file overrides, and execute with bounded time/output and sanitized failures. Offline auth diagnostics do not execute them. No secret provider or credential store is bundled.
+- Document the helper contract, precedence, and profile migration in [Authentication](docs/authentication.md) and [Compatibility](docs/compatibility.md); update the packaged skill for 0.22.x.
+- Make help snapshots independent of the invoking terminal’s color capability.
 
 ## 0.21.1 - Post-Program Hygiene
 

@@ -1,8 +1,8 @@
 # Compatibility And Support
 
-The signed `v0.21.1` release is the latest public beta, not a 1.0 stability
-promise. This project is unofficial and is not affiliated with or endorsed by
-Instructure.
+The signed `v0.22.0` release is the latest public beta, not a 1.0 stability promise. This project is unofficial and is not affiliated with or endorsed by Instructure.
+
+Version `0.22.0` adds optional `credential_command` arrays in trusted user profiles. Existing environment and file configurations continue to work. Command profiles require an API URL and cannot be read by older releases: restore the profile’s environment or file selector before rolling back to `v0.21.1`. See [Authentication](authentication.md) for the helper contract.
 
 Version `0.21.1` is a defect-fix release that adds no command or option. Three
 fixes are operator-visible because a previously silent mismatch now fails with
@@ -142,11 +142,7 @@ Panopto deployment.
 
 ## Compatibility Lifetimes
 
-Version `0.19.0` removes the provider-specific authentication interface
-and the deprecated alternate roster schema. Authentication now accepts only
-provider-neutral environment or credential-file locators, and roster export is
-`LoginID`-only. Stale automation fails loudly rather than silently choosing a
-different credential source.
+Version `0.19.0` removes the provider-specific authentication interface and the deprecated alternate roster schema. Authentication accepts provider-neutral environment or credential-file locators, with optional trusted-profile credential commands added in `0.22.0`; roster export is `LoginID`-only. Stale automation fails loudly rather than silently choosing a different credential source.
 
 The release also requires a user-controlled binding between the selected
 credential and effective Canvas origin. Many existing projects with only a
