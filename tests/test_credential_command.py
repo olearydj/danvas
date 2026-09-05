@@ -157,6 +157,7 @@ def test_profile_precedes_process_selector():
         ("import time; time.sleep(10)", "timed out"),
         ('print("op://private/item/field")', "one token"),
         ('print("bad token")', "one token"),
+        ('import sys; sys.stdout.write("token\\r")', "one token"),
         ('print("")', "one token"),
         ("import sys; sys.stdout.buffer.write(bytes([255]))", "invalid text"),
     ],

@@ -51,9 +51,10 @@ def read_command(argv: tuple[str, ...]) -> str:
         if process.stderr:
             process.stderr.close()
     try:
-        value = content.decode("utf-8").removesuffix("\n").removesuffix("\r")
+        value = content.decode("utf-8")
     except UnicodeError:
         raise _failure("Canvas credential command returned invalid text.") from None
+    value = value[:-2] if value.endswith("\r\n") else value.removesuffix("\n")
     if (
         not value
         or re.match(r"[A-Za-z][A-Za-z0-9+.-]*://", value)
