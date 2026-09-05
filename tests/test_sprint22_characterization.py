@@ -50,6 +50,8 @@ def without_long_help(record: dict[str, Any]) -> dict[str, Any]:
 
 def render_help(path: tuple[str, ...], *, width: int, color: bool) -> str:
     env = {
+        # Exercise a color-capable terminal even under TERM=dumb agent runners.
+        "TERM": "xterm-256color",
         "COLUMNS": str(width),
         "FORCE_COLOR": "1" if color else None,
         "NO_COLOR": None if color else "1",
